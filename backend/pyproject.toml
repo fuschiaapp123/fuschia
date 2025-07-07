@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fuschia-backend"
+version = "0.1.0"
+description = "Fuschia Intelligent Automation Platform Backend"
+authors = [{name = "Fuschia Team", email = "team@fuschia.io"}]
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi==0.104.1",
+    "uvicorn[standard]==0.24.0",
+    "neo4j==5.15.0",
+    "pydantic==2.5.0",
+    "python-jose[cryptography]==3.3.0",
+    "passlib[bcrypt]==1.7.4",
+    "python-multipart==0.0.6",
+    "python-dotenv==1.0.0",
+    "sqlalchemy==2.0.23",
+    "alembic==1.13.1",
+    "httpx==0.25.2",
+    "websockets==12.0",
+    "redis==5.0.1",
+    "celery==5.3.4",
+    "prometheus-client==0.19.0",
+    "structlog==23.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==7.4.3",
+    "pytest-asyncio==0.21.1",
+    "black==23.11.0",
+    "ruff==0.1.6",
+    "mypy==1.7.1",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.black]
+line-length = 88
+target-version = ['py39']

@@ -1,0 +1,229 @@
+{
+  "workflows": [
+    {
+      "id": "wf_employee_onboarding",
+      "name": "Employee Onboarding",
+      "description": "Complete workflow for new employee integration",
+      "steps": [
+        {
+          "id": "step_1",
+          "name": "Create IT Accounts",
+          "type": "automated",
+          "system": "Active Directory",
+          "duration_minutes": 5
+        },
+        {
+          "id": "step_2",
+          "name": "Send Welcome Email",
+          "type": "automated",
+          "system": "Email System",
+          "duration_minutes": 1
+        },
+        {
+          "id": "step_3",
+          "name": "Schedule Orientation",
+          "type": "manual",
+          "assignee": "HR Manager",
+          "duration_minutes": 30
+        },
+        {
+          "id": "step_4",
+          "name": "Equipment Assignment",
+          "type": "manual",
+          "assignee": "IT Support",
+          "duration_minutes": 15
+        }
+      ],
+      "triggers": ["new_hire_approved"],
+      "completion_criteria": "all_steps_completed"
+    },
+    {
+      "id": "wf_incident_resolution",
+      "name": "IT Incident Resolution",
+      "description": "Automated incident triage and resolution workflow",
+      "steps": [
+        {
+          "id": "step_1",
+          "name": "Incident Classification",
+          "type": "ai_automated",
+          "agent": "Classification Agent",
+          "duration_minutes": 2
+        },
+        {
+          "id": "step_2",
+          "name": "Priority Assignment",
+          "type": "ai_automated",
+          "agent": "Priority Agent",
+          "duration_minutes": 1
+        },
+        {
+          "id": "step_3",
+          "name": "Auto-Resolution Attempt",
+          "type": "automated",
+          "system": "ServiceNow",
+          "duration_minutes": 5
+        },
+        {
+          "id": "step_4",
+          "name": "Escalate to Human",
+          "type": "conditional",
+          "condition": "auto_resolution_failed",
+          "assignee": "IT Specialist",
+          "duration_minutes": 60
+        }
+      ],
+      "triggers": ["incident_created"],
+      "completion_criteria": "incident_resolved"
+    }
+  ],
+  "agents": [
+    {
+      "id": "agent_classifier",
+      "name": "Classification Agent",
+      "type": "nlp_classifier",
+      "specialization": "incident_classification",
+      "capabilities": [
+        "text_analysis",
+        "category_prediction",
+        "sentiment_analysis"
+      ],
+      "performance_metrics": {
+        "accuracy": 0.94,
+        "response_time_ms": 150,
+        "confidence_threshold": 0.8
+      },
+      "training_data": "incident_history_2023"
+    },
+    {
+      "id": "agent_priority",
+      "name": "Priority Agent",
+      "type": "decision_tree",
+      "specialization": "priority_assignment",
+      "capabilities": [
+        "impact_assessment",
+        "urgency_evaluation",
+        "sla_calculation"
+      ],
+      "performance_metrics": {
+        "accuracy": 0.89,
+        "response_time_ms": 100,
+        "confidence_threshold": 0.75
+      },
+      "rules": [
+        {
+          "condition": "impact=high AND urgency=high",
+          "result": "priority=critical"
+        },
+        {
+          "condition": "impact=medium AND urgency=high",
+          "result": "priority=high"
+        }
+      ]
+    },
+    {
+      "id": "agent_resolver",
+      "name": "Resolution Agent",
+      "type": "knowledge_base",
+      "specialization": "automated_resolution",
+      "capabilities": [
+        "solution_lookup",
+        "script_execution",
+        "status_monitoring"
+      ],
+      "performance_metrics": {
+        "success_rate": 0.67,
+        "response_time_ms": 3000,
+        "confidence_threshold": 0.85
+      },
+      "knowledge_base": "it_solutions_kb"
+    }
+  ],
+  "integrations": [
+    {
+      "system": "ServiceNow",
+      "type": "rest_api",
+      "endpoints": [
+        {
+          "name": "create_incident",
+          "method": "POST",
+          "url": "/api/now/table/incident",
+          "auth_type": "basic"
+        },
+        {
+          "name": "update_incident",
+          "method": "PUT",
+          "url": "/api/now/table/incident/{id}",
+          "auth_type": "basic"
+        }
+      ],
+      "credentials": {
+        "username": "fuschia_integration",
+        "password": "encrypted_password"
+      }
+    },
+    {
+      "system": "Salesforce",
+      "type": "rest_api",
+      "endpoints": [
+        {
+          "name": "create_lead",
+          "method": "POST",
+          "url": "/services/data/v58.0/sobjects/Lead/",
+          "auth_type": "oauth2"
+        },
+        {
+          "name": "update_opportunity",
+          "method": "PATCH",
+          "url": "/services/data/v58.0/sobjects/Opportunity/{id}",
+          "auth_type": "oauth2"
+        }
+      ],
+      "credentials": {
+        "client_id": "salesforce_client_id",
+        "client_secret": "encrypted_client_secret",
+        "refresh_token": "encrypted_refresh_token"
+      }
+    }
+  ],
+  "performance_data": {
+    "workflow_executions": [
+      {
+        "workflow_id": "wf_employee_onboarding",
+        "executions_last_30_days": 47,
+        "avg_completion_time_minutes": 120,
+        "success_rate": 0.96,
+        "automation_rate": 0.65
+      },
+      {
+        "workflow_id": "wf_incident_resolution",
+        "executions_last_30_days": 1456,
+        "avg_completion_time_minutes": 18,
+        "success_rate": 0.89,
+        "automation_rate": 0.78
+      }
+    ],
+    "agent_performance": [
+      {
+        "agent_id": "agent_classifier",
+        "tasks_completed_last_30_days": 1523,
+        "avg_response_time_ms": 145,
+        "accuracy": 0.94,
+        "uptime": 0.998
+      },
+      {
+        "agent_id": "agent_priority",
+        "tasks_completed_last_30_days": 1498,
+        "avg_response_time_ms": 98,
+        "accuracy": 0.91,
+        "uptime": 0.999
+      },
+      {
+        "agent_id": "agent_resolver",
+        "tasks_completed_last_30_days": 976,
+        "avg_response_time_ms": 2890,
+        "success_rate": 0.69,
+        "uptime": 0.995
+      }
+    ]
+  }
+}

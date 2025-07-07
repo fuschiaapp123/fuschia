@@ -1,0 +1,163 @@
+/* Zapier-style custom CSS for ReactFlow */
+
+/* Hide default ReactFlow elements we don't want */
+.react-flow__background {
+  background: #f8fafc !important;
+}
+
+.react-flow__edge path {
+  stroke: #e5e7eb;
+  stroke-width: 2px;
+}
+
+.react-flow__edge.selected path {
+  stroke: #ff4f00;
+  stroke-width: 3px;
+}
+
+/* Custom node styling */
+.zapier-step-node {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.zapier-step-node.selected {
+  transform: scale(1.02);
+}
+
+.zapier-step-node.expanded {
+  z-index: 1000;
+}
+
+/* Custom edge animations */
+.react-flow__edge.animated path {
+  stroke-dasharray: 5;
+  animation: dashdraw 0.5s linear infinite;
+}
+
+@keyframes dashdraw {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Control buttons styling */
+.react-flow__controls {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  background: #fff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 6px !important;
+  margin: 2px !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #f9fafb !important;
+  border-color: #d1d5db !important;
+}
+
+.react-flow__controls-button svg {
+  width: 14px !important;
+  height: 14px !important;
+  color: #6b7280 !important;
+}
+
+/* Handle styling to match Zapier */
+.react-flow__handle {
+  border: 2px solid #fff !important;
+  background: #ff4f00 !important;
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.react-flow__handle-top {
+  top: -6px !important;
+}
+
+.react-flow__handle-bottom {
+  bottom: -6px !important;
+}
+
+/* Hide connection line */
+.react-flow__connectionline {
+  stroke: #ff4f00;
+  stroke-width: 2px;
+  stroke-dasharray: 5;
+}
+
+/* Custom scrollbar for expanded configurations */
+.zapier-step-node textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.zapier-step-node textarea::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.zapier-step-node textarea::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.zapier-step-node textarea::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Focus states for form elements */
+.zapier-step-node select:focus,
+.zapier-step-node textarea:focus,
+.zapier-step-node input:focus {
+  outline: none !important;
+  border-color: #ff4f00 !important;
+  box-shadow: 0 0 0 1px #ff4f00 !important;
+}
+
+/* Button hover effects */
+.zapier-step-node button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Status indicator animations */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.zapier-step-node [data-status="running"] {
+  animation: pulse 2s infinite;
+}
+
+/* Drag and drop feedback */
+.react-flow__node.dragging {
+  transform: rotate(2deg) scale(1.05);
+  z-index: 1000;
+}
+
+/* Selection styling */
+.react-flow__node.selected .zapier-step-node {
+  box-shadow: 0 0 0 2px #ff4f00, 0 8px 25px rgba(255, 79, 0, 0.15) !important;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .zapier-step-node {
+    min-width: 280px;
+    max-width: 320px;
+  }
+  
+  .react-flow__controls {
+    bottom: 20px;
+    right: 20px;
+  }
+}
