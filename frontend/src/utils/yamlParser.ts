@@ -23,6 +23,12 @@ export interface ParsedWorkflow {
 export interface ReactFlowData {
   nodes: Node[];
   edges: Edge[];
+  metadata?: {
+    name?: string;
+    description?: string;
+    category?: string;
+    [key: string]: any;
+  };
 }
 
 export function parseYAMLWorkflow(yamlContent: string): ParsedWorkflow | null {

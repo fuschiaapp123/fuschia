@@ -23,8 +23,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 
 def get_user_service():
-    from app.services.user_service import UserService
-    return UserService()
+    from app.services.postgres_user_service import postgres_user_service
+    return postgres_user_service
 
 
 async def get_current_user(

@@ -17,9 +17,8 @@ export const NodePropertyForm: React.FC<NodePropertyFormProps> = ({
     label: '',
     type: 'action',
     description: '',
-    status: 'idle',
-    app: '',
-    action: '',
+    objective: '',
+    completionCriteria: '',
   });
 
   useEffect(() => {
@@ -28,9 +27,8 @@ export const NodePropertyForm: React.FC<NodePropertyFormProps> = ({
         label: node.data.label || '',
         type: node.data.type || 'action',
         description: node.data.description || '',
-        status: node.data.status || 'idle',
-        app: node.data.app || '',
-        action: node.data.action || '',
+        objective: node.data.objective || '',
+        completionCriteria: node.data.completionCriteria || '',
       });
     }
   }, [node]);
@@ -98,44 +96,28 @@ export const NodePropertyForm: React.FC<NodePropertyFormProps> = ({
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Application/Service
+          Objective
         </label>
-        <input
-          type="text"
-          value={formData.app || ''}
-          onChange={(e) => handleChange('app', e.target.value)}
+        <textarea
+          value={formData.objective || ''}
+          onChange={(e) => handleChange('objective', e.target.value)}
+          rows={2}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500 focus:border-transparent"
-          placeholder="e.g., Email, Slack, Database"
+          placeholder="What should this step accomplish? (e.g., Validate user input, Send notification)"
         />
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Action
+          Completion Criteria
         </label>
-        <input
-          type="text"
-          value={formData.action || ''}
-          onChange={(e) => handleChange('action', e.target.value)}
+        <textarea
+          value={formData.completionCriteria || ''}
+          onChange={(e) => handleChange('completionCriteria', e.target.value)}
+          rows={2}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500 focus:border-transparent"
-          placeholder="e.g., Send email, Post message, Query data"
+          placeholder="How do we know this step is successful? (e.g., Response code 200, Email sent confirmation)"
         />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Status
-        </label>
-        <select
-          value={formData.status}
-          onChange={(e) => handleChange('status', e.target.value as WorkflowStepData['status'])}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500 focus:border-transparent"
-        >
-          <option value="idle">Idle</option>
-          <option value="running">Running</option>
-          <option value="completed">Completed</option>
-          <option value="error">Error</option>
-        </select>
       </div>
 
       <div className="flex space-x-3 pt-4 border-t border-gray-200">

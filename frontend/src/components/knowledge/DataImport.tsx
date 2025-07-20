@@ -1,16 +1,16 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
   Database, 
   RefreshCw, 
   Eye, 
-  Download, 
   CheckCircle,
   AlertCircle,
   ChevronRight,
   Search,
-  Filter,
   Upload
 } from 'lucide-react';
+import ServiceNowService, { ServiceNowColumn } from '@/services/servicenowService';
+import { useAuthStore } from '@/store/authStore';
 
 interface DataSource {
   id: string;
@@ -25,186 +25,321 @@ interface DataSource {
 interface DataTable {
   name: string;
   displayName: string;
-  recordCount: number;
-  lastUpdated: string;
-  description: string;
-  fields: string[];
+  recordCount?: number;
+  lastUpdated?: string;
+  description?: string;
+  fields: ServiceNowColumn[];
+  primary: string;
 }
 
 interface TableData {
   [key: string]: any;
 }
 
-const dataSources: DataSource[] = [
-  {
-    id: 'servicenow-prod',
-    name: 'ServiceNow Production',
-    type: 'ServiceNow',
-    status: 'connected',
-    lastSync: '2 minutes ago',
-    description: 'Production ServiceNow instance for incident and change management',
-    icon: '🔧'
-  },
-  {
-    id: 'salesforce-sales',
-    name: 'Salesforce Sales Cloud',
-    type: 'Salesforce',
-    status: 'connected',
-    lastSync: '5 minutes ago',
-    description: 'Sales pipeline and customer relationship data',
-    icon: '☁️'
-  },
-  {
-    id: 'jira-dev',
-    name: 'JIRA Development',
-    type: 'JIRA',
-    status: 'connected',
-    lastSync: '10 minutes ago',
-    description: 'Development project tracking and issue management',
-    icon: '📋'
-  },
-  {
-    id: 'sharepoint-docs',
-    name: 'SharePoint Documents',
-    type: 'SharePoint',
-    status: 'disconnected',
-    lastSync: '2 hours ago',
-    description: 'Document library and collaboration platform',
-    icon: '📄'
-  },
-  {
-    id: 'sqlserver-hr',
-    name: 'SQL Server HR Database',
-    type: 'SQL Server',
-    status: 'connected',
-    lastSync: '1 hour ago',
-    description: 'Human resources and employee data',
-    icon: '🗄️'
-  }
-];
-
-const mockTables: Record<string, DataTable[]> = {
-  'servicenow-prod': [
-    {
-      name: 'incident',
-      displayName: 'Incidents',
-      recordCount: 15234,
-      lastUpdated: '2 minutes ago',
-      description: 'IT incident records and resolution tracking',
-      fields: ['number', 'short_description', 'state', 'priority', 'assigned_to', 'opened_at', 'resolved_at']
-    },
-    {
-      name: 'change_request',
-      displayName: 'Change Requests',
-      recordCount: 8756,
-      lastUpdated: '5 minutes ago',
-      description: 'Change management and approval workflow',
-      fields: ['number', 'short_description', 'state', 'risk', 'requested_by', 'start_date', 'end_date']
-    },
-    {
-      name: 'cmdb_ci',
-      displayName: 'Configuration Items',
-      recordCount: 45123,
-      lastUpdated: '1 hour ago',
-      description: 'Configuration management database items',
-      fields: ['name', 'sys_class_name', 'serial_number', 'asset_tag', 'location', 'assigned_to']
-    }
-  ],
-  'salesforce-sales': [
-    {
-      name: 'Account',
-      displayName: 'Accounts',
-      recordCount: 12456,
-      lastUpdated: '3 minutes ago',
-      description: 'Customer account information and details',
-      fields: ['Name', 'Type', 'Industry', 'Annual_Revenue', 'Owner', 'Created_Date']
-    },
-    {
-      name: 'Opportunity',
-      displayName: 'Opportunities',
-      recordCount: 8934,
-      lastUpdated: '5 minutes ago',
-      description: 'Sales opportunities and pipeline data',
-      fields: ['Name', 'Stage', 'Amount', 'Close_Date', 'Probability', 'Account_Name']
-    },
-    {
-      name: 'Contact',
-      displayName: 'Contacts',
-      recordCount: 23567,
-      lastUpdated: '8 minutes ago',
-      description: 'Contact information for prospects and customers',
-      fields: ['Name', 'Email', 'Phone', 'Title', 'Account', 'Lead_Source']
-    }
-  ],
-  'jira-dev': [
-    {
-      name: 'Issue',
-      displayName: 'Issues',
-      recordCount: 6789,
-      lastUpdated: '10 minutes ago',
-      description: 'Development tasks, bugs, and stories',
-      fields: ['Key', 'Summary', 'Issue_Type', 'Status', 'Priority', 'Assignee', 'Reporter']
-    },
-    {
-      name: 'Project',
-      displayName: 'Projects',
-      recordCount: 45,
-      lastUpdated: '2 hours ago',
-      description: 'Development projects and initiatives',
-      fields: ['Key', 'Name', 'Lead', 'Category', 'Project_Type', 'Created']
-    }
-  ]
-};
-
-const mockTableData: Record<string, TableData[]> = {
-  'servicenow-prod-incident': [
-    { number: 'INC0010001', short_description: 'Email server down', state: 'In Progress', priority: 'High', assigned_to: 'John Doe', opened_at: '2024-01-15 09:30' },
-    { number: 'INC0010002', short_description: 'Login issues with CRM', state: 'New', priority: 'Medium', assigned_to: 'Jane Smith', opened_at: '2024-01-15 10:15' },
-    { number: 'INC0010003', short_description: 'Printer not working', state: 'Resolved', priority: 'Low', assigned_to: 'Bob Wilson', opened_at: '2024-01-15 11:00' },
-    { number: 'INC0010004', short_description: 'Network connectivity issues', state: 'In Progress', priority: 'High', assigned_to: 'Alice Brown', opened_at: '2024-01-15 11:30' },
-    { number: 'INC0010005', short_description: 'Software installation request', state: 'New', priority: 'Low', assigned_to: 'Charlie Davis', opened_at: '2024-01-15 12:00' }
-  ],
-  'salesforce-sales-Account': [
-    { Name: 'Acme Corporation', Type: 'Customer', Industry: 'Technology', Annual_Revenue: '$5M', Owner: 'Sarah Johnson', Created_Date: '2023-06-15' },
-    { Name: 'Global Solutions Inc', Type: 'Prospect', Industry: 'Consulting', Annual_Revenue: '$12M', Owner: 'Mike Chen', Created_Date: '2023-08-22' },
-    { Name: 'TechStart Ltd', Type: 'Customer', Industry: 'Software', Annual_Revenue: '$2M', Owner: 'Lisa Park', Created_Date: '2023-09-10' },
-    { Name: 'Enterprise Systems', Type: 'Partner', Industry: 'IT Services', Annual_Revenue: '$50M', Owner: 'David Kumar', Created_Date: '2023-10-05' },
-    { Name: 'Innovation Labs', Type: 'Prospect', Industry: 'Research', Annual_Revenue: '$8M', Owner: 'Emma Thompson', Created_Date: '2023-11-12' }
-  ]
-};
 
 export const DataImport: React.FC = () => {
+  // Auth state
+  const { isAuthenticated, token, user, login } = useAuthStore();
+  
+  // Data Sources State - Initially just ServiceNow
+  const [dataSources, setDataSources] = useState<DataSource[]>([]);
+  const [isLoadingSources, setIsLoadingSources] = useState(true);
+  
+  // Component State
   const [selectedSource, setSelectedSource] = useState<DataSource | null>(null);
   const [selectedTable, setSelectedTable] = useState<DataTable | null>(null);
+  const [availableTables, setAvailableTables] = useState<DataTable[]>([]);
   const [tableData, setTableData] = useState<TableData[]>([]);
+  
+  // Loading States
   const [isLoadingTables, setIsLoadingTables] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  
+  // UI State
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [searchTerm, setSearchTerm] = useState('');
+  const [tableSearchTerm, setTableSearchTerm] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string[]>([]);
+  
+  // Login form state
+  const [showLoginForm, setShowLoginForm] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const addDebugInfo = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setDebugInfo(prev => [...prev, `[${timestamp}] ${message}`]);
+    console.log(`[DataImport Debug] ${message}`);
+  };
+
+  const clearDebugInfo = () => {
+    setDebugInfo([]);
+  };
+
+  const testServiceNowDebug = async () => {
+    addDebugInfo('Testing ServiceNow debug endpoint...');
+    
+    try {
+      const response = await fetch('/api/v1/servicenow/debug-connection', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const result = await response.json();
+      addDebugInfo(`Debug Response: ${JSON.stringify(result, null, 2)}`);
+      
+      if (result.status === 'success') {
+        addDebugInfo(`✅ HTTP Status: ${result.http_status}`);
+        addDebugInfo(`✅ Content Type: ${result.content_type}`);
+        addDebugInfo(`✅ JSON Valid: ${result.json_valid}`);
+        if (result.json_keys) {
+          addDebugInfo(`✅ JSON Keys: ${result.json_keys}`);
+        }
+      } else {
+        addDebugInfo(`❌ Error: ${result.message}`);
+        if (result.json_error) {
+          addDebugInfo(`❌ JSON Error: ${result.json_error}`);
+        }
+      }
+    } catch (error) {
+      addDebugInfo(`❌ Debug test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    addDebugInfo(`Attempting login for: ${loginEmail}`);
+    
+    try {
+      const result = await ServiceNowService.testLogin(loginEmail, loginPassword);
+      
+      if (result.success && result.token) {
+        addDebugInfo('Login successful!');
+        
+        // Create a basic user object
+        const userObj = {
+          id: 'temp-user',
+          email: loginEmail,
+          full_name: loginEmail,
+          is_active: true
+        };
+        
+        // Update the auth store
+        login(userObj, result.token);
+        
+        // Hide the login form
+        setShowLoginForm(false);
+        setLoginEmail('');
+        setLoginPassword('');
+        
+        addDebugInfo('Auth store updated, reloading data sources...');
+      } else {
+        addDebugInfo(`Login failed: ${result.error}`);
+        setErrorMessage(`Login failed: ${result.error}`);
+      }
+    } catch (error: any) {
+      addDebugInfo(`Login error: ${error.message}`);
+      setErrorMessage(`Login error: ${error.message}`);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  // Load ServiceNow connection status and initialize data sources
+  useEffect(() => {
+    const loadDataSources = async () => {
+      try {
+        addDebugInfo('Starting data source loading...');
+        setIsLoadingSources(true);
+        setErrorMessage(null);
+        
+        // Check authentication first
+        addDebugInfo(`Auth check: isAuthenticated=${isAuthenticated}, hasToken=${!!token}`);
+        if (!isAuthenticated || !token) {
+          const errorMsg = 'Please log in to access data sources';
+          addDebugInfo(`Auth failed: ${errorMsg}`);
+          setErrorMessage(errorMsg);
+          setDataSources([]);
+          setIsLoadingSources(false);
+          return;
+        }
+        
+        // Log token details for debugging (first/last 10 chars only for security)
+        if (token) {
+          const tokenPreview = token.length > 20 ? 
+            `${token.substring(0, 10)}...${token.substring(token.length - 10)}` : 
+            token;
+          addDebugInfo(`Token preview: ${tokenPreview}`);
+        }
+        
+        addDebugInfo(`User: ${user?.email || 'unknown'}`);
+        
+        // Test basic API connectivity first
+        addDebugInfo('Testing API connectivity...');
+        try {
+          const apiConnected = await ServiceNowService.testApiConnectivity();
+          addDebugInfo(`API connectivity: ${apiConnected ? 'SUCCESS' : 'FAILED'}`);
+          if (!apiConnected) {
+            addDebugInfo('API connectivity failed, but continuing anyway...');
+          }
+        } catch (connError: any) {
+          addDebugInfo(`API connectivity test error: ${connError.message}`);
+        }
+        
+        // Check authentication status with the API
+        addDebugInfo('Checking auth status with API...');
+        try {
+          const authStatus = await ServiceNowService.checkAuthStatus();
+          addDebugInfo(`Auth status: ${authStatus.authenticated ? 'SUCCESS' : 'FAILED'} - ${authStatus.error || 'OK'}`);
+          if (!authStatus.authenticated) {
+            addDebugInfo(`Auth failed: ${authStatus.error}, but continuing to test ServiceNow...`);
+          }
+        } catch (authError: any) {
+          addDebugInfo(`Auth check error: ${authError.message}`);
+        }
+        
+        addDebugInfo('Getting ServiceNow connection status...');
+        const connectionStatus = await ServiceNowService.getConnectionStatus();
+        addDebugInfo(`ServiceNow status: ${connectionStatus.connected ? 'CONNECTED' : 'DISCONNECTED'} - ${connectionStatus.message}`);
+        
+        const serviceNowSource: DataSource = {
+          id: 'servicenow-prod',
+          name: 'ServiceNow Production',
+          type: 'ServiceNow',
+          status: connectionStatus.connected ? 'connected' : 'error',
+          lastSync: connectionStatus.connected ? 'Just now' : 'Failed',
+          description: connectionStatus.message,
+          icon: '🔧'
+        };
+        
+        // For now, only ServiceNow is implemented
+        setDataSources([serviceNowSource]);
+        addDebugInfo('Data sources loaded successfully');
+        setErrorMessage(null);
+      } catch (error: any) {
+        const errorMsg = `Failed to load data sources: ${error?.message || 'Unknown error'}`;
+        addDebugInfo(`ERROR: ${errorMsg}`);
+        console.error('Failed to load data sources:', error);
+        setErrorMessage(errorMsg);
+        
+        // Fallback data source with error status
+        const fallbackSource: DataSource = {
+          id: 'servicenow-prod',
+          name: 'ServiceNow Production',
+          type: 'ServiceNow',
+          status: 'error',
+          lastSync: 'Failed',
+          description: 'Unable to connect to ServiceNow',
+          icon: '🔧'
+        };
+        setDataSources([fallbackSource]);
+      } finally {
+        setIsLoadingSources(false);
+      }
+    };
+    
+    loadDataSources();
+  }, [isAuthenticated, token]); // Re-run when authentication state changes
 
   const handleSourceSelect = useCallback(async (source: DataSource) => {
+    if (source.status !== 'connected') {
+      setErrorMessage('Cannot select disconnected data source');
+      return;
+    }
+    
     setSelectedSource(source);
     setSelectedTable(null);
     setTableData([]);
+    setAvailableTables([]);
     setIsLoadingTables(true);
+    setErrorMessage(null);
     
-    // Simulate API call to fetch tables
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsLoadingTables(false);
+    try {
+      if (source.type === 'ServiceNow') {
+        // Fetch actual ServiceNow tables
+        const tables = await ServiceNowService.getTables();
+        
+        // Convert ServiceNow tables to DataTable format
+        const dataTablePromises = tables.map(async (table) => {
+          return {
+                name: table.name,
+                displayName: table.label,
+                fields: [],
+                primary: table.primary,
+                description: `ServiceNow ${table.label} table`,
+                lastUpdated: 'Live data',
+                recordCount: undefined // We'll fetch this when needed
+              } as DataTable;
+          // try {
+          //   const columns = await ServiceNowService.getTableColumns(table.name);
+          //   return {
+          //     name: table.name,
+          //     displayName: table.label,
+          //     fields: columns,
+          //     primary: table.primary,
+          //     description: `ServiceNow ${table.label} table`,
+          //     lastUpdated: 'Live data',
+          //     recordCount: undefined // We'll fetch this when needed
+          //   } as DataTable;
+          // } catch (error) {
+          //   console.error(`Failed to fetch columns for table ${table.name}:`, error);
+          //   return {
+          //     name: table.name,
+          //     displayName: table.label,
+          //     fields: [],
+          //     primary: table.primary,
+          //     description: `ServiceNow ${table.label} table`,
+          //     lastUpdated: 'Live data'
+          //   } as DataTable;
+          // }
+        });
+        
+        const dataTables = await Promise.all(dataTablePromises);
+        setAvailableTables(dataTables);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tables:', error);
+      setErrorMessage('Failed to fetch tables from data source');
+    } finally {
+      setIsLoadingTables(false);
+    }
   }, []);
 
   const handleTableSelect = useCallback(async (table: DataTable) => {
     setSelectedTable(table);
     setIsLoadingData(true);
+    setErrorMessage(null);
     
-    // Simulate API call to fetch table data
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const tableKey = `${selectedSource?.id}-${table.name}`;
-    const data = mockTableData[tableKey] || [];
-    setTableData(data);
-    setIsLoadingData(false);
+    try {
+      if (selectedSource?.type === 'ServiceNow') {
+        // Fetch actual data from ServiceNow
+        const response = await ServiceNowService.getTableRecords(table.name, {
+          size: 10, // Preview only 10 records
+          page: 1
+        });
+        
+        setTableData(response.records);
+        
+        // Update table with actual record count if available
+        if (response.total) {
+          const updatedTable = { ...table, recordCount: response.total };
+          setSelectedTable(updatedTable);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch table data:', error);
+      setErrorMessage('Failed to fetch table data');
+      setTableData([]);
+    } finally {
+      setIsLoadingData(false);
+    }
   }, [selectedSource]);
 
   const handleImportData = useCallback(async () => {
@@ -212,17 +347,58 @@ export const DataImport: React.FC = () => {
     
     setIsImporting(true);
     setImportStatus('idle');
+    setErrorMessage(null);
     
     try {
-      // Simulate import process
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      setImportStatus('success');
+      if (selectedSource.type === 'ServiceNow') {
+        // Export to Neo4j using the real API
+        const exportResponse = await ServiceNowService.exportTableToNeo4j({
+          table: selectedTable.name,
+          limit: 1000 // Export up to 1000 records
+        });
+        
+        console.log('Export successful:', exportResponse);
+        setImportStatus('success');
+      }
     } catch (error) {
+      console.error('Import failed:', error);
+      setErrorMessage('Failed to import data to knowledge graph');
       setImportStatus('error');
     } finally {
       setIsImporting(false);
     }
   }, [selectedSource, selectedTable]);
+
+  const handleRefreshSources = useCallback(async () => {
+    if (!isAuthenticated || !token) {
+      setErrorMessage('Please log in to refresh data sources');
+      return;
+    }
+    
+    setIsLoadingSources(true);
+    setErrorMessage(null);
+    
+    try {
+      const connectionStatus = await ServiceNowService.getConnectionStatus();
+      
+      const serviceNowSource: DataSource = {
+        id: 'servicenow-prod',
+        name: 'ServiceNow Production',
+        type: 'ServiceNow',
+        status: connectionStatus.connected ? 'connected' : 'error',
+        lastSync: connectionStatus.connected ? 'Just now' : 'Failed',
+        description: connectionStatus.message,
+        icon: '🔧'
+      };
+      
+      setDataSources([serviceNowSource]);
+    } catch (error) {
+      console.error('Failed to refresh data sources:', error);
+      setErrorMessage('Failed to refresh data sources');
+    } finally {
+      setIsLoadingSources(false);
+    }
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -255,13 +431,183 @@ export const DataImport: React.FC = () => {
     source.type.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const availableTables = selectedSource ? mockTables[selectedSource.id] || [] : [];
+  const filteredTables = availableTables.filter(table =>
+    table.name.toLowerCase().includes(tableSearchTerm.toLowerCase()) ||
+    table.displayName.toLowerCase().includes(tableSearchTerm.toLowerCase()) ||
+    (table.description && table.description.toLowerCase().includes(tableSearchTerm.toLowerCase()))
+  );
+
+  // Show authentication required message if not logged in
+  if (!isAuthenticated) {
+    return (
+      <div className="p-6">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Data Import</h2>
+          <p className="text-gray-600">Import data from connected systems into the knowledge graph</p>
+        </div>
+        
+        {/* Debug Panel for unauthenticated users */}
+        {debugInfo.length > 0 && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-medium text-gray-900">Debug Information</h4>
+              <button 
+                onClick={clearDebugInfo}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="max-h-40 overflow-y-auto">
+              {debugInfo.map((info, index) => (
+                <div key={index} className="text-xs font-mono text-gray-600 mb-1">
+                  {info}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {!showLoginForm ? (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+            <AlertCircle className="w-12 h-12 text-yellow-600 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-yellow-900 mb-2">Authentication Required</h3>
+            <p className="text-yellow-700 mb-4">Please log in to access data import features.</p>
+            <div className="space-x-3">
+              <button 
+                onClick={() => setShowLoginForm(true)}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors"
+              >
+                Login Here
+              </button>
+              <button 
+                onClick={() => window.location.href = '/login'}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+              >
+                Go to Login Page
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Login</h3>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  required
+                />
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:opacity-50 transition-colors"
+                >
+                  {isLoggingIn ? 'Logging in...' : 'Login'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowLoginForm(false)}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Data Import</h2>
         <p className="text-gray-600">Import data from connected systems into the knowledge graph</p>
+      </div>
+
+      {/* Error Message */}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <div>
+              <h4 className="font-medium text-red-900">Error</h4>
+              <p className="text-sm text-red-700">{errorMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Debug Panel */}
+      {debugInfo.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-medium text-gray-900">Debug Information</h4>
+            <div className="flex space-x-2">
+              <button 
+                onClick={testServiceNowDebug}
+                className="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+              >
+                Test Debug Endpoint
+              </button>
+              <button 
+                onClick={clearDebugInfo}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="max-h-40 overflow-y-auto">
+            {debugInfo.map((info, index) => (
+              <div key={index} className="text-xs font-mono text-gray-600 mb-1">
+                {info}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Debug Actions */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Debug Actions</h3>
+        <div className="flex flex-wrap gap-3">
+          <button 
+            onClick={testServiceNowDebug}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+          >
+            <span>🔍</span>
+            <span>Test ServiceNow Debug</span>
+          </button>
+          <button 
+            onClick={clearDebugInfo}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
+          >
+            <span>🧹</span>
+            <span>Clear Debug Info</span>
+          </button>
+        </div>
       </div>
 
       {/* Progress Steps */}
@@ -309,8 +655,12 @@ export const DataImport: React.FC = () => {
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">Data Sources</h3>
-              <button className="p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100">
-                <RefreshCw className="w-4 h-4" />
+              <button 
+                onClick={handleRefreshSources}
+                disabled={isLoadingSources}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoadingSources ? 'animate-spin' : ''}`} />
               </button>
             </div>
             <div className="mt-3">
@@ -328,7 +678,14 @@ export const DataImport: React.FC = () => {
           </div>
           
           <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
-            {filteredSources.map((source) => (
+            {isLoadingSources && (
+              <div className="text-center py-8">
+                <RefreshCw className="w-8 h-8 text-gray-400 mx-auto mb-3 animate-spin" />
+                <p className="text-gray-500">Loading data sources...</p>
+              </div>
+            )}
+            
+            {!isLoadingSources && filteredSources.map((source) => (
               <div
                 key={source.id}
                 onClick={() => handleSourceSelect(source)}
@@ -366,6 +723,20 @@ export const DataImport: React.FC = () => {
             {selectedSource && (
               <p className="text-sm text-gray-600 mt-1">From {selectedSource.name}</p>
             )}
+            {selectedSource && !isLoadingTables && availableTables.length > 0 && (
+              <div className="mt-3">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search tables..."
+                    value={tableSearchTerm}
+                    onChange={(e) => setTableSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
@@ -383,7 +754,20 @@ export const DataImport: React.FC = () => {
               </div>
             )}
             
-            {selectedSource && !isLoadingTables && availableTables.map((table) => (
+            {selectedSource && !isLoadingTables && filteredTables.length === 0 && availableTables.length > 0 && (
+              <div className="text-center py-8">
+                <Database className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">No tables match your search</p>
+                <button 
+                  onClick={() => setTableSearchTerm('')}
+                  className="text-sm text-fuschia-600 hover:text-fuschia-700 mt-2"
+                >
+                  Clear search
+                </button>
+              </div>
+            )}
+            
+            {selectedSource && !isLoadingTables && filteredTables.map((table) => (
               <div
                 key={table.name}
                 onClick={() => handleTableSelect(table)}
@@ -395,7 +779,9 @@ export const DataImport: React.FC = () => {
               >
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-medium text-gray-900">{table.displayName}</h4>
-                  <span className="text-sm text-gray-500">{table.recordCount.toLocaleString()} records</span>
+                  <span className="text-sm text-gray-500">
+                    {table.recordCount ? `${table.recordCount.toLocaleString()} records` : 'Live data'}
+                  </span>
                 </div>
                 <p className="text-xs text-gray-600 mb-2">{table.description}</p>
                 <div className="flex items-center justify-between">

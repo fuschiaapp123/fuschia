@@ -1,8 +1,14 @@
 import React from 'react';
 import { useAppStore } from '@/store/appStore';
+import { useAuthStore } from '@/store/authStore';
+import { LLMSettings } from '@/components/settings/LLMSettings';
+import { UserManagement } from '@/components/settings/UserManagement';
+import { UserProfile } from '@/components/settings/UserProfile';
+import { TemplateSettingsComponent } from '@/components/settings/TemplateSettings';
 
 export const SettingsModule: React.FC = () => {
   const { activeTab } = useAppStore();
+  const { user: currentUser } = useAuthStore();
 
   const renderContent = () => {
     switch (activeTab) {
@@ -36,6 +42,10 @@ export const SettingsModule: React.FC = () => {
             </div>
           </div>
         );
+      case 'templates':
+        return <TemplateSettingsComponent />;
+      case 'llm':
+        return <LLMSettings />;
       case 'integrations':
         return (
           <div className="p-6">
@@ -58,14 +68,14 @@ export const SettingsModule: React.FC = () => {
           </div>
         );
       case 'users':
-        return (
-          <div className="p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">User Management</h2>
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <p className="text-gray-500">User management interface will be implemented here</p>
-            </div>
-          </div>
-        );
+        // Show user management for admins/managers, profile for others
+        if (currentUser?.role === 'admin' || currentUser?.role === 'manager') {
+          return <UserManagement />;
+        } else {
+          return <UserProfile />;
+        }
+      case 'profile':
+        return <UserProfile />;
       default:
         return (
           <div className="p-6">

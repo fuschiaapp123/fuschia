@@ -2,12 +2,24 @@ from typing import Optional, List
 from datetime import datetime
 import uuid
 import structlog
+from neo4j.time import DateTime as Neo4jDateTime
 
 from app.db.neo4j import neo4j_driver
 from app.models.user import User, UserCreate, UserUpdate, UserInDB
 from app.auth.password import get_password_hash, verify_password
 
 logger = structlog.get_logger()
+
+
+def convert_neo4j_datetime(neo4j_dt) -> Optional[datetime]:
+    """Convert Neo4j DateTime to Python datetime"""
+    if neo4j_dt is None:
+        return None
+    if isinstance(neo4j_dt, Neo4jDateTime):
+        return neo4j_dt.to_native()
+    if isinstance(neo4j_dt, datetime):
+        return neo4j_dt
+    return None
 
 
 class UserService:
@@ -46,7 +58,7 @@ class UserService:
                 full_name=user_data["full_name"],
                 role=user_data["role"],
                 is_active=user_data["is_active"],
-                created_at=user_data["created_at"]
+                created_at=convert_neo4j_datetime(user_data["created_at"])
             )
         raise Exception("Failed to create user")
     
@@ -66,8 +78,8 @@ class UserService:
                 role=user_data["role"],
                 is_active=user_data["is_active"],
                 hashed_password=user_data["hashed_password"],
-                created_at=user_data["created_at"],
-                updated_at=user_data.get("updated_at")
+                created_at=convert_neo4j_datetime(user_data["created_at"]),
+                updated_at=convert_neo4j_datetime(user_data.get("updated_at"))
             )
         return None
     
@@ -86,8 +98,8 @@ class UserService:
                 full_name=user_data["full_name"],
                 role=user_data["role"],
                 is_active=user_data["is_active"],
-                created_at=user_data["created_at"],
-                updated_at=user_data.get("updated_at")
+                created_at=convert_neo4j_datetime(user_data["created_at"]),
+                updated_at=convert_neo4j_datetime(user_data.get("updated_at"))
             )
         return None
     
@@ -137,7 +149,7 @@ class UserService:
                 full_name=user_data["full_name"],
                 role=user_data["role"],
                 is_active=user_data["is_active"],
-                created_at=user_data["created_at"],
-                updated_at=user_data.get("updated_at")
+                created_at=convert_neo4j_datetime(user_data["created_at"]),
+                updated_at=convert_neo4j_datetime(user_data.get("updated_at"))
             )
         return None

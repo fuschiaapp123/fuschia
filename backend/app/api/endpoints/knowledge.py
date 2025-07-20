@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 from app.models.knowledge import (
     KnowledgeNode, KnowledgeNodeCreate, KnowledgeNodeUpdate,
     KnowledgeRelationship, KnowledgeRelationshipCreate,
-    KnowledgeGraph
+    KnowledgeGraph, CypherQueryRequest, CypherQueryResponse
 )
 from app.models.user import User
 from app.services.knowledge_service import KnowledgeService
@@ -94,3 +94,50 @@ async def search_knowledge(
     knowledge_service: KnowledgeService = Depends(KnowledgeService)
 ):
     return await knowledge_service.search_nodes(query, limit)
+
+
+@router.post("/cypher", response_model=CypherQueryResponse)
+async def execute_cypher_query(
+    query_request: CypherQueryRequest,
+    current_user: User = Depends(get_current_active_user),
+    knowledge_service: KnowledgeService = Depends(KnowledgeService)
+):
+    """
+    Execute a raw Cypher query against the Neo4j database.
+    
+    This endpoint allows authenticated users to execute custom Cypher queries
+    for advanced graph operations and data retrieval. The results are formatted
+    to match the frontend interface with separate nodes and relationships arrays.
+    
+    Args:
+        query_request: JSON body containing the Cypher query string
+        current_user: Authenticated user (required for access control)
+        knowledge_service: Injected knowledge service instance
+    
+    Returns:
+        CypherQueryResponse: Formatted results with nodes, relationships, and summary
+    
+    Raises:
+        HTTPException: If query execution fails or user is not authenticated
+    """
+    try:
+        result = await knowledge_service.execute_cypher_query(query_request.query)
+        
+        # Check if there was an error in the query execution
+        if 'error' in result.summary:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cypher query execution failed: {result.summary['error']}"
+            )
+        
+        return result
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Handle unexpected errors
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error while executing Cypher query: {str(e)}"
+        )

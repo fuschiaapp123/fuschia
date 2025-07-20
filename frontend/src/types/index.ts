@@ -2,10 +2,25 @@ export interface User {
   id: string;
   email: string;
   full_name: string;
-  role: 'admin' | 'manager' | 'analyst' | 'user';
+  role: 'admin' | 'process_owner' | 'manager' | 'analyst' | 'end_user' | 'user';
   is_active: boolean;
   created_at: string;
   updated_at?: string;
+}
+
+export interface UserCreate {
+  email: string;
+  full_name: string;
+  password: string;
+  role: User['role'];
+  is_active?: boolean;
+}
+
+export interface UserUpdate {
+  email?: string;
+  full_name?: string;
+  role?: User['role'];
+  is_active?: boolean;
 }
 
 export interface KnowledgeNode {
@@ -45,5 +60,5 @@ export interface AuthState {
 export interface AppState {
   sidebarCollapsed: boolean;
   activeTab: string;
-  currentModule: 'knowledge' | 'workflow' | 'agents' | 'analytics' | 'settings';
+  currentModule: 'home' | 'knowledge' | 'workflow' | 'value-streams' | 'process-mining' | 'agents' | 'analytics' | 'settings';
 }

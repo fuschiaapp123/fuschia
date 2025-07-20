@@ -19,7 +19,7 @@
   }
   
   .sidebar-item-active {
-    @apply bg-primary-100 text-primary-900 border-primary-200;
+    @apply bg-fuschia-100 text-fuschia-900 border-fuschia-200;
   }
   
   .sidebar-item-inactive {
@@ -31,7 +31,7 @@
   }
   
   .tab-active {
-    @apply border-primary-500 text-primary-600;
+    @apply border-fuschia-500 text-fuschia-600;
   }
   
   .tab-inactive {

@@ -2,15 +2,49 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
 import structlog
+from neo4j.time import DateTime as Neo4jDateTime
 
 from app.db.neo4j import neo4j_driver
 from app.models.knowledge import (
     KnowledgeNode, KnowledgeNodeCreate, KnowledgeNodeUpdate,
     KnowledgeRelationship, KnowledgeRelationshipCreate,
-    KnowledgeGraph
+    KnowledgeGraph, CypherQueryResponse
 )
 
 logger = structlog.get_logger()
+
+
+def convert_neo4j_value(value):
+    """Convert Neo4j-specific types to serializable Python types"""
+    if isinstance(value, Neo4jDateTime):
+        return value.to_native()
+    elif hasattr(value, 'labels') and hasattr(value, 'id'):
+        # This is a Neo4j Node
+        return {
+            'id': str(value.id),
+            'element_id': getattr(value, 'element_id', str(value.id)),
+            'labels': list(value.labels),
+            'properties': {k: convert_neo4j_value(v) for k, v in value.items()}
+        }
+    elif hasattr(value, 'type') and hasattr(value, 'start_node') and hasattr(value, 'end_node'):
+        # This is a Neo4j Relationship
+        return {
+            'id': str(value.id),
+            'element_id': getattr(value, 'element_id', str(value.id)),
+            'type': value.type,
+            'start_node': str(value.start_node.id),
+            'end_node': str(value.end_node.id),
+            'properties': {k: convert_neo4j_value(v) for k, v in value.items()}
+        }
+    elif isinstance(value, dict):
+        return {k: convert_neo4j_value(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [convert_neo4j_value(item) for item in value]
+    elif hasattr(value, '_fields'):
+        # Handle other Neo4j record-like objects
+        return {field: convert_neo4j_value(getattr(value, field)) for field in value._fields}
+    else:
+        return value
 
 
 class KnowledgeService:
@@ -241,3 +275,110 @@ class KnowledgeService:
             ))
         
         return nodes
+
+    async def execute_cypher_query(self, query: str) -> CypherQueryResponse:
+        """
+        Execute a raw Cypher query and return formatted results for the frontend.
+        This method formats the results to match the expected frontend interface.
+        """
+        try:
+            # Execute the query
+            result = await neo4j_driver.execute_query(query)
+            
+            # Initialize response structure
+            nodes = []
+            relationships = []
+            raw_results = []
+            
+            # Process each record in the result
+            for record in result:
+                # Convert the record to a serializable format
+                converted_record = {}
+                for key, value in record.items():
+                    converted_record[key] = convert_neo4j_value(value)
+                raw_results.append(converted_record)
+                
+                # Extract nodes and relationships from the record
+                for key, value in record.items():
+                    if hasattr(value, 'labels') and hasattr(value, 'id'):
+                        # This is a node
+                        node_data = {
+                            'id': str(value.id),
+                            'element_id': value.element_id,
+                            'labels': list(value.labels),
+                            'properties': convert_neo4j_value(dict(value.items()))
+                        }
+                        # Avoid duplicates
+                        if not any(n['id'] == node_data['id'] for n in nodes):
+                            nodes.append(node_data)
+                    
+                    elif hasattr(value, 'type') and hasattr(value, 'start_node') and hasattr(value, 'end_node'):
+                        # This is a relationship
+                        rel_data = {
+                            'id': str(value.id),
+                            'element_id': value.element_id,
+                            'type': value.type,
+                            'start_node': str(value.start_node.id),
+                            'end_node': str(value.end_node.id),
+                            'properties': convert_neo4j_value(dict(value.items()))
+                        }
+                        # Avoid duplicates
+                        if not any(r['id'] == rel_data['id'] for r in relationships):
+                            relationships.append(rel_data)
+                    
+                    elif isinstance(value, list):
+                        # Handle lists that might contain nodes or relationships
+                        for item in value:
+                            if hasattr(item, 'labels') and hasattr(item, 'id'):
+                                # Node in list
+                                node_data = {
+                                    'id': str(item.id),
+                                    'element_id': item.element_id,
+                                    'labels': list(item.labels),
+                                    'properties': convert_neo4j_value(dict(item.items()))
+                                }
+                                if not any(n['id'] == node_data['id'] for n in nodes):
+                                    nodes.append(node_data)
+                            elif hasattr(item, 'type') and hasattr(item, 'start_node') and hasattr(item, 'end_node'):
+                                # Relationship in list
+                                rel_data = {
+                                    'id': str(item.id),
+                                    'element_id': item.element_id,
+                                    'type': item.type,
+                                    'start_node': str(item.start_node.id),
+                                    'end_node': str(item.end_node.id),
+                                    'properties': convert_neo4j_value(dict(item.items()))
+                                }
+                                if not any(r['id'] == rel_data['id'] for r in relationships):
+                                    relationships.append(rel_data)
+            
+            # Create summary information
+            summary = {
+                'total_records': len(result),
+                'nodes_count': len(nodes),
+                'relationships_count': len(relationships),
+                'query': query
+            }
+            
+            return CypherQueryResponse(
+                nodes=nodes,
+                relationships=relationships,
+                summary=summary,
+                raw_results=raw_results
+            )
+            
+        except Exception as e:
+            logger.error("Failed to execute Cypher query", query=query, error=str(e))
+            # Return error information in the response
+            return CypherQueryResponse(
+                nodes=[],
+                relationships=[],
+                summary={
+                    'error': str(e),
+                    'query': query,
+                    'total_records': 0,
+                    'nodes_count': 0,
+                    'relationships_count': 0
+                },
+                raw_results=[]
+            )

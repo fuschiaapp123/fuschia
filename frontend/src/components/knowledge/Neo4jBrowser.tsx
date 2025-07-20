@@ -12,10 +12,13 @@ import {
   RefreshCw,
   Info,
   Bookmark,
-  Clock
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 
 import { Neo4jVisualization } from './Neo4jVisualization';
+import { NodePropertiesDrawer } from './NodePropertiesDrawer';
+import { useAuthStore } from '@/store/authStore';
 
 interface Neo4jNode {
   id: string;
@@ -55,6 +58,7 @@ interface QueryHistory {
 }
 
 export const Neo4jBrowser: React.FC = () => {
+  const { token } = useAuthStore();
   const [query, setQuery] = useState('MATCH (n) RETURN n LIMIT 25');
   const [isExecuting, setIsExecuting] = useState(false);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
@@ -63,6 +67,8 @@ export const Neo4jBrowser: React.FC = () => {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [selectedNode, setSelectedNode] = useState<Neo4jNode | null>(null);
   const [selectedRelationship, setSelectedRelationship] = useState<Neo4jRelationship | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Sample data
   const sampleNodes: Neo4jNode[] = [
@@ -156,7 +162,7 @@ export const Neo4jBrowser: React.FC = () => {
 
   const handleNodeClick = useCallback((node: Neo4jNode) => {
     setSelectedNode(node);
-    console.log('Node clicked:', node);
+    setIsDrawerOpen(true);
   }, []);
 
   const handleRelationshipClick = useCallback((relationship: Neo4jRelationship) => {
@@ -164,50 +170,131 @@ export const Neo4jBrowser: React.FC = () => {
     console.log('Relationship clicked:', relationship);
   }, []);
 
+  const executeNeo4jQuery = useCallback(async (cypherQuery: string): Promise<QueryResult> => {
+    console.log('Executing Cypher query:', cypherQuery);
+    console.log('Token:', token ? 'Present' : 'Missing');
+    
+    const response = await fetch('/api/v1/knowledge/cypher', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ query: cypherQuery })
+    });
+
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('Error response text:', errorText);
+      
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { detail: `HTTP ${response.status}: ${response.statusText}. Response: ${errorText}` };
+      }
+      
+      throw new Error(errorData.detail || errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const responseText = await response.text();
+    console.log('Success response text:', responseText);
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`Invalid JSON response: ${responseText}`);
+    }
+    
+    // Transform the API response to match our interface
+    const nodes: Neo4jNode[] = data.nodes?.map((node: any) => ({
+      id: node.id,
+      labels: node.labels || [],
+      properties: node.properties || {}
+    })) || [];
+
+    const relationships: Neo4jRelationship[] = data.relationships?.map((rel: any) => ({
+      id: rel.id,
+      type: rel.type,
+      startNodeId: rel.start_node || rel.startNodeId,
+      endNodeId: rel.end_node || rel.endNodeId,
+      properties: rel.properties || {}
+    })) || [];
+
+    return {
+      nodes,
+      relationships,
+      summary: {
+        resultAvailableAfter: data.summary?.resultAvailableAfter || 0,
+        resultConsumedAfter: data.summary?.resultConsumedAfter || 0,
+        counters: {
+          nodesCreated: data.summary?.counters?.nodesCreated || 0,
+          relationshipsCreated: data.summary?.counters?.relationshipsCreated || 0,
+          propertiesSet: data.summary?.counters?.propertiesSet || 0
+        }
+      }
+    };
+  }, [token]);
+
   const executeQuery = useCallback(async () => {
     if (!query.trim()) return;
 
     setIsExecuting(true);
+    setError(null);
     const startTime = Date.now();
 
     try {
-      // Simulate query execution
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Try to execute the real query first
+      let result: QueryResult;
       
-      // Mock different query results based on query content
-      let resultNodes = sampleNodes;
-      let resultRelationships = sampleRelationships;
+      try {
+        result = await executeNeo4jQuery(query);
+      } catch (apiError) {
+        console.warn('Neo4j API failed, falling back to sample data:', apiError);
+        setError(`API Error: ${apiError instanceof Error ? apiError.message : 'Unknown error'}. Showing sample data.`);
+        
+        // Fallback to sample data with filtering
+        let resultNodes = sampleNodes;
+        let resultRelationships = sampleRelationships;
 
-      if (query.toLowerCase().includes('person')) {
-        resultNodes = sampleNodes.filter(n => n.labels.includes('Person'));
-        resultRelationships = sampleRelationships.filter(r => 
-          resultNodes.some(n => n.id === r.startNodeId) || 
-          resultNodes.some(n => n.id === r.endNodeId)
-        );
-      } else if (query.toLowerCase().includes('system')) {
-        resultNodes = sampleNodes.filter(n => n.labels.includes('System'));
-        resultRelationships = sampleRelationships.filter(r => 
-          resultNodes.some(n => n.id === r.startNodeId) || 
-          resultNodes.some(n => n.id === r.endNodeId)
-        );
+        if (query.toLowerCase().includes('person')) {
+          resultNodes = sampleNodes.filter(n => n.labels.includes('Person'));
+          resultRelationships = sampleRelationships.filter(r => 
+            resultNodes.some(n => n.id === r.startNodeId) || 
+            resultNodes.some(n => n.id === r.endNodeId)
+          );
+        } else if (query.toLowerCase().includes('system')) {
+          resultNodes = sampleNodes.filter(n => n.labels.includes('System'));
+          resultRelationships = sampleRelationships.filter(r => 
+            resultNodes.some(n => n.id === r.startNodeId) || 
+            resultNodes.some(n => n.id === r.endNodeId)
+          );
+        }
+
+        const executionTime = Date.now() - startTime;
+        result = {
+          nodes: resultNodes,
+          relationships: resultRelationships,
+          summary: {
+            resultAvailableAfter: executionTime - 100,
+            resultConsumedAfter: 100,
+            counters: {
+              nodesCreated: 0,
+              relationshipsCreated: 0,
+              propertiesSet: 0
+            }
+          }
+        };
       }
 
       const executionTime = Date.now() - startTime;
 
       // Set result
-      setQueryResult({
-        nodes: resultNodes,
-        relationships: resultRelationships,
-        summary: {
-          resultAvailableAfter: executionTime - 100,
-          resultConsumedAfter: 100,
-          counters: {
-            nodesCreated: 0,
-            relationshipsCreated: 0,
-            propertiesSet: 0
-          }
-        }
-      });
+      setQueryResult(result);
 
       // Add to history
       setQueryHistory(prev => [{
@@ -216,15 +303,26 @@ export const Neo4jBrowser: React.FC = () => {
         timestamp: new Date(),
         executionTime,
         success: true,
-        resultCount: resultNodes.length + resultRelationships.length
+        resultCount: result.nodes.length + result.relationships.length
       }, ...prev.slice(0, 9)]);
 
     } catch (error) {
       console.error('Query execution failed:', error);
+      setError(error instanceof Error ? error.message : 'Unknown error occurred');
+      
+      // Add failed query to history
+      setQueryHistory(prev => [{
+        id: Date.now().toString(),
+        query,
+        timestamp: new Date(),
+        executionTime: Date.now() - startTime,
+        success: false,
+        resultCount: 0
+      }, ...prev.slice(0, 9)]);
     } finally {
       setIsExecuting(false);
     }
-  }, [query]);
+  }, [query, executeNeo4jQuery]);
 
   const quickQueries = [
     'MATCH (n) RETURN n LIMIT 25',
@@ -406,6 +504,25 @@ export const Neo4jBrowser: React.FC = () => {
           </div>
         </div>
 
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 p-4 mx-4 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+              <div>
+                <h4 className="font-medium text-red-900">Query Error</h4>
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+              <button 
+                onClick={() => setError(null)}
+                className="ml-auto text-red-600 hover:text-red-800"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Content Area */}
         <div className="flex-1 overflow-hidden">
           {selectedTab === 'graph' && queryResult && (
@@ -556,6 +673,16 @@ export const Neo4jBrowser: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Node Properties Drawer */}
+      <NodePropertiesDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => {
+          console.log('Closing drawer');
+          setIsDrawerOpen(false);
+        }}
+        node={selectedNode}
+      />
     </div>
   );
 };

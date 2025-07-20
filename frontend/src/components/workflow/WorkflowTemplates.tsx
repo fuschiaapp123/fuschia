@@ -1,6 +1,8 @@
 import React from 'react';
 import { cn } from '@/utils/cn';
 import { Play, Copy, Download, Clock, Users, CheckCircle } from 'lucide-react';
+import { useAppStore } from '@/store/appStore';
+import { templateService } from '@/services/templateService';
 
 interface WorkflowTemplate {
   id: string;
@@ -239,14 +241,41 @@ const WorkflowTemplateCard: React.FC<WorkflowTemplateCardProps> = ({ template, o
 };
 
 export const WorkflowTemplates: React.FC = () => {
+  const { setActiveTab, setWorkflowData } = useAppStore();
+
   const handleUseTemplate = (template: WorkflowTemplate) => {
-    console.log('Using template:', template.name);
-    // In a real app, this would navigate to the designer with the template loaded
+    // Find the full template data from the service
+    const fullTemplate = templateService.getAllTemplates().find(t => t.name === template.name);
+    if (fullTemplate) {
+      // Set the workflow data in the app store
+      setWorkflowData({
+        nodes: fullTemplate.nodes,
+        edges: fullTemplate.edges,
+      });
+      
+      // Switch to the designer tab
+      setActiveTab('designer');
+    } else {
+      alert('Template data not found. Please try again.');
+    }
   };
 
   const handleCloneTemplate = (template: WorkflowTemplate) => {
-    console.log('Cloning template:', template.name);
-    // In a real app, this would create a copy of the template
+    const fullTemplate = templateService.getAllTemplates().find(t => t.name === template.name);
+    if (fullTemplate) {
+      // Create a copy with a new ID and name
+      const clonedTemplate = templateService.createTemplateFromWorkflow(
+        `${template.name} (Copy)`,
+        `Copy of ${template.description}`,
+        template.category,
+        fullTemplate.nodes,
+        fullTemplate.edges
+      );
+      
+      // Save the cloned template
+      templateService.saveCustomTemplate(clonedTemplate);
+      alert('Template cloned successfully!');
+    }
   };
 
   return (

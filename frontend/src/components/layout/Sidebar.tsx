@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/appStore';
+import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/utils/cn';
 import { 
   Database, 
@@ -8,10 +10,21 @@ import {
   Settings, 
   ChevronLeft, 
   ChevronRight,
-  BarChart3
+  BarChart3,
+  User,
+  LogOut,
+  Home,
+  TrendingUp,
+  Search
 } from 'lucide-react';
 
 const sidebarItems = [
+  {
+    id: 'home',
+    label: 'Overview',
+    icon: Home,
+    description: 'Platform Overview',
+  },
   {
     id: 'knowledge',
     label: 'Knowledge',
@@ -23,6 +36,18 @@ const sidebarItems = [
     label: 'Workflow',
     icon: GitBranch,
     description: 'Business Process Design',
+  },
+  {
+    id: 'value-streams',
+    label: 'Value Streams',
+    icon: TrendingUp,
+    description: 'Value Stream Mapping',
+  },
+  {
+    id: 'process-mining',
+    label: 'Process Mining',
+    icon: Search,
+    description: 'Process Discovery & Analysis',
   },
   {
     id: 'agents',
@@ -46,6 +71,39 @@ const sidebarItems = [
 
 export const Sidebar: React.FC = () => {
   const { sidebarCollapsed, currentModule, setSidebarCollapsed, setCurrentModule } = useAppStore();
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleModuleClick = (moduleId: string) => {
+    if (moduleId === 'home') {
+      setCurrentModule('home' as any);
+      navigate('/dashboard');
+      return;
+    }
+    setCurrentModule(moduleId as any);
+    navigate(`/${moduleId}`);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <div className={cn(
@@ -83,7 +141,7 @@ export const Sidebar: React.FC = () => {
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentModule(item.id as 'knowledge' | 'workflow' | 'agents' | 'analytics' | 'settings')}
+              onClick={() => handleModuleClick(item.id)}
               className={cn(
                 'sidebar-item w-full',
                 isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'
@@ -103,10 +161,50 @@ export const Sidebar: React.FC = () => {
         })}
       </nav>
 
-      {/* Footer */}
+      {/* User Section */}
       <div className="p-4 border-t border-gray-200">
+        <div className="relative" ref={userMenuRef}>
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className={cn(
+              'w-full flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors',
+              sidebarCollapsed && 'justify-center'
+            )}
+          >
+            <div className="w-8 h-8 bg-gradient-to-br from-fuschia-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-white" />
+            </div>
+            {!sidebarCollapsed && (
+              <div className="flex-1 text-left min-w-0">
+                <div className="font-medium text-gray-900 truncate">
+                  {user?.full_name || user?.email?.split('@')[0] || 'User'}
+                </div>
+                <div className="text-xs text-gray-500 truncate">
+                  {user?.email}
+                </div>
+              </div>
+            )}
+          </button>
+
+          {/* User Menu Dropdown */}
+          {showUserMenu && !sidebarCollapsed && (
+            <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+              <div className="p-2">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center space-x-3 p-2 text-left rounded-lg hover:bg-red-50 text-red-600 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="text-sm font-medium">Sign out</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Version Info */}
         {!sidebarCollapsed && (
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-500 mt-4 pt-4 border-t border-gray-100">
             <div>Fuschia v0.1.0</div>
             <div>Enterprise Edition</div>
           </div>

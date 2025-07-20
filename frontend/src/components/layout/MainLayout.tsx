@@ -4,6 +4,8 @@ import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { ChatPanel } from './ChatPanel';
 import { useAppStore } from '@/store/appStore';
+import { useAuthStore } from '@/store/authStore';
+import { useLLMStore } from '@/store/llmStore';
 import ChatAPI from './ChatAPI';
 import { parseYAMLWorkflow, convertToReactFlowData, convertToAgentFlowData, isValidYAML } from '@/utils/yamlParser';
 
@@ -13,6 +15,17 @@ interface MainLayoutProps {
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const { activeTab, currentModule, setWorkflowData, setAgentData } = useAppStore();
+  const { user: currentUser } = useAuthStore();
+  const { 
+    selectedProvider, 
+    selectedModel, 
+    temperature, 
+    maxTokens, 
+    streamingEnabled,
+    updateProvider, 
+    updateModel 
+  } = useLLMStore();
+  
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -26,8 +39,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       timestamp: new Date(),
     },
   ]);
-  const [selectedProvider, setSelectedProvider] = useState('default');
-  const [selectedModel, setSelectedModel] = useState('gpt-3.5-turbo');
   const [agentMode, setAgentMode] = useState(false);
   const [selectedAgent] = useState('default-agent');
 
@@ -49,7 +60,22 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       setMessages(prev => [...prev, aiMessage]);
 
       const chatContext = `${currentModule}_${activeTab}`;
-      const response = await ChatAPI(chatContext, userMessage.content, agentMode, selectedAgent);
+      const response = await ChatAPI(
+        chatContext, 
+        userMessage.content, 
+        {
+          provider: selectedProvider,
+          model: selectedModel,
+          temperature,
+          maxTokens,
+          streaming: streamingEnabled
+        },
+        agentMode, 
+        selectedAgent,
+        currentUser?.role,
+        currentModule,
+        activeTab
+      );
       console.log('Chat API response:', response);
       
       // Check if response contains YAML workflow and parse it
@@ -87,7 +113,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           content: response.response,
           status: 'complete',
           agent_id: agentMode ? response.agent_id : undefined,
-          agent_label: agentMode ? response.agent_label : undefined
+          agent_label: agentMode ? response.agent_label : undefined,
+          metadata: response.metadata
         } : msg
       ));
 
@@ -114,8 +141,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         messages={messages}
         selectedProvider={selectedProvider}
         selectedModel={selectedModel}
-        onProviderChange={setSelectedProvider}
-        onModelChange={setSelectedModel}
+        onProviderChange={updateProvider}
+        onModelChange={updateModel}
         onSendMessage={handleSendMessage}
         agentMode={agentMode}
         onAgentModeChange={setAgentMode}

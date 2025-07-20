@@ -18,8 +18,18 @@ class Settings(BaseSettings):
     
     # Database
     NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_CONNECTION_URL: str = "bolt://localhost:7687"
     NEO4J_USERNAME: str = "neo4j"
+    NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = "password"
+    
+    @property
+    def neo4j_uri(self) -> str:
+        return self.NEO4J_CONNECTION_URL or self.NEO4J_URI
+    
+    @property
+    def neo4j_username(self) -> str:
+        return self.NEO4J_USER or self.NEO4J_USERNAME
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379"

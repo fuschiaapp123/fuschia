@@ -7,7 +7,7 @@ interface AppStore extends AppState {
   agentData: ReactFlowData | null;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setActiveTab: (tab: string) => void;
-  setCurrentModule: (module: 'knowledge' | 'workflow' | 'agents' | 'analytics' | 'settings') => void;
+  setCurrentModule: (module: 'home' | 'knowledge' | 'workflow' | 'value-streams' | 'process-mining' | 'agents' | 'analytics' | 'settings') => void;
   setWorkflowData: (data: ReactFlowData | null) => void;
   setAgentData: (data: ReactFlowData | null) => void;
 }
@@ -23,8 +23,8 @@ export const useAppStore = create<AppStore>((set) => ({
   
   setActiveTab: (tab: string) => set({ activeTab: tab }),
   
-  setCurrentModule: (module: 'knowledge' | 'workflow' | 'agents' | 'analytics' | 'settings') => 
-    set({ currentModule: module }),
+  setCurrentModule: (module: 'home' | 'knowledge' | 'workflow' | 'value-streams' | 'process-mining' | 'agents' | 'analytics' | 'settings') => 
+    set({ currentModule: module, activeTab: 'overview' }),
   
   setWorkflowData: (data: ReactFlowData | null) => set({ workflowData: data }),
   
