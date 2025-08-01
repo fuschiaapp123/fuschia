@@ -71,7 +71,7 @@ class WorkflowService {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-
+      alert("Saving workflow to database...");
       const response = await fetch(`${this.baseUrl}/workflows/save`, {
         method: 'POST',
         headers,
@@ -221,11 +221,81 @@ class WorkflowService {
   }
 
   /**
+   * Get workflow templates from database formatted for the template loader
+   */
+  async getWorkflowTemplatesFromDatabase(): Promise<any[]> {
+    try {
+      const token = useAuthStore.getState().token;
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${this.baseUrl}/workflows`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Details:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('Database workflow templates response:', result);
+      console.log('Number of workflows returned:', result.workflows?.length || 0);
+      if (result.workflows && result.workflows.length > 0) {
+        console.log('First workflow sample:', result.workflows[0]);
+        console.log('First workflow template_data:', result.workflows[0].template_data);
+      }
+      
+      // Convert database templates to frontend format
+      const templates = result.workflows || [];
+      return templates.map((template: any) => {
+        const convertedTemplate = {
+          id: template.id,
+          name: template.name || 'Untitled Template',
+          description: template.description || 'No description available',
+          category: template.category || 'Custom',
+          complexity: (template.complexity || 'medium').toLowerCase(),
+          estimatedTime: template.estimated_time || 'Variable',
+          steps: template.template_data?.nodes?.length || 0,
+          usageCount: template.usage_count || 0,
+          template_type: 'workflow',
+          tags: template.tags || [],
+          preview: template.preview_steps || [],
+          // Load from the correct workflow template fields
+          nodes: template.template_data?.nodes || [],
+          edges: template.template_data?.edges || [],
+          metadata: template.metadata || {}
+        };
+        
+        // Debug logging only if nodes/edges are empty
+        if (!convertedTemplate.nodes.length && !convertedTemplate.edges.length) {
+          console.log('Empty template found:', template.name);
+          console.log('Template data structure:', template.template_data);
+        }
+        
+        return convertedTemplate;
+      });
+    } catch (error) {
+      console.error('Failed to fetch workflow templates from database:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Test database connectivity
    */
   async testConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/templates/test`);
+      // Use the workflows/test endpoint for proper connectivity testing
+      const response = await fetch(`${this.baseUrl}/workflows/test`);
       return response.ok;
     } catch (error) {
       console.error('Database connection test failed:', error);

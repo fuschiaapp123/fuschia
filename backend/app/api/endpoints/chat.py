@@ -16,7 +16,7 @@ load_dotenv()
 try:
     llm_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 except Exception as e:
-    print(f"Warning: OpenAI client initialization failed: {e}")
+    # Warning: OpenAI client initialization failed - continuing without LLM
     llm_client = None
 
 router = APIRouter()
@@ -257,7 +257,7 @@ async def detect_intent(
             model="gpt-3.5-turbo"
         )
         
-        print(f"Intent agent result: {agent_result}")
+        # Debug: Intent agent processing completed
         return IntentDetectionResponse(
             detected_intent=agent_result.get("detected_intent", "GENERAL_CHAT"),
             confidence=float(agent_result.get("confidence", 0.5)),
@@ -602,12 +602,12 @@ async def enhanced_chat_endpoint(request: ChatRequest):
         # Step 2: Determine if workflow execution should be triggered
         workflow_result = None
         main_response = ""
-        print(f"Detected intent result", intent_result.workflow_execution)
+        # Debug: Intent detection completed with workflow requirements
         # Check for workflow execution recommendation from intent detection
         if (hasattr(intent_result, 'workflow_execution') and 
             intent_result.workflow_execution and 
             intent_result.workflow_execution.get('recommended')):
-            print(f"Detected intent requires workflow execution: {intent_result.detected_intent}")
+            # Debug: Intent requires workflow execution
             try:
                 # Import workflow orchestrator
                 from app.services.workflow_orchestrator import WorkflowOrchestrator
@@ -640,31 +640,32 @@ async def enhanced_chat_endpoint(request: ChatRequest):
                     organization_id = "customer-service-org"
                 
                 execution = await orchestrator.initiate_workflow_execution(
-                    workflow_template_id=intent_result.workflow_execution['template_name'],
-                    organization_id="default-org",
+                    workflow_template_id=intent_result.workflow_execution['workflow_template_id'],
+                    organization_id=intent_result.workflow_execution['agent_template_id'],
                     initiated_by="chat_user",  # Would be actual user ID in real implementation
                     initial_context=execution_context
                 )
-                
+                # Debug: Workflow execution initiated successfully   
+
                 workflow_result = WorkflowTriggerResponse(
-                    response=f"Multi-agent workflow execution started for {intent_result.workflow_execution['template_name']}",
+                    response=f"Multi-agent workflow execution started for {intent_result.workflow_execution['workflow_template_name']}",
                     workflow_triggered=True,
                     agent_path=["Intent Detection Agent", "Workflow Orchestrator", f"{organization_id} Organization"],
                     final_agent="Multi-Agent System",
                     agent_actions=[{
                         'action': 'workflow_execution_initiated',
                         'execution_id': execution.id,
-                        'template_name': intent_result.workflow_execution['template_name'],
+                        'template_name': intent_result.workflow_execution['workflow_template_name'],
                         'task_count': len(execution.tasks),
                         'organization': organization_id,
                         'status': execution.status
                     }]
                 )
-                
+                print(f"Workflow execution details, workflow_result: {workflow_result}")
                 # Generate enhanced response
                 main_response = f"""🤖 **Intent Detected:** {intent_result.detected_intent.replace('_', ' ').title()}
 
-🚀 **Multi-Agent Workflow Initiated:** {intent_result.workflow_execution['template_name']}
+🚀 **Multi-Agent Workflow Initiated:** {intent_result.workflow_execution['workflow_template_name']}
 
 **Execution Details:**
 • Execution ID: `{execution.id[:8]}...`
@@ -679,9 +680,10 @@ async def enhanced_chat_endpoint(request: ChatRequest):
 4. Final results will be delivered upon completion
 
 The multi-agent system is now working on your request with Chain of Thought and ReAct strategies, including human-in-the-loop validation for critical steps."""
-                
+                print(f"Enhanced response generated: {main_response}")
             except Exception as workflow_error:
                 # Fall back to legacy workflow system
+                print(f"Workflow orchestrator failed: {str(workflow_error)}. Falling back to legacy workflow system.")
                 workflow_result = await _fallback_to_legacy_workflow(intent_result, user_message)
                 main_response = f"🤖 **Intent Detected:** {intent_result.detected_intent.replace('_', ' ').title()}\n\n{workflow_result.response if workflow_result else 'I understand your request and will help you with the available tools.'}"
                 

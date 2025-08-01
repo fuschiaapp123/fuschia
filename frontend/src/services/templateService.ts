@@ -1,6 +1,7 @@
 import { Node, Edge } from '@xyflow/react';
 
-export interface WorkflowTemplate {
+// Generic base template interface
+export interface BaseTemplate {
   id: string;
   name: string;
   description: string;
@@ -8,11 +9,11 @@ export interface WorkflowTemplate {
   estimatedTime: string;
   complexity: 'Simple' | 'Medium' | 'Advanced';
   usageCount: number;
-  steps: number;
   tags: string[];
   preview: string[];
   nodes: Node[];
   edges: Edge[];
+  template_type: 'workflow' | 'agent';
   metadata?: {
     author?: string;
     version?: string;
@@ -21,6 +22,23 @@ export interface WorkflowTemplate {
     [key: string]: any;
   };
 }
+
+// Workflow-specific template interface
+export interface WorkflowTemplate extends BaseTemplate {
+  template_type: 'workflow';
+  steps: number;
+}
+
+// Agent-specific template interface
+export interface AgentTemplate extends BaseTemplate {
+  template_type: 'agent';
+  agentCount: number;
+  features: string[];
+  useCase: string;
+}
+
+// Union type for all templates
+export type Template = WorkflowTemplate | AgentTemplate;
 
 export interface TemplateSettings {
   defaultTemplatesFolder: string;
@@ -31,7 +49,8 @@ export interface TemplateSettings {
 
 class TemplateService {
   private readonly storageKey = 'fuschia-template-settings';
-  private readonly templatesKey = 'fuschia-custom-templates';
+  private readonly workflowTemplatesKey = 'fuschia-custom-workflow-templates';
+  private readonly agentTemplatesKey = 'fuschia-custom-agent-templates';
 
   // Default template settings
   private defaultSettings: TemplateSettings = {
@@ -71,16 +90,16 @@ class TemplateService {
   }
 
   /**
-   * Load template from file input
+   * Load template from file input (generic)
    */
-  async loadTemplateFromFile(file: File): Promise<WorkflowTemplate> {
+  async loadTemplateFromFile<T extends Template>(file: File): Promise<T> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       
       reader.onload = (event) => {
         try {
           const content = event.target?.result as string;
-          const template = JSON.parse(content) as WorkflowTemplate;
+          const template = JSON.parse(content) as T;
           
           // Validate template structure
           if (!this.validateTemplate(template)) {
@@ -100,9 +119,9 @@ class TemplateService {
   }
 
   /**
-   * Save template to file
+   * Save template to file (generic)
    */
-  saveTemplateToFile(template: WorkflowTemplate): void {
+  saveTemplateToFile(template: Template): void {
     const blob = new Blob([JSON.stringify(template, null, 2)], {
       type: 'application/json',
     });
@@ -116,11 +135,12 @@ class TemplateService {
   }
 
   /**
-   * Get saved custom templates from localStorage
+   * Get saved custom templates from localStorage (generic)
    */
-  getCustomTemplates(): WorkflowTemplate[] {
+  getCustomTemplates<T extends Template>(templateType: 'workflow' | 'agent'): T[] {
     try {
-      const stored = localStorage.getItem(this.templatesKey);
+      const key = templateType === 'workflow' ? this.workflowTemplatesKey : this.agentTemplatesKey;
+      const stored = localStorage.getItem(key);
       if (stored) {
         return JSON.parse(stored);
       }
@@ -132,11 +152,25 @@ class TemplateService {
   }
 
   /**
-   * Save custom template to localStorage
+   * Get saved custom workflow templates (legacy method for backward compatibility)
    */
-  saveCustomTemplate(template: WorkflowTemplate): void {
+  getCustomWorkflowTemplates(): WorkflowTemplate[] {
+    return this.getCustomTemplates<WorkflowTemplate>('workflow');
+  }
+
+  /**
+   * Get saved custom agent templates
+   */
+  getCustomAgentTemplates(): AgentTemplate[] {
+    return this.getCustomTemplates<AgentTemplate>('agent');
+  }
+
+  /**
+   * Save custom template to localStorage (generic)
+   */
+  saveCustomTemplate<T extends Template>(template: T): void {
     try {
-      const templates = this.getCustomTemplates();
+      const templates = this.getCustomTemplates<T>(template.template_type);
       const existingIndex = templates.findIndex(t => t.id === template.id);
       
       if (existingIndex >= 0) {
@@ -145,20 +179,22 @@ class TemplateService {
         templates.push(template);
       }
       
-      localStorage.setItem(this.templatesKey, JSON.stringify(templates));
+      const key = template.template_type === 'workflow' ? this.workflowTemplatesKey : this.agentTemplatesKey;
+      localStorage.setItem(key, JSON.stringify(templates));
     } catch (error) {
       console.error('Failed to save custom template:', error);
     }
   }
 
   /**
-   * Delete custom template
+   * Delete custom template (generic)
    */
-  deleteCustomTemplate(templateId: string): void {
+  deleteCustomTemplate(templateId: string, templateType: 'workflow' | 'agent'): void {
     try {
-      const templates = this.getCustomTemplates();
+      const templates = this.getCustomTemplates(templateType);
       const filtered = templates.filter(t => t.id !== templateId);
-      localStorage.setItem(this.templatesKey, JSON.stringify(filtered));
+      const key = templateType === 'workflow' ? this.workflowTemplatesKey : this.agentTemplatesKey;
+      localStorage.setItem(key, JSON.stringify(filtered));
     } catch (error) {
       console.error('Failed to delete custom template:', error);
     }
@@ -175,10 +211,11 @@ class TemplateService {
     edges: Edge[]
   ): WorkflowTemplate {
     const template: WorkflowTemplate = {
-      id: `custom-${Date.now()}`,
+      id: `custom-workflow-${Date.now()}`,
       name,
       description,
       category,
+      template_type: 'workflow',
       estimatedTime: 'Variable',
       complexity: 'Medium',
       usageCount: 0,
@@ -206,17 +243,80 @@ class TemplateService {
   }
 
   /**
-   * Validate template structure
+   * Convert agent data to template
    */
-  private validateTemplate(template: any): template is WorkflowTemplate {
-    return (
+  createTemplateFromAgent(
+    name: string,
+    description: string,
+    category: string,
+    nodes: Node[],
+    edges: Edge[],
+    features: string[],
+    useCase: string
+  ): AgentTemplate {
+    const template: AgentTemplate = {
+      id: `custom-agent-${Date.now()}`,
+      name,
+      description,
+      category,
+      template_type: 'agent',
+      estimatedTime: 'Variable',
+      complexity: 'Medium',
+      usageCount: 0,
+      agentCount: nodes.length,
+      features,
+      useCase,
+      tags: [category, 'Custom'],
+      preview: nodes.slice(0, 5).map(node => String(node.data?.name || 'Unnamed agent')),
+      nodes: nodes.map(node => ({
+        ...node,
+        selected: false,
+        dragging: false,
+      })),
+      edges: edges.map(edge => ({
+        ...edge,
+        selected: false,
+      })),
+      metadata: {
+        author: 'Current User',
+        version: '1.0.0',
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+      },
+    };
+
+    return template;
+  }
+
+  /**
+   * Validate template structure (generic)
+   */
+  private validateTemplate(template: any): template is Template {
+    const baseValidation = (
       template &&
       typeof template.id === 'string' &&
       typeof template.name === 'string' &&
       typeof template.description === 'string' &&
+      typeof template.template_type === 'string' &&
+      (template.template_type === 'workflow' || template.template_type === 'agent') &&
       Array.isArray(template.nodes) &&
       Array.isArray(template.edges)
     );
+
+    if (!baseValidation) return false;
+
+    // Template-specific validation
+    if (template.template_type === 'workflow') {
+      return typeof template.steps === 'number';
+    } else if (template.template_type === 'agent') {
+      return (
+        typeof template.agentCount === 'number' &&
+        Array.isArray(template.features) &&
+        typeof template.useCase === 'string'
+      );
+    }
+
+    return false;
   }
 
   /**
@@ -229,6 +329,7 @@ class TemplateService {
         name: 'Employee Onboarding',
         description: 'Automate the complete employee onboarding process from form submission to IT setup',
         category: 'HR',
+        template_type: 'workflow',
         estimatedTime: '2-3 hours',
         complexity: 'Medium',
         usageCount: 234,
@@ -316,6 +417,7 @@ class TemplateService {
         name: 'IT Incident Management',
         description: 'Automated IT incident triage and resolution workflow with escalation rules',
         category: 'IT Operations',
+        template_type: 'workflow',
         estimatedTime: '30 minutes',
         complexity: 'Advanced',
         usageCount: 456,
@@ -416,6 +518,7 @@ class TemplateService {
         name: 'Invoice Processing',
         description: 'Automate invoice approval and payment processing workflow',
         category: 'Finance',
+        template_type: 'workflow',
         estimatedTime: '30-45 minutes',
         complexity: 'Medium',
         usageCount: 89,
@@ -475,6 +578,7 @@ class TemplateService {
         name: 'Sales Lead Qualification',
         description: 'Qualify and nurture sales leads through automated workflow',
         category: 'Sales',
+        template_type: 'workflow',
         estimatedTime: '15-30 minutes',
         complexity: 'Simple',
         usageCount: 156,
@@ -533,6 +637,7 @@ class TemplateService {
         name: 'Compliance Audit',
         description: 'Automated compliance audit and reporting workflow',
         category: 'Compliance',
+        template_type: 'workflow',
         estimatedTime: '1-2 hours',
         complexity: 'Advanced',
         usageCount: 34,
@@ -593,17 +698,61 @@ class TemplateService {
   }
 
   /**
-   * Get all templates (built-in + custom)
+   * Get built-in agent templates
    */
-  getAllTemplates(): WorkflowTemplate[] {
-    return [...this.getBuiltInTemplates(), ...this.getCustomTemplates()];
+  getBuiltInAgentTemplates(): AgentTemplate[] {
+    // For now, return empty array since built-in agent templates are handled in AgentTemplates component
+    // This could be populated with built-in agent templates in the future
+    return [];
   }
 
   /**
-   * Get all available categories
+   * Get all workflow templates (built-in + custom)
    */
-  getAvailableCategories(): string[] {
-    const templates = this.getAllTemplates();
+  getAllWorkflowTemplates(): WorkflowTemplate[] {
+    return [...this.getBuiltInTemplates(), ...this.getCustomWorkflowTemplates()];
+  }
+
+  /**
+   * Get all agent templates (built-in + custom)
+   */
+  getAllAgentTemplates(): AgentTemplate[] {
+    return [...this.getBuiltInAgentTemplates(), ...this.getCustomAgentTemplates()];
+  }
+
+  /**
+   * Get all templates by type
+   */
+  getAllTemplatesByType<T extends Template>(templateType: 'workflow' | 'agent'): T[] {
+    if (templateType === 'workflow') {
+      return this.getAllWorkflowTemplates() as T[];
+    } else {
+      return this.getAllAgentTemplates() as T[];
+    }
+  }
+
+  /**
+   * Get all templates (built-in + custom) - legacy method
+   */
+  getAllTemplates(): WorkflowTemplate[] {
+    return this.getAllWorkflowTemplates();
+  }
+
+  /**
+   * Get all available categories by template type
+   */
+  getAvailableCategories(templateType?: 'workflow' | 'agent'): string[] {
+    let templates: Template[];
+    
+    if (templateType === 'workflow') {
+      templates = this.getAllWorkflowTemplates();
+    } else if (templateType === 'agent') {
+      templates = this.getAllAgentTemplates();
+    } else {
+      // Legacy: return workflow categories only
+      templates = this.getAllWorkflowTemplates();
+    }
+    
     const categories = new Set(templates.map(t => t.category));
     return Array.from(categories).sort();
   }

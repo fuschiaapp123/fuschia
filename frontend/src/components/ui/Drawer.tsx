@@ -40,12 +40,12 @@ export const Drawer: React.FC<DrawerProps> = ({
       
       {/* Drawer */}
       <div className={cn(
-        'fixed right-0 top-0 h-full bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out',
+        'fixed right-0 top-0 h-full bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col',
         getDrawerWidth(),
         isOpen ? 'translate-x-0' : 'translate-x-full'
       )}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
           <button
             onClick={onClose}

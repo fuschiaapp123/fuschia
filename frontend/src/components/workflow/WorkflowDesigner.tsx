@@ -16,13 +16,14 @@ import {
   Position,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Plus, Play, Save, Upload, FolderOpen, Trash2 } from 'lucide-react';
+import { Plus, Play, Save, Upload, FolderOpen, Trash2, Settings } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAppStore } from '@/store/appStore';
 import { Drawer } from '@/components/ui/Drawer';
 import { NodePropertyForm } from './NodePropertyForm';
 import { templateService, WorkflowTemplate } from '@/services/templateService';
 import { workflowService } from '@/services/workflowService';
+import { workflowExecutionService } from '@/services/workflowExecutionService';
 
 // Define workflow step types
 export interface WorkflowStepData {
@@ -224,8 +225,8 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     category: 'Custom',
   });
   
-  // State for editing metadata
-  const [isEditingMetadata, setIsEditingMetadata] = useState(false);
+  // State for properties dialog
+  const [isPropertiesDialogOpen, setIsPropertiesDialogOpen] = useState(false);
   
   // Update nodes and edges when workflowData changes
   useEffect(() => {
@@ -244,10 +245,36 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     }
   }, [workflowData, setNodes, setEdges]);
 
-  // Load available templates and categories
+  // Load available templates and categories from database
   useEffect(() => {
-    setAvailableTemplates(templateService.getAllTemplates());
-    setAvailableCategories(['Custom', ...templateService.getAvailableCategories()]);
+    const loadTemplatesFromDatabase = async () => {
+      try {
+        // Test database connection first
+        const isConnected = await workflowService.testConnection();
+        if (isConnected) {
+          console.log('Loading workflow templates from database...');
+          const databaseTemplates = await workflowService.getWorkflowTemplatesFromDatabase();
+          console.log('Loaded templates from database:', databaseTemplates);
+          setAvailableTemplates(databaseTemplates);
+          
+          // Extract categories from database templates
+          const dbCategories = [...new Set(databaseTemplates.map(t => t.category))];
+          setAvailableCategories(['Custom', ...dbCategories]);
+        } else {
+          console.warn('Database not available, falling back to local storage templates');
+          // Fallback to local storage if database is not available
+          setAvailableTemplates(templateService.getAllTemplates());
+          setAvailableCategories(['Custom', 'Fuschia', ...templateService.getAvailableCategories()]);
+        }
+      } catch (error) {
+        console.error('Failed to load templates from database:', error);
+        // Fallback to local storage on error
+        setAvailableTemplates(templateService.getAllTemplates());
+        setAvailableCategories(['Custom', 'Fuschia', ...templateService.getAvailableCategories()]);
+      }
+    };
+
+    loadTemplatesFromDatabase();
   }, []);
 
   const onConnect = useCallback(
@@ -292,19 +319,68 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
   }, [nodes.length, setNodes]);
 
   const runWorkflow = useCallback(async () => {
+    if (nodes.length === 0) {
+      alert('Cannot run empty workflow. Please add some workflow steps first.');
+      return;
+    }
+
     setIsRunning(true);
     
-    // Simulate workflow execution
-    for (let i = 0; i < nodes.length; i++) {
-      // Wait 1 second to simulate processing
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      // First save the workflow as a template if it's not already saved
+      let templateId = '';
+      
+      // Check if this workflow has been saved before
+      const workflowData = useAppStore.getState().workflowData;
+      if (workflowData?.metadata?.savedId) {
+        templateId = workflowData.metadata.savedId;
+      } else {
+        // Save as temporary template for execution
+        const tempTemplate = {
+          name: workflowMetadata.name || `Execution ${new Date().toLocaleString()}`,
+          description: workflowMetadata.description || 'Temporary workflow for execution',
+          category: workflowMetadata.category || 'Execution',
+          complexity: 'medium' as const,
+          estimatedTime: '30-60 minutes',
+          tags: ['execution', 'temporary'],
+          nodes: nodes.map(node => ({ ...node, selected: false, dragging: false })),
+          edges: edges.map(edge => ({ ...edge, selected: false })),
+        };
+
+        const savedTemplate = await workflowService.saveWorkflowToDatabase(tempTemplate);
+        templateId = savedTemplate.id;
+      }
+
+      // Execute the workflow
+      console.log('Starting workflow execution for template:', templateId);
+      const execution = await workflowExecutionService.executeWorkflow(templateId, {
+        execution_context: {
+          executed_from: 'designer',
+          node_count: nodes.length,
+          edge_count: edges.length,
+          initiated_at: new Date().toISOString()
+        },
+        priority: 1
+      });
+
+      console.log('Workflow execution started:', execution);
+      
+      // Show success message with execution details
+      const executionUrl = `/executions/${execution.id}`;
+      const message = `Workflow execution started successfully!\n\nExecution ID: ${execution.id}\nStatus: ${execution.status}\nTasks: ${execution.tasks.length}\n\nYou can monitor the execution progress in the Workflow Executions section.`;
+      
+      alert(message);
+      
+      // Optionally redirect to execution view
+      // window.location.href = executionUrl;
+      
+    } catch (error) {
+      console.error('Failed to execute workflow:', error);
+      alert(`Failed to execute workflow: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsRunning(false);
     }
-    
-    setIsRunning(false);
-    
-    // Show completion message
-    alert('Workflow execution completed! All steps have been processed according to their objectives and completion criteria.');
-  }, [nodes]);
+  }, [nodes, edges, workflowMetadata]);
 
   const showSaveWorkflowDialog = useCallback(() => {
     // Initialize form with current workflow metadata
@@ -409,8 +485,15 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
         templateService.saveTemplateToFile(template);
       }
 
-      // Update available templates
-      setAvailableTemplates(templateService.getAllTemplates());
+      // Update available templates from database
+      try {
+        const databaseTemplates = await workflowService.getWorkflowTemplatesFromDatabase();
+        setAvailableTemplates(databaseTemplates);
+      } catch (error) {
+        console.error('Failed to refresh templates from database:', error);
+        // Fallback to local storage if database refresh fails
+        setAvailableTemplates(templateService.getAllTemplates());
+      }
 
       // Close dialog and show success
       setShowSaveDialog(false);
@@ -466,6 +549,8 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
   }, [saveFormData, nodes, edges, workflowMetadata]);
 
   const loadTemplate = useCallback((template: WorkflowTemplate) => {
+    console.log('Loading template:', template.name, `(${template.nodes?.length || 0} nodes, ${template.edges?.length || 0} edges)`);
+    
     // Clear existing canvas first
     setNodes([]);
     setEdges([]);
@@ -477,10 +562,45 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
       category: template.category || 'Custom',
     });
     
+    // Validate and process nodes and edges
+    const processedNodes = (template.nodes || []).map((node, index) => {
+      // Ensure each node has required ReactFlow properties
+      return {
+        id: node.id || `node-${index}`,
+        type: node.type || 'workflowStep',
+        position: node.position || { x: 100 + (index % 3) * 250, y: 100 + Math.floor(index / 3) * 200 },
+        data: node.data || {
+          label: 'Unnamed Step',
+          type: 'action',
+          description: 'Configure this step',
+          objective: 'Define what this step should accomplish',
+          completionCriteria: 'Define success criteria for this step',
+        },
+        selected: false,
+        dragging: false
+      };
+    });
+    
+    const processedEdges = (template.edges || []).map((edge, index) => {
+      // Ensure each edge has required ReactFlow properties
+      return {
+        id: edge.id || `edge-${index}`,
+        source: edge.source,
+        target: edge.target,
+        type: edge.type || 'smoothstep',
+        style: edge.style || { stroke: '#6366f1', strokeWidth: 2 },
+        selected: false
+      };
+    });
+    
+    if (processedNodes.length === 0 && processedEdges.length === 0) {
+      console.warn('Template has no nodes or edges - template data may be empty');
+    }
+    
     // Small delay to ensure clearing is visible
     setTimeout(() => {
-      setNodes(template.nodes);
-      setEdges(template.edges);
+      setNodes(processedNodes);
+      setEdges(processedEdges);
     }, 100);
     
     setShowTemplateLoader(false);
@@ -521,12 +641,12 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     }
   }, [nodes.length, edges.length, setNodes, setEdges]);
 
-  const handleMetadataEdit = useCallback(() => {
-    setIsEditingMetadata(true);
+  const handlePropertiesEdit = useCallback(() => {
+    setIsPropertiesDialogOpen(true);
   }, []);
 
-  const handleMetadataSave = useCallback(() => {
-    setIsEditingMetadata(false);
+  const handlePropertiesSave = useCallback(() => {
+    setIsPropertiesDialogOpen(false);
     
     // Update the workflow data in the store with new metadata
     const { setWorkflowData } = useAppStore.getState();
@@ -545,8 +665,8 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     }
   }, [workflowMetadata]);
 
-  const handleMetadataCancel = useCallback(() => {
-    setIsEditingMetadata(false);
+  const handlePropertiesCancel = useCallback(() => {
+    setIsPropertiesDialogOpen(false);
     
     // Reset to original values from store
     const currentWorkflowData = useAppStore.getState().workflowData;
@@ -628,121 +748,61 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           </div>
         </Panel>
 
-        {/* Workflow Metadata Panel */}
-        <Panel position="top-center">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 min-w-[400px] max-w-[600px]">
-            {!isEditingMetadata ? (
-              // Display mode
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-gray-900 truncate">
+        {/* Stacked Info & Status Panels - Top Right */}
+        <Panel position="top-right">
+          <div className="space-y-2">
+            {/* Minimized Workflow Info Panel */}
+            <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-gray-900 truncate">
                     {workflowMetadata.name}
-                  </h2>
-                  <button
-                    onClick={handleMetadataEdit}
-                    className="text-gray-500 hover:text-gray-700 text-sm"
-                  >
-                    Edit
-                  </button>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                  </h3>
+                  <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded mt-1 inline-block">
                     {workflowMetadata.category}
                   </span>
                 </div>
-                <p className="text-sm text-gray-600 max-h-10 overflow-hidden">
-                  {workflowMetadata.description}
-                </p>
-              </div>
-            ) : (
-              // Edit mode
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Workflow Name
-                  </label>
-                  <input
-                    type="text"
-                    value={workflowMetadata.name}
-                    onChange={(e) => setWorkflowMetadata({ ...workflowMetadata, name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
-                    placeholder="Enter workflow name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category
-                  </label>
-                  <select
-                    value={workflowMetadata.category}
-                    onChange={(e) => setWorkflowMetadata({ ...workflowMetadata, category: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
-                  >
-                    {availableCategories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    value={workflowMetadata.description}
-                    onChange={(e) => setWorkflowMetadata({ ...workflowMetadata, description: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
-                    rows={2}
-                    placeholder="Describe what this workflow does"
-                  />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={handleMetadataSave}
-                    className="px-3 py-1 bg-green-500 text-white rounded-md hover:bg-green-600 text-sm"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={handleMetadataCancel}
-                    className="px-3 py-1 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </Panel>
-        
-        {/* Status Panel */}
-        <Panel position="top-right">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 min-w-[200px]">
-            <h3 className="font-semibold text-sm text-gray-900 mb-3">Workflow Status</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Steps:</span>
-                <span className="font-medium">{nodes.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Connections:</span>
-                <span className="font-medium">{edges.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Status:</span>
-                <span className={cn(
-                  "font-medium",
-                  isRunning ? "text-blue-600" : "text-green-600"
-                )}>
-                  {isRunning ? 'Running' : 'Ready'}
-                </span>
+                <button
+                  onClick={handlePropertiesEdit}
+                  className="ml-1 p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                  title="Edit workflow properties"
+                >
+                  <Settings className="h-3 w-3" />
+                </button>
               </div>
               
-              {/* Database save status */}
-              <div className="pt-2 border-t border-gray-100">
+              {/* Compact workflow stats */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Steps:</span>
+                  <span className="font-medium">{nodes.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Links:</span>
+                  <span className="font-medium">{edges.length}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Status Panel */}
+            <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[180px]">
+              <div className="space-y-2">
+                {/* Status indicator */}
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Saved to DB:</span>
+                  <span className="text-xs text-gray-600">Status</span>
+                  <span className={cn(
+                    "px-2 py-1 rounded text-xs font-medium",
+                    isRunning 
+                      ? "bg-blue-100 text-blue-700" 
+                      : "bg-green-100 text-green-700"
+                  )}>
+                    {isRunning ? 'Running' : 'Ready'}
+                  </span>
+                </div>
+                
+                {/* Save status */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600">Saved</span>
                   <div className="flex items-center space-x-1">
                     {workflowData?.metadata?.savedId ? (
                       <>
@@ -757,8 +817,9 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
                     )}
                   </div>
                 </div>
+                
                 {workflowData?.metadata?.savedId && (
-                  <div className="text-xs text-gray-500 mt-1 truncate">
+                  <div className="text-xs text-gray-500 truncate border-t border-gray-100 pt-2 mt-2">
                     ID: {workflowData.metadata.savedId.split('-')[0]}...
                   </div>
                 )}
@@ -974,6 +1035,74 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           </div>
         </div>
       )}
+
+      {/* Workflow Properties Drawer */}
+      <Drawer 
+        isOpen={isPropertiesDialogOpen} 
+        onClose={handlePropertiesCancel}
+        title="Workflow Properties"
+        size="lg"
+      >
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Workflow Name
+            </label>
+            <input
+              type="text"
+              value={workflowMetadata.name}
+              onChange={(e) => setWorkflowMetadata({ ...workflowMetadata, name: e.target.value })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              placeholder="Enter workflow name"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Category
+            </label>
+            <select
+              value={workflowMetadata.category}
+              onChange={(e) => setWorkflowMetadata({ ...workflowMetadata, category: e.target.value })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+            >
+              {availableCategories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Description
+            </label>
+            <textarea
+              value={workflowMetadata.description}
+              onChange={(e) => setWorkflowMetadata({ ...workflowMetadata, description: e.target.value })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              rows={4}
+              placeholder="Describe what this workflow does"
+            />
+          </div>
+          
+          <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+            <button
+              onClick={handlePropertiesCancel}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handlePropertiesSave}
+              className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 text-sm"
+            >
+              Save Properties
+            </button>
+          </div>
+        </div>
+      </Drawer>
     </div>
   );
 };

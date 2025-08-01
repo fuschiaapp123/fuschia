@@ -18,6 +18,9 @@ import {
   Search
 } from 'lucide-react';
 
+// Import logo as a module (this will work with Vite)
+const fuschinLogoUrl = '/FUSCHIA-LOGO-COLOR.png';
+
 const sidebarItems = [
   {
     id: 'home',
@@ -112,12 +115,39 @@ export const Sidebar: React.FC = () => {
     )}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        {!sidebarCollapsed && (
+        {!sidebarCollapsed ? (
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-fuschia-500 to-fuschia-600 rounded-lg flex items-center justify-center">
+            <img 
+              src={fuschinLogoUrl} 
+              alt="Fuschia Logo" 
+              className="h-8 w-auto"
+              onError={(e) => {
+                // Fallback to text logo if image fails to load
+                e.currentTarget.style.display = 'none';
+                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                if (fallback) fallback.style.display = 'flex';
+              }}
+            />
+            <div className="w-8 h-8 bg-gradient-to-br from-fuschia-500 to-fuschia-600 rounded-lg items-center justify-center hidden">
               <span className="text-white font-bold text-sm">F</span>
             </div>
-            <h1 className="text-xl font-bold text-gray-900">Fuschia</h1>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center">
+            <img 
+              src={fuschinLogoUrl} 
+              alt="Fuschia Logo" 
+              className="h-6 w-auto"
+              onError={(e) => {
+                // Fallback to text logo if image fails to load
+                e.currentTarget.style.display = 'none';
+                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                if (fallback) fallback.style.display = 'flex';
+              }}
+            />
+            <div className="w-6 h-6 bg-gradient-to-br from-fuschia-500 to-fuschia-600 rounded-lg items-center justify-center hidden">
+              <span className="text-white font-bold text-xs">F</span>
+            </div>
           </div>
         )}
         <button

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Node, Edge } from '@xyflow/react';
 import { 
   Users, 
@@ -17,27 +17,25 @@ import {
 import { cn } from '@/utils/cn';
 import { useAppStore } from '@/store/appStore';
 import { AgentData } from './AgentDesigner';
+import { templateService, AgentTemplate } from '@/services/templateService';
 
-interface AgentTemplate {
-  id: string;
-  name: string;
-  description: string;
-  category: 'enterprise' | 'development' | 'customer-service' | 'data-analytics' | 'security';
+// AgentTemplate is now imported from templateService
+
+interface LocalAgentTemplate extends AgentTemplate {
   icon: React.ReactNode;
-  complexity: 'simple' | 'medium' | 'complex';
-  agentCount: number;
-  nodes: Node[];
-  edges: Edge[];
-  features: string[];
-  useCase: string;
 }
 
-const agentTemplates: AgentTemplate[] = [
+const agentTemplates: LocalAgentTemplate[] = [
   {
     id: 'customer-service-hierarchy',
     name: 'Customer Service Hierarchy',
     description: 'Multi-tier customer support organization with escalation paths',
     category: 'customer-service',
+    template_type: 'agent',
+    estimatedTime: '30-60 minutes',
+    usageCount: 156,
+    tags: ['Customer Service', 'Support', 'Escalation'],
+    preview: ['Service Coordinator', 'L1 Support Agent', 'L2 Support Specialist', 'Escalation Manager'],
     icon: <MessageSquare className="w-6 h-6" />,
     complexity: 'medium',
     agentCount: 6,
@@ -149,6 +147,11 @@ const agentTemplates: AgentTemplate[] = [
     name: 'Data Processing Pipeline',
     description: 'Automated data ingestion, processing, and analytics pipeline',
     category: 'data-analytics',
+    template_type: 'agent',
+    estimatedTime: '45-90 minutes',
+    usageCount: 89,
+    tags: ['Data Processing', 'ETL', 'Analytics'],
+    preview: ['Data Ingestion Agent', 'ETL Processor', 'Quality Controller', 'Analytics Engine', 'Pipeline Coordinator'],
     icon: <Database className="w-6 h-6" />,
     complexity: 'complex',
     agentCount: 5,
@@ -284,6 +287,11 @@ const agentTemplates: AgentTemplate[] = [
     name: 'Development Team Structure',
     description: 'Software development team with code review and deployment automation',
     category: 'development',
+    template_type: 'agent',
+    estimatedTime: '60-120 minutes',
+    usageCount: 234,
+    tags: ['Development', 'CI/CD', 'Code Review'],
+    preview: ['Development Coordinator', 'Code Reviewer', 'Test Automation Agent', 'Deployment Manager'],
     icon: <Brain className="w-6 h-6" />,
     complexity: 'medium',
     agentCount: 4,
@@ -395,6 +403,11 @@ const agentTemplates: AgentTemplate[] = [
     name: 'Security Incident Response',
     description: 'Automated security monitoring and incident response team',
     category: 'security',
+    template_type: 'agent',
+    estimatedTime: '90-180 minutes',
+    usageCount: 45,
+    tags: ['Security', 'Incident Response', 'Monitoring'],
+    preview: ['Security Monitor', 'Incident Responder', 'Threat Intelligence Analyst', 'Security Coordinator'],
     icon: <Shield className="w-6 h-6" />,
     complexity: 'complex',
     agentCount: 5,
@@ -520,22 +533,43 @@ const complexityColors = {
 export const AgentTemplates: React.FC = () => {
   const { setAgentData } = useAppStore();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<LocalAgentTemplate | null>(null);
+  const [availableTemplates, setAvailableTemplates] = useState<LocalAgentTemplate[]>([]);
 
   const categories = ['all', 'enterprise', 'development', 'customer-service', 'data-analytics', 'security'];
 
-  const filteredTemplates = selectedCategory === 'all' 
-    ? agentTemplates 
-    : agentTemplates.filter(template => template.category === selectedCategory);
+  // Load available templates on component mount
+  useEffect(() => {
+    // Combine built-in templates with those from templateService
+    const serviceTemplates = templateService.getAllAgentTemplates();
+    
+    // Convert service templates to LocalAgentTemplate format with icons
+    const templatesWithIcons: LocalAgentTemplate[] = serviceTemplates.map(template => ({
+      ...template,
+      icon: categoryIcons[template.category as keyof typeof categoryIcons] || <Users className="w-6 h-6" />
+    }));
 
-  const handleTemplateLoad = (template: AgentTemplate) => {
+    // Add built-in templates (they already have icons)
+    const allTemplates = [...agentTemplates, ...templatesWithIcons];
+    setAvailableTemplates(allTemplates);
+  }, []);
+
+  const filteredTemplates = selectedCategory === 'all' 
+    ? availableTemplates 
+    : availableTemplates.filter(template => template.category === selectedCategory);
+
+  const handleTemplateLoad = (template: LocalAgentTemplate) => {
     setAgentData({
       nodes: template.nodes,
       edges: template.edges,
     });
+    
+    // Navigate to the Agent Designer (assuming there's a way to switch tabs)
+    const { setActiveTab } = useAppStore.getState();
+    setActiveTab('designer'); // This should switch to the Agent Designer tab
   };
 
-  const handleTemplatePreview = (template: AgentTemplate) => {
+  const handleTemplatePreview = (template: LocalAgentTemplate) => {
     setSelectedTemplate(template);
   };
 

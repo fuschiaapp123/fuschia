@@ -6,22 +6,43 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.db.neo4j import neo4j_driver
+from app.db.postgres import init_db, test_db_connection
 from app.api.router import api_router
 
-
+print("Starting Fuschia Backend API...")
 logger = structlog.get_logger()
-
+print("Logger initialized")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Fuschia Backend API")
+    
+    # Initialize PostgreSQL database
+    try:
+        logger.info("Initializing PostgreSQL database...")
+        await init_db()
+        logger.info("PostgreSQL database initialized successfully")
+        
+        # Test connection
+        pg_connected = await test_db_connection()
+        if pg_connected:
+            logger.info("PostgreSQL connection verified")
+        else:
+            logger.warning("PostgreSQL connection test failed")
+    except Exception as e:
+        logger.error(f"PostgreSQL initialization failed: {e}")
+        logger.info("Starting without PostgreSQL connection")
+    
+    # Initialize Neo4j database
     try:
         await neo4j_driver.verify_connectivity()
         logger.info("Neo4j connection verified")
     except Exception as e:
         logger.warning(f"Neo4j connection failed: {e}")
         logger.info("Starting without Neo4j connection")
+    
     yield
+    
     logger.info("Shutting down Fuschia Backend API")
     await neo4j_driver.close()
 

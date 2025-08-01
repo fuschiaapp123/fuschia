@@ -14,7 +14,7 @@ import os
 try:
     llm_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 except Exception as e:
-    print(f"Warning: OpenAI client initialization failed: {e}")
+    # Warning: OpenAI client initialization failed - continuing without LLM
     llm_client = None
 
 # Global orchestrator instance

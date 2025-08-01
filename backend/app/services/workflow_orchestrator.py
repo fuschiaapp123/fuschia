@@ -11,6 +11,7 @@ from app.models.agent_organization import (
 )
 from app.services.workflow_execution_agent import WorkflowExecutionAgent
 from app.services.template_service import template_service
+from app.services.workflow_execution_service import workflow_execution_service
 from openai import OpenAI
 
 
@@ -52,38 +53,35 @@ class WorkflowOrchestrator:
             workflow_template = await template_service.get_template(workflow_template_id)
             if not workflow_template:
                 raise ValueError(f"Workflow template {workflow_template_id} not found")
-            print ("---> After get_template")
+            self.logger.debug("Retrieved workflow template", workflow_template_id=workflow_template_id)
             # Get agent organization (mock for now - would come from database)
             organization = await self._get_agent_organization(organization_id)
             if not organization:
                 raise ValueError(f"Agent organization {organization_id} not found")
-            print ("---> After get_agent_organization")
-            # Create workflow tasks from template
-            tasks = self._create_tasks_from_template(workflow_template)
-            print
-            # Create workflow execution
-            execution = WorkflowExecution(
+            self.logger.debug("Retrieved agent organization", organization_id=organization_id)
+            # Create workflow execution using the database service
+            execution = await workflow_execution_service.create_execution(
                 workflow_template_id=workflow_template_id,
-                organization_id=organization_id,
-                tasks=tasks,
-                execution_context=initial_context or {},
                 initiated_by=initiated_by,
-                status=ExecutionStatus.PENDING.value
+                organization_id=organization_id,
+                execution_context=initial_context or {},
+                priority=1
             )
-            print ("---> After create_workflow_execution")
-            # Store execution
+            self.logger.debug("Created workflow execution in database", execution_id=execution.id)
+            
+            # Store execution in memory for orchestration
             self.active_executions[execution.id] = execution
-            print ("---> After store_workflow_execution")
+            self.logger.debug("Stored workflow execution in memory", execution_id=execution.id)
             # Initialize agent instances
             await self._initialize_agent_instances(organization, execution)
-            print ("---> After initialize_agent_instances")
+            self.logger.debug("Initialized agent instances", execution_id=execution.id)
             # Start execution
             execution_task = asyncio.create_task(self._execute_workflow(execution))
-            print ("---> After start_execution_task")
+            self.logger.debug("Started execution task", execution_id=execution.id)
             self.logger.info(
                 "Workflow execution initiated",
                 execution_id=execution.id,
-                task_count=len(tasks),
+                task_count=len(execution.tasks),
                 organization_agents=len(organization.agents)
             )
             
@@ -96,13 +94,19 @@ class WorkflowOrchestrator:
     async def _execute_workflow(self, execution: WorkflowExecution) -> None:
         """Execute the workflow with multi-agent coordination"""
         
-        execution.status = ExecutionStatus.RUNNING.value
+        execution.status = ExecutionStatus.RUNNING
+        # Update status in database
+        await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.RUNNING)
         
         try:
             while not self._is_workflow_complete(execution):
                 # Get ready tasks (dependencies satisfied)
                 ready_tasks = self._get_ready_tasks(execution)
-                
+                self.logger.debug(
+                    "Retrieved ready tasks for execution",
+                    execution_id=execution.id,
+                    ready_task_count=len(ready_tasks)
+                )
                 if not ready_tasks:
                     # Check if waiting for human interaction
                     if execution.human_approvals_pending:
@@ -111,7 +115,9 @@ class WorkflowOrchestrator:
                             execution_id=execution.id,
                             pending_approvals=len(execution.human_approvals_pending)
                         )
-                        execution.status = ExecutionStatus.PAUSED.value
+                        execution.status = ExecutionStatus.PAUSED
+                        # Update status in database
+                        await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.PAUSED)
                         await asyncio.sleep(5)  # Wait before checking again
                         continue
                     else:
@@ -124,18 +130,30 @@ class WorkflowOrchestrator:
                 
                 # Assign and execute ready tasks
                 task_assignments = await self._assign_tasks_to_agents(ready_tasks, execution)
-                
+                self.logger.info(
+                    "Assigned tasks to agents",
+                    execution_id=execution.id,
+                    task_assignments=task_assignments
+                )
                 # Execute tasks in parallel
                 execution_coroutines = []
                 for task_id, agent_id in task_assignments.items():
                     task = next(t for t in execution.tasks if t.id == task_id)
                     agent = self.agent_instances[agent_id]
-                    
+                    self.logger.debug(
+                        "Executing task with agent",
+                        task_id=task.id,
+                        agent_id=agent.agent_node.id
+                    )
                     coroutine = self._execute_task_with_monitoring(
                         agent, task, execution.execution_context, execution
                     )
                     execution_coroutines.append(coroutine)
-                
+                self.logger.debug(
+                    "Prepared execution coroutines for tasks",
+                    execution_id=execution.id,
+                    task_count=len(execution_coroutines)
+                )
                 # Wait for all assigned tasks to complete
                 if execution_coroutines:
                     task_results = await asyncio.gather(*execution_coroutines, return_exceptions=True)
@@ -156,27 +174,33 @@ class WorkflowOrchestrator:
             
             # Determine final status
             if self._all_tasks_completed(execution):
-                execution.status = ExecutionStatus.COMPLETED.value
+                execution.status = ExecutionStatus.COMPLETED
                 execution.actual_completion = datetime.utcnow()
+                # Update status in database
+                await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.COMPLETED)
                 self.logger.info(
                     "Workflow execution completed successfully",
                     execution_id=execution.id,
                     duration=(execution.actual_completion - execution.started_at).total_seconds()
                 )
             else:
-                execution.status = ExecutionStatus.FAILED.value
+                execution.status = ExecutionStatus.FAILED
+                # Update status in database
+                await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.FAILED, "Workflow execution incomplete")
                 self.logger.error(
                     "Workflow execution failed",
                     execution_id=execution.id
                 )
                 
         except Exception as e:
-            execution.status = ExecutionStatus.FAILED.value
+            execution.status = ExecutionStatus.FAILED
             execution.error_log.append({
                 'error': str(e),
                 'timestamp': datetime.utcnow().isoformat(),
                 'phase': 'execution'
             })
+            # Update status in database
+            await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.FAILED, str(e))
             self.logger.error("Workflow execution failed with exception", error=str(e))
     
     async def _execute_task_with_monitoring(self,
@@ -189,6 +213,11 @@ class WorkflowOrchestrator:
         try:
             # Update execution tracking
             execution.current_tasks.append(task.id)
+            
+            # Update task status to IN_PROGRESS in database
+            await workflow_execution_service.update_task_status(
+                task.id, TaskStatus.IN_PROGRESS, agent.agent_node.id
+            )
             
             # Execute task
             result = await agent.execute_task(task, context, execution)
@@ -206,8 +235,16 @@ class WorkflowOrchestrator:
             
             if result.get('status') == TaskStatus.COMPLETED.value:
                 execution.completed_tasks.append(task.id)
+                # Update task status to COMPLETED in database
+                await workflow_execution_service.update_task_status(
+                    task.id, TaskStatus.COMPLETED, agent.agent_node.id, result
+                )
             elif result.get('status') == TaskStatus.FAILED.value:
                 execution.failed_tasks.append(task.id)
+                # Update task status to FAILED in database
+                await workflow_execution_service.update_task_status(
+                    task.id, TaskStatus.FAILED, agent.agent_node.id, result
+                )
             
             return result
             
@@ -223,6 +260,14 @@ class WorkflowOrchestrator:
             if task.id in execution.current_tasks:
                 execution.current_tasks.remove(task.id)
             execution.failed_tasks.append(task.id)
+            
+            # Update task status to FAILED in database
+            await workflow_execution_service.update_task_status(
+                task.id, TaskStatus.FAILED, agent.agent_node.id, {
+                    'error': str(e),
+                    'timestamp': datetime.utcnow().isoformat()
+                }
+            )
             
             return {
                 'task_id': task.id,
@@ -257,6 +302,9 @@ class WorkflowOrchestrator:
             task.assigned_agent_id = target_agent_id
             self.task_assignments[task.id] = target_agent_id
             
+            # Update task assignment in database
+            await workflow_execution_service.update_task_assignment(task.id, target_agent_id)
+            
             # Re-execute with new agent
             new_result = await target_agent.execute_task(task, execution.execution_context, execution)
             
@@ -286,6 +334,9 @@ class WorkflowOrchestrator:
             if best_agent_id:
                 assignments[task.id] = best_agent_id
                 self.task_assignments[task.id] = best_agent_id
+                
+                # Update task assignment in database
+                await workflow_execution_service.update_task_assignment(task.id, best_agent_id)
                 
                 # Update agent load tracking
                 self.agent_load[best_agent_id] = self.agent_load.get(best_agent_id, 0) + 1
@@ -431,9 +482,9 @@ class WorkflowOrchestrator:
                                         organization: AgentOrganization,
                                         execution: WorkflowExecution) -> None:
         """Initialize agent instances for the organization"""
-        print (f"---> Initializing agent instances for organization {organization}")
+        self.logger.debug("Initializing agent instances for organization", organization_id=organization.id)
         for agent_node in organization.agents:
-            print (f"---> Initializing agent instance for {agent_node.name} ({agent_node.id})")
+            self.logger.debug("Initializing agent instance", agent_name=agent_node.name, agent_id=agent_node.id)
             # Create agent instance 
             agent_instance = WorkflowExecutionAgent(
                 agent_node=agent_node,
@@ -455,42 +506,114 @@ class WorkflowOrchestrator:
         
         tasks = []
         template_data = workflow_template.template_data
+        # Map original node IDs to new unique task IDs for dependency resolution
+        node_id_mapping = {}
         
         if isinstance(template_data, dict) and 'nodes' in template_data:
             for node in template_data['nodes']:
+                original_node_id = node.get('id', str(uuid.uuid4()))
+                unique_task_id = str(uuid.uuid4())  # Always generate unique ID
+                
+                # Store mapping for dependency resolution
+                node_id_mapping[original_node_id] = unique_task_id
+                
                 task = WorkflowTask(
-                    id=node.get('id', str(uuid.uuid4())),
+                    id=unique_task_id,
                     name=node.get('data', {}).get('label', 'Unnamed Task'),
                     description=node.get('data', {}).get('description', ''),
                     objective=node.get('data', {}).get('objective', ''),
                     completion_criteria=node.get('data', {}).get('completionCriteria', ''),
-                    context=node.get('data', {})
+                    status=TaskStatus.PENDING,
+                    context={
+                        **node.get('data', {}),
+                        'original_node_id': original_node_id  # Store original ID for reference
+                    }
                 )
                 tasks.append(task)
             
-            # Add dependencies based on edges
+            # Add dependencies based on edges using mapped IDs
             if 'edges' in template_data:
                 for edge in template_data['edges']:
-                    target_id = edge.get('target')
                     source_id = edge.get('source')
+                    target_id = edge.get('target')
                     
-                    # Find target task and add dependency
-                    for task in tasks:
-                        if task.id == target_id and source_id:
-                            task.dependencies.append(source_id)
+                    if source_id in node_id_mapping and target_id in node_id_mapping:
+                        # Find the target task and add the source task as a dependency
+                        target_task_id = node_id_mapping[target_id]
+                        source_task_id = node_id_mapping[source_id]
+                        
+                        for task in tasks:
+                            if task.id == target_task_id:
+                                task.dependencies.append(source_task_id)
+                                break
         
         return tasks
     
     async def _get_agent_organization(self, organization_id: str) -> Optional[AgentOrganization]:
-        """Get agent organization by ID (mock implementation)"""
+        """Get agent organization by ID from database, with template integration"""
         
-        # Mock agent organization for testing
+        try:
+            from app.services.agent_organization_service import agent_organization_service
+            
+            # First, try to get existing organization from database
+            organization = await agent_organization_service.get_agent_organization(organization_id)
+            
+            if organization:
+                self.logger.info(
+                    "Retrieved existing agent organization from database",
+                    organization_id=organization_id,
+                    agent_count=len(organization.agents)
+                )
+                return organization
+            
+            # If not found, try to treat organization_id as a template_id and create from template
+            self.logger.info(
+                "Organization not found, attempting to create from agent template",
+                template_id=organization_id
+            )
+            
+            organization = await agent_organization_service.create_organization_from_template(
+                agent_template_id=organization_id,
+                organization_name=f"Generated Organization {organization_id[:8]}",
+                created_by="system"
+            )
+            
+            if organization:
+                self.logger.info(
+                    "Created agent organization from template",
+                    organization_id=organization.id,
+                    template_id=organization_id,
+                    agent_count=len(organization.agents)
+                )
+                return organization
+            
+            # If template creation also fails, fall back to mock organization
+            self.logger.warning(
+                "Failed to create from template, falling back to mock organization",
+                template_id=organization_id
+            )
+            return await self._create_fallback_organization(organization_id)
+            
+        except Exception as e:
+            self.logger.error(
+                "Failed to get or create agent organization, falling back to mock",
+                organization_id=organization_id,
+                error=str(e)
+            )
+            # Fallback to mock organization on any error
+            return await self._create_fallback_organization(organization_id)
+    
+    async def _create_fallback_organization(self, organization_id: str) -> AgentOrganization:
+        """Create fallback mock organization when database is unavailable"""
+        
         from app.models.agent_organization import AgentNode, AgentRole, AgentStrategy, AgentCapability, AgentTool
+        
+        self.logger.info("Creating fallback mock organization", organization_id=organization_id)
         
         return AgentOrganization(
             id=organization_id,
-            name="Default Workflow Organization",
-            description="Default multi-agent organization for workflow execution",
+            name="Fallback Workflow Organization",
+            description="Fallback multi-agent organization for workflow execution",
             agents=[
                 AgentNode(
                     id="coordinator-001",
@@ -572,12 +695,31 @@ class WorkflowOrchestrator:
     
     # Public methods for external interaction
     
+    async def load_execution_from_database(self, execution_id: str) -> Optional[WorkflowExecution]:
+        """Load workflow execution from database into memory for orchestration"""
+        try:
+            # Get execution from database
+            execution = await workflow_execution_service.get_execution(execution_id)
+            if execution:
+                # Store in memory for orchestration
+                self.active_executions[execution_id] = execution
+                self.logger.info("Loaded execution from database", execution_id=execution_id)
+                return execution
+            return None
+        except Exception as e:
+            self.logger.error("Failed to load execution from database", 
+                            execution_id=execution_id, error=str(e))
+            return None
+    
     async def get_execution_status(self, execution_id: str) -> Optional[Dict[str, Any]]:
         """Get current status of workflow execution"""
         
         execution = self.active_executions.get(execution_id)
         if not execution:
-            return None
+            # Try to load from database
+            execution = await self.load_execution_from_database(execution_id)
+            if not execution:
+                return None
         
         return {
             'execution_id': execution_id,
@@ -631,7 +773,9 @@ class WorkflowOrchestrator:
         
         execution = self.active_executions.get(execution_id)
         if execution:
-            execution.status = ExecutionStatus.PAUSED.value
+            execution.status = ExecutionStatus.PAUSED
+            # Update status in database
+            await workflow_execution_service.update_execution_status(execution_id, ExecutionStatus.PAUSED)
             return True
         return False
     
@@ -639,8 +783,10 @@ class WorkflowOrchestrator:
         """Resume paused workflow execution"""
         
         execution = self.active_executions.get(execution_id)
-        if execution and execution.status == ExecutionStatus.PAUSED.value:
-            execution.status = ExecutionStatus.RUNNING.value
+        if execution and execution.status == ExecutionStatus.PAUSED:
+            execution.status = ExecutionStatus.RUNNING
+            # Update status in database
+            await workflow_execution_service.update_execution_status(execution_id, ExecutionStatus.RUNNING)
             # Restart execution task
             asyncio.create_task(self._execute_workflow(execution))
             return True
@@ -651,7 +797,9 @@ class WorkflowOrchestrator:
         
         execution = self.active_executions.get(execution_id)
         if execution:
-            execution.status = ExecutionStatus.CANCELLED.value
+            execution.status = ExecutionStatus.CANCELLED
             execution.actual_completion = datetime.utcnow()
+            # Update status in database
+            await workflow_execution_service.update_execution_status(execution_id, ExecutionStatus.CANCELLED, "Cancelled by user")
             return True
         return False

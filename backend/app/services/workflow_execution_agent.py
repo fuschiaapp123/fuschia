@@ -85,13 +85,15 @@ class WorkflowExecutionAgent:
         )
         
         # Update task status
-        task.status = TaskStatus.IN_PROGRESS.value
+        task.status = TaskStatus.IN_PROGRESS
         task.started_at = datetime.utcnow()
         task.assigned_agent_id = self.agent_node.id
-        
+        print (f"===>Agent {self.agent_node.name}, strategy {self.agent_node.strategy} is executing task {task.name} with ID {task_id}")
         try:
             # Choose execution strategy
-            if self.agent_node.strategy == AgentStrategy.CHAIN_OF_THOUGHT:
+            if self.agent_node.strategy == AgentStrategy.SIMPLE:
+                result = await self._execute_with_simple(task, execution_context, workflow_execution)
+            elif self.agent_node.strategy == AgentStrategy.CHAIN_OF_THOUGHT:
                 result = await self._execute_with_chain_of_thought(task, execution_context, workflow_execution)
             elif self.agent_node.strategy == AgentStrategy.REACT:
                 result = await self._execute_with_react(task, execution_context, workflow_execution)
@@ -104,18 +106,19 @@ class WorkflowExecutionAgent:
                 
                 approval_result = await self._request_human_approval(task, result, workflow_execution)
                 if approval_result['status'] == 'approved':
-                    task.status = TaskStatus.COMPLETED.value
+                    task.status = TaskStatus.COMPLETED
                     task.completed_at = datetime.utcnow()
                     result.update(approval_result.get('feedback', {}))
                 else:
-                    task.status = TaskStatus.ESCALATED.value
+                    task.status = TaskStatus.ESCALATED
                     result['escalation_reason'] = approval_result.get('reason', 'Human rejected')
             else:
-                task.status = TaskStatus.COMPLETED.value
+                task.status = TaskStatus.COMPLETED
                 task.completed_at = datetime.utcnow()
             
             # Store results
             task.results = result
+            print(f"===> task: {task}")
             
             self.logger.info(
                 "Task execution completed",
@@ -126,7 +129,7 @@ class WorkflowExecutionAgent:
             
             return {
                 'task_id': task_id,
-                'status': task.status,
+                'status': task.status.value,
                 'results': result,
                 'agent_id': self.agent_node.id,
                 'execution_time': (task.completed_at - task.started_at).total_seconds() if task.completed_at else None
@@ -134,7 +137,7 @@ class WorkflowExecutionAgent:
             
         except Exception as e:
             self.logger.error("Task execution failed", task_id=task_id, error=str(e))
-            task.status = TaskStatus.FAILED.value
+            task.status = TaskStatus.FAILED
             task.results = {
                 'error': str(e),
                 'error_type': type(e).__name__,
@@ -143,8 +146,70 @@ class WorkflowExecutionAgent:
             
             return {
                 'task_id': task_id,
-                'status': task.status,
+                'status': task.status.value,
                 'error': str(e),
+                'agent_id': self.agent_node.id
+            }
+    
+    async def _execute_with_simple(self,
+                                  task: WorkflowTask,
+                                  execution_context: Dict[str, Any],
+                                  workflow_execution: WorkflowExecution) -> Dict[str, Any]:
+        """Execute task using simple direct execution without complex reasoning"""
+        if not self.llm_client:
+            return await self._fallback_execution(task, execution_context)
+        
+        self.logger.info(
+            "Executing task with simple strategy",
+            task_id=task.id,
+            agent_id=self.agent_node.id
+        )
+        simple_prompt = self._build_simple_prompt(task, execution_context, workflow_execution)
+        try:
+            # For simple strategy, execute directly without complex reasoning
+            # This is the most straightforward approach - just execute the task
+            completion = self.llm_client.chat.completions.create(
+                            model="gpt-4",
+                            messages=simple_prompt,
+                            max_tokens=1500,
+                            temperature=0.5
+                        )
+            response_text = completion.choices[0].message.content
+            result = {
+                'success': True,
+                'strategy': 'simple',
+                'confidence': 0.8,  # Standard confidence for simple execution
+                'execution_summary': f"Task '{task.name}' executed directly by {self.agent_node.name}",
+                'response': response_text,
+                'task_id': task.id,
+                'agent_id': self.agent_node.id,
+                'completed_at': datetime.utcnow().isoformat()
+            }
+            
+            # Log simple execution completion
+            self.logger.info(
+                "Simple strategy execution completed",
+                task_id=task.id,
+                agent_id=self.agent_node.id,
+                success=result['success']
+            )
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(
+                "Simple strategy execution failed",
+                task_id=task.id,
+                agent_id=self.agent_node.id,
+                error=str(e)
+            )
+            
+            return {
+                'success': False,
+                'strategy': 'simple',
+                'confidence': 0.0,
+                'error': str(e),
+                'task_id': task.id,
                 'agent_id': self.agent_node.id
             }
     
@@ -499,6 +564,28 @@ class WorkflowExecutionAgent:
         }
     
     # Helper methods for building prompts and parsing responses
+    def _build_simple_prompt(self, task: WorkflowTask, context: Dict[str, Any], workflow: WorkflowExecution) -> List[Dict[str, str]]:
+        """Build simple execution prompt"""
+        return [
+            {
+                "role": "system",
+                "content": f"You are {self.agent_node.name}, a {self.agent_node.role.value} agent in an enterprise automation workflow."
+            },
+            {
+                "role": "user",
+                "content": f"""TASK DETAILS:
+- Name: {task.name}
+- Description: {task.description}
+- Objective: {task.objective or 'Complete the task successfully'}
+- Completion Criteria: {task.completion_criteria or 'Task meets objective requirements'}
+- Context: {json.dumps(context, default=str, indent=2)}
+- Available Tools: {', '.join(self.available_tools.keys())}
+- Agent Capabilities: {[cap.name for cap in self.agent_node.capabilities]}
+- Current Time: {datetime.utcnow().isoformat()}
+            """
+            }
+        ]
+
     def _build_cot_prompt(self, task: WorkflowTask, context: Dict[str, Any], workflow: WorkflowExecution) -> str:
         """Build Chain of Thought prompt"""
         return f"""You are {self.agent_node.name}, a {self.agent_node.role.value} agent in an enterprise automation workflow.

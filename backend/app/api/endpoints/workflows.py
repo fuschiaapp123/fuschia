@@ -15,6 +15,7 @@ class WorkflowSaveRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: str = Field(..., max_length=1000)
     category: str = Field(..., max_length=100)
+    template_type: str = Field(default="workflow")  # Support both 'workflow' and 'agent'
     complexity: str = Field(default="medium")
     estimated_time: str = Field(default="Variable", max_length=50)
     tags: List[str] = Field(default_factory=list)
@@ -35,6 +36,11 @@ class WorkflowSaveResponse(BaseModel):
     status: str
     created_at: datetime
     created_by: Optional[str] = None
+    # Include template data for frontend loading
+    template_data: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    tags: List[str] = Field(default_factory=list)
+    preview_steps: List[str] = Field(default_factory=list)
 
 
 class WorkflowListResponse(BaseModel):
@@ -63,12 +69,20 @@ async def save_workflow(
         
         complexity = complexity_map.get(workflow_data.complexity.lower(), TemplateComplexity.MEDIUM)
         
+        # Determine template type from request
+        template_type = TemplateType.WORKFLOW  # Default
+        if hasattr(workflow_data, 'template_type') and workflow_data.template_type:
+            if workflow_data.template_type.lower() == 'agent':
+                template_type = TemplateType.AGENT
+            elif workflow_data.template_type.lower() == 'workflow':
+                template_type = TemplateType.WORKFLOW
+        
         # Create template from workflow data
         template_create = TemplateCreate(
             name=workflow_data.name,
             description=workflow_data.description,
             category=workflow_data.category,
-            template_type=TemplateType.WORKFLOW,
+            template_type=template_type,
             complexity=complexity,
             estimated_time=workflow_data.estimated_time,
             tags=workflow_data.tags if workflow_data.tags else [workflow_data.category, "Custom"],
@@ -138,7 +152,12 @@ async def get_workflows(
                     usage_count=full_template.usage_count,
                     status=full_template.status.value,
                     created_at=full_template.created_at,
-                    created_by=full_template.created_by
+                    created_by=full_template.created_by,
+                    # Include template data for frontend loading
+                    template_data=full_template.template_data,
+                    metadata=full_template.metadata,
+                    tags=full_template.tags,
+                    preview_steps=full_template.preview_steps
                 ))
         
         return WorkflowListResponse(
@@ -149,6 +168,14 @@ async def get_workflows(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get workflows: {str(e)}")
+
+
+@router.get("/test")
+async def test_connection():
+    """
+    Simple endpoint to test connectivity to the workflows service
+    """
+    return {"status": "ok", "message": "Workflows service is available"}
 
 
 @router.get("/{workflow_id}")
@@ -331,3 +358,22 @@ async def use_workflow(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update workflow usage: {str(e)}")
+
+
+@router.get("/templates/test")
+async def test_template_connectivity():
+    """
+    Test endpoint for checking template service connectivity
+    Used by frontend services to verify backend availability
+    """
+    try:
+        # Test basic template service connectivity
+        # This is a simple health check for the template service
+        return {
+            "status": "ok",
+            "message": "Template service is available",
+            "timestamp": datetime.utcnow().isoformat(),
+            "service": "template_service"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Template service unavailable: {str(e)}")

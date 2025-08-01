@@ -77,8 +77,21 @@ export const Login: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-fuschia-600 rounded-full flex items-center justify-center">
-            <LogIn className="h-8 w-8 text-white" />
+          <div className="mx-auto mb-6">
+            <img 
+              src="/FUSCHIA-LOGO-COLOR.png" 
+              alt="Fuschia Logo" 
+              className="h-16 w-auto mx-auto"
+              onError={(e) => {
+                // Fallback to icon if image fails to load
+                e.currentTarget.style.display = 'none';
+                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                if (fallback) fallback.style.display = 'flex';
+              }}
+            />
+            <div className="mx-auto h-16 w-16 bg-fuschia-600 rounded-full items-center justify-center hidden">
+              <LogIn className="h-8 w-8 text-white" />
+            </div>
           </div>
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
             Welcome back

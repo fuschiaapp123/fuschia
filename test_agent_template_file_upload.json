@@ -1,0 +1,98 @@
+{
+  "id": "test-customer-service-team",
+  "name": "Test Customer Service Team",
+  "description": "A test agent organization for customer service operations with escalation paths",
+  "category": "customer-service",
+  "template_type": "agent",
+  "estimatedTime": "45-60 minutes",
+  "complexity": "Medium",
+  "usageCount": 0,
+  "agentCount": 3,
+  "features": ["Ticket Routing", "Escalation Management", "Knowledge Base", "Live Chat"],
+  "useCase": "Handle customer inquiries with automatic routing and escalation",
+  "tags": ["Customer Service", "Support", "Test"],
+  "preview": ["Service Coordinator", "L1 Support Agent", "L2 Support Specialist"],
+  "nodes": [
+    {
+      "id": "1",
+      "type": "agentNode",
+      "position": { "x": 250, "y": 50 },
+      "data": {
+        "name": "Service Coordinator",
+        "role": "coordinator",
+        "skills": ["Ticket Routing", "Customer Classification", "Load Balancing"],
+        "tools": ["CRM", "Ticket System"],
+        "description": "Routes customer inquiries to appropriate support agents",
+        "status": "active",
+        "level": 0,
+        "department": "Customer Service",
+        "maxConcurrentTasks": 50
+      }
+    },
+    {
+      "id": "2",
+      "type": "agentNode",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "name": "L1 Support Agent",
+        "role": "executor",
+        "skills": ["Basic Troubleshooting", "Account Management", "FAQ Resolution"],
+        "tools": ["Knowledge Base", "Ticketing System"],
+        "description": "Handles basic customer support inquiries and account issues",
+        "status": "active",
+        "level": 1,
+        "department": "Customer Service",
+        "maxConcurrentTasks": 10
+      }
+    },
+    {
+      "id": "3",
+      "type": "agentNode",
+      "position": { "x": 400, "y": 200 },
+      "data": {
+        "name": "L2 Support Specialist",
+        "role": "specialist",
+        "skills": ["Advanced Troubleshooting", "Technical Support", "Escalation Management"],
+        "tools": ["Remote Desktop", "System Logs", "Diagnostic Tools"],
+        "description": "Handles complex technical issues and escalated customer problems",
+        "status": "active",
+        "level": 2,
+        "department": "Customer Service",
+        "maxConcurrentTasks": 5
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1-2",
+      "source": "1",
+      "target": "2",
+      "type": "smoothstep",
+      "style": { "stroke": "#3b82f6", "strokeWidth": 2 },
+      "label": "Basic Issues"
+    },
+    {
+      "id": "e1-3",
+      "source": "1",
+      "target": "3",
+      "type": "smoothstep",
+      "style": { "stroke": "#ef4444", "strokeWidth": 2 },
+      "label": "Complex Issues"
+    },
+    {
+      "id": "e2-3",
+      "source": "2",
+      "target": "3",
+      "type": "smoothstep",
+      "style": { "stroke": "#f59e0b", "strokeWidth": 2 },
+      "label": "Escalation"
+    }
+  ],
+  "metadata": {
+    "author": "Test User",
+    "version": "1.0.0",
+    "created": "2024-01-15T10:30:00.000Z",
+    "agentCount": 3,
+    "edgeCount": 3
+  }
+}

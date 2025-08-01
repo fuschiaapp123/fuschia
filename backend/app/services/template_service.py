@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 import structlog
 
-from app.db.postgres import TemplateTable, AsyncSessionLocal
+from app.db.postgres import WorkflowTemplateTable, TemplateTable, AsyncSessionLocal
 from app.models.template import (
     Template, TemplateCreate, TemplateUpdate, TemplateMatch, 
     TemplateSearchResult, TemplateType, TemplateStatus
@@ -16,7 +16,7 @@ logger = structlog.get_logger()
 
 
 class TemplateService:
-    """Service for managing workflow and agent templates in PostgreSQL"""
+    """Service for managing workflow templates in PostgreSQL"""
     
     def __init__(self):
         self.logger = logger.bind(service="TemplateService")
@@ -26,17 +26,20 @@ class TemplateService:
         template_data: TemplateCreate, 
         created_by: Optional[str] = None
     ) -> Template:
-        """Create a new template"""
+        """Create a new workflow template"""
         try:
             async with AsyncSessionLocal() as session:
+                # Only handle workflow templates now
+                if template_data.template_type != TemplateType.WORKFLOW:
+                    raise ValueError("This service only handles workflow templates. Use AgentOrganizationService for agent templates.")
+                
                 template_id = str(uuid.uuid4())
                 
-                db_template = TemplateTable(
+                db_template = WorkflowTemplateTable(
                     id=template_id,
                     name=template_data.name,
                     description=template_data.description,
                     category=template_data.category,
-                    template_type=template_data.template_type.value,
                     complexity=template_data.complexity.value,
                     estimated_time=template_data.estimated_time,
                     tags=template_data.tags,
@@ -61,16 +64,32 @@ class TemplateService:
             raise
     
     async def get_template(self, template_id: str) -> Optional[Template]:
-        """Get a template by ID"""
+        """Get a workflow template by ID"""
         try:
             async with AsyncSessionLocal() as session:
+                # Try new WorkflowTemplateTable first
                 result = await session.execute(
-                    select(TemplateTable).where(TemplateTable.id == template_id)
+                    select(WorkflowTemplateTable).where(WorkflowTemplateTable.id == template_id)
                 )
                 template = result.scalar_one_or_none()
                 
                 if template:
                     return self._convert_to_pydantic(template)
+                
+                # Fall back to legacy TemplateTable for workflow templates
+                legacy_result = await session.execute(
+                    select(TemplateTable).where(
+                        and_(
+                            TemplateTable.id == template_id,
+                            TemplateTable.template_type == TemplateType.WORKFLOW.value
+                        )
+                    )
+                )
+                legacy_template = legacy_result.scalar_one_or_none()
+                
+                if legacy_template:
+                    return self._convert_to_pydantic(legacy_template)
+                    
                 return None
                 
         except Exception as e:
@@ -83,10 +102,30 @@ class TemplateService:
         template_type: TemplateType, 
         created_by: str
     ) -> Optional[Template]:
-        """Get a template by name, type, and creator"""
+        """Get a workflow template by name and creator"""
         try:
+            # Only handle workflow templates now
+            if template_type != TemplateType.WORKFLOW:
+                raise ValueError("This service only handles workflow templates. Use AgentOrganizationService for agent templates.")
+                
             async with AsyncSessionLocal() as session:
+                # Try new WorkflowTemplateTable first
                 result = await session.execute(
+                    select(WorkflowTemplateTable).where(
+                        and_(
+                            WorkflowTemplateTable.name == name,
+                            WorkflowTemplateTable.created_by == created_by,
+                            WorkflowTemplateTable.status == TemplateStatus.ACTIVE.value
+                        )
+                    )
+                )
+                template = result.scalar_one_or_none()
+                
+                if template:
+                    return self._convert_to_pydantic(template)
+                
+                # Fall back to legacy TemplateTable for workflow templates
+                legacy_result = await session.execute(
                     select(TemplateTable).where(
                         and_(
                             TemplateTable.name == name,
@@ -96,10 +135,11 @@ class TemplateService:
                         )
                     )
                 )
-                template = result.scalar_one_or_none()
+                legacy_template = legacy_result.scalar_one_or_none()
                 
-                if template:
-                    return self._convert_to_pydantic(template)
+                if legacy_template:
+                    return self._convert_to_pydantic(legacy_template)
+                    
                 return None
                 
         except Exception as e:
@@ -112,39 +152,77 @@ class TemplateService:
         template_data: TemplateCreate, 
         updated_by: str
     ) -> Template:
-        """Update an existing template"""
+        """Update an existing workflow template"""
         try:
+            # Only handle workflow templates
+            if template_data.template_type != TemplateType.WORKFLOW:
+                raise ValueError("This service only handles workflow templates. Use AgentOrganizationService for agent templates.")
+                
             async with AsyncSessionLocal() as session:
-                # Get existing template
+                # Try to get from new WorkflowTemplateTable first
                 result = await session.execute(
-                    select(TemplateTable).where(TemplateTable.id == template_id)
+                    select(WorkflowTemplateTable).where(WorkflowTemplateTable.id == template_id)
                 )
                 existing_template = result.scalar_one_or_none()
                 
-                if not existing_template:
-                    raise ValueError(f"Template with ID {template_id} not found")
+                if existing_template:
+                    # Update WorkflowTemplateTable
+                    existing_template.name = template_data.name
+                    existing_template.description = template_data.description
+                    existing_template.category = template_data.category
+                    existing_template.complexity = template_data.complexity.value
+                    existing_template.estimated_time = template_data.estimated_time
+                    existing_template.tags = template_data.tags
+                    existing_template.preview_steps = template_data.preview_steps
+                    existing_template.template_data = template_data.template_data
+                    existing_template.template_metadata = {
+                        **(template_data.metadata or {}),
+                        "updated": datetime.utcnow().isoformat(),
+                        "updated_by": updated_by
+                    }
+                    existing_template.updated_at = datetime.utcnow()
+                    
+                    await session.commit()
+                    await session.refresh(existing_template)
+                    
+                    self.logger.info("Workflow template updated", template_id=template_id, name=template_data.name)
+                    return self._convert_to_pydantic(existing_template)
                 
-                # Update fields
-                existing_template.name = template_data.name
-                existing_template.description = template_data.description
-                existing_template.category = template_data.category
-                existing_template.complexity = template_data.complexity.value
-                existing_template.estimated_time = template_data.estimated_time
-                existing_template.tags = template_data.tags
-                existing_template.preview_steps = template_data.preview_steps
-                existing_template.template_data = template_data.template_data
-                existing_template.template_metadata = {
+                # Fall back to legacy TemplateTable for workflow templates
+                legacy_result = await session.execute(
+                    select(TemplateTable).where(
+                        and_(
+                            TemplateTable.id == template_id,
+                            TemplateTable.template_type == TemplateType.WORKFLOW.value
+                        )
+                    )
+                )
+                legacy_template = legacy_result.scalar_one_or_none()
+                
+                if not legacy_template:
+                    raise ValueError(f"Workflow template with ID {template_id} not found")
+                
+                # Update legacy template
+                legacy_template.name = template_data.name
+                legacy_template.description = template_data.description
+                legacy_template.category = template_data.category
+                legacy_template.complexity = template_data.complexity.value
+                legacy_template.estimated_time = template_data.estimated_time
+                legacy_template.tags = template_data.tags
+                legacy_template.preview_steps = template_data.preview_steps
+                legacy_template.template_data = template_data.template_data
+                legacy_template.template_metadata = {
                     **(template_data.metadata or {}),
                     "updated": datetime.utcnow().isoformat(),
                     "updated_by": updated_by
                 }
-                existing_template.updated_at = datetime.utcnow()
+                legacy_template.updated_at = datetime.utcnow()
                 
                 await session.commit()
-                await session.refresh(existing_template)
+                await session.refresh(legacy_template)
                 
-                self.logger.info("Template updated", template_id=template_id, name=template_data.name)
-                return self._convert_to_pydantic(existing_template)
+                self.logger.info("Legacy workflow template updated", template_id=template_id, name=template_data.name)
+                return self._convert_to_pydantic(legacy_template)
                 
         except Exception as e:
             self.logger.error("Failed to update template", error=str(e), template_id=template_id)
@@ -178,25 +256,45 @@ class TemplateService:
             raise
     
     async def delete_template(self, template_id: str) -> bool:
-        """Soft delete a template by marking it as inactive"""
+        """Soft delete a workflow template by marking it as inactive"""
         try:
             async with AsyncSessionLocal() as session:
-                # Get existing template
+                # Try new WorkflowTemplateTable first
                 result = await session.execute(
-                    select(TemplateTable).where(TemplateTable.id == template_id)
+                    select(WorkflowTemplateTable).where(WorkflowTemplateTable.id == template_id)
                 )
                 existing_template = result.scalar_one_or_none()
                 
-                if not existing_template:
+                if existing_template:
+                    existing_template.status = TemplateStatus.ARCHIVED.value
+                    existing_template.updated_at = datetime.utcnow()
+                    
+                    await session.commit()
+                    
+                    self.logger.info("Workflow template deleted", template_id=template_id)
+                    return True
+                
+                # Fall back to legacy TemplateTable for workflow templates
+                legacy_result = await session.execute(
+                    select(TemplateTable).where(
+                        and_(
+                            TemplateTable.id == template_id,
+                            TemplateTable.template_type == TemplateType.WORKFLOW.value
+                        )
+                    )
+                )
+                legacy_template = legacy_result.scalar_one_or_none()
+                
+                if not legacy_template:
                     return False
                 
-                # Mark as inactive
-                existing_template.status = TemplateStatus.INACTIVE.value
-                existing_template.updated_at = datetime.utcnow()
+                # Mark legacy template as inactive
+                legacy_template.status = TemplateStatus.ARCHIVED.value
+                legacy_template.updated_at = datetime.utcnow()
                 
                 await session.commit()
                 
-                self.logger.info("Template deleted (soft)", template_id=template_id)
+                self.logger.info("Legacy workflow template deleted", template_id=template_id)
                 return True
                 
         except Exception as e:
@@ -212,52 +310,98 @@ class TemplateService:
         status: TemplateStatus = TemplateStatus.ACTIVE,
         limit: int = 50
     ) -> TemplateSearchResult:
-        """Search templates with various filters"""
+        """Search workflow templates with various filters"""
         try:
-            async with AsyncSessionLocal() as session:
-                # Build base query
-                stmt = select(TemplateTable).where(TemplateTable.status == status.value)
+            # Only handle workflow templates
+            if template_type and template_type != TemplateType.WORKFLOW:
+                raise ValueError("This service only handles workflow templates. Use AgentOrganizationService for agent templates.")
                 
-                # Apply filters
-                if template_type:
-                    stmt = stmt.where(TemplateTable.template_type == template_type.value)
+            async with AsyncSessionLocal() as session:
+                all_templates = []
+                
+                # Search new WorkflowTemplateTable
+                workflow_stmt = select(WorkflowTemplateTable).where(WorkflowTemplateTable.status == status.value)
                 
                 if category:
-                    stmt = stmt.where(TemplateTable.category == category)
+                    workflow_stmt = workflow_stmt.where(WorkflowTemplateTable.category == category)
                 
                 if query:
                     # Search in name, description, and tags
                     search_filter = or_(
-                        TemplateTable.name.ilike(f"%{query}%"),
-                        TemplateTable.description.ilike(f"%{query}%")
+                        WorkflowTemplateTable.name.ilike(f"%{query}%"),
+                        WorkflowTemplateTable.description.ilike(f"%{query}%")
                     )
-                    stmt = stmt.where(search_filter)
+                    workflow_stmt = workflow_stmt.where(search_filter)
                 
                 if tags:
                     # Match any of the provided tags
                     for tag in tags:
-                        stmt = stmt.where(TemplateTable.tags.op('@>')([tag]))
+                        workflow_stmt = workflow_stmt.where(WorkflowTemplateTable.tags.op('@>')([tag]))
                 
-                # Execute query with limit
-                stmt = stmt.limit(limit).order_by(
-                    TemplateTable.usage_count.desc(),
-                    TemplateTable.created_at.desc()
+                workflow_stmt = workflow_stmt.order_by(
+                    WorkflowTemplateTable.usage_count.desc(),
+                    WorkflowTemplateTable.created_at.desc()
                 )
                 
-                result = await session.execute(stmt)
+                workflow_result = await session.execute(workflow_stmt)
+                workflow_templates = workflow_result.scalars().all()
+                all_templates.extend(workflow_templates)
                 
-                templates = result.scalars().all()
-                print("Templates returned: ", len(templates))
+                # Search legacy TemplateTable for workflow templates if we haven't reached the limit
+                if len(all_templates) < limit:
+                    legacy_stmt = select(TemplateTable).where(
+                        and_(
+                            TemplateTable.status == status.value,
+                            TemplateTable.template_type == TemplateType.WORKFLOW.value
+                        )
+                    )
+                    
+                    if category:
+                        legacy_stmt = legacy_stmt.where(TemplateTable.category == category)
+                    
+                    if query:
+                        search_filter = or_(
+                            TemplateTable.name.ilike(f"%{query}%"),
+                            TemplateTable.description.ilike(f"%{query}%")
+                        )
+                        legacy_stmt = legacy_stmt.where(search_filter)
+                    
+                    if tags:
+                        for tag in tags:
+                            legacy_stmt = legacy_stmt.where(TemplateTable.tags.op('@>')([tag]))
+                    
+                    legacy_stmt = legacy_stmt.limit(limit - len(all_templates)).order_by(
+                        TemplateTable.usage_count.desc(),
+                        TemplateTable.created_at.desc()
+                    )
+                    
+                    legacy_result = await session.execute(legacy_stmt)
+                    legacy_templates = legacy_result.scalars().all()
+                    all_templates.extend(legacy_templates)
+                
+                # Limit the final results
+                all_templates = all_templates[:limit]
+                
+                print("Templates returned: ", len(all_templates))
                 # Convert to TemplateMatch objects with relevance scoring
                 template_matches = []
-                for template in templates:
+                for template in all_templates:
                     relevance_score = self._calculate_relevance_score(template, query, tags)
+                    
+                    # Handle both WorkflowTemplateTable and TemplateTable
+                    if hasattr(template, 'template_type'):
+                        # Legacy TemplateTable
+                        template_type = TemplateType(template.template_type)
+                    else:
+                        # New WorkflowTemplateTable - always workflow
+                        template_type = TemplateType.WORKFLOW
+                    
                     match = TemplateMatch(
                         template_id=template.id,
                         name=template.name,
                         description=template.description,
                         category=template.category,
-                        template_type=TemplateType(template.template_type),
+                        template_type=template_type,
                         complexity=template.complexity,
                         tags=template.tags or [],
                         relevance_score=relevance_score
@@ -266,9 +410,10 @@ class TemplateService:
                 
                 # Sort by relevance score
                 template_matches.sort(key=lambda x: x.relevance_score, reverse=True)
-                print ("Template matches found:", len(template_matches))
+                print("Template matches found:", len(template_matches))
+                
                 # Get unique categories
-                categories_found = list(set(template.category for template in templates))
+                categories_found = list(set(template.category for template in all_templates))
                 
                 return TemplateSearchResult(
                     templates=template_matches,
@@ -282,72 +427,134 @@ class TemplateService:
             raise
     
     async def get_templates_by_category(self, category: str) -> List[Template]:
-        """Get all templates in a specific category"""
+        """Get all workflow templates in a specific category"""
         try:
             async with AsyncSessionLocal() as session:
-                result = await session.execute(
+                all_templates = []
+                
+                # Get from new WorkflowTemplateTable
+                workflow_result = await session.execute(
+                    select(WorkflowTemplateTable)
+                    .where(and_(
+                        WorkflowTemplateTable.category == category,
+                        WorkflowTemplateTable.status == TemplateStatus.ACTIVE.value
+                    ))
+                    .order_by(WorkflowTemplateTable.usage_count.desc())
+                )
+                workflow_templates = workflow_result.scalars().all()
+                all_templates.extend([self._convert_to_pydantic(template) for template in workflow_templates])
+                
+                # Get from legacy TemplateTable for workflow templates
+                legacy_result = await session.execute(
                     select(TemplateTable)
                     .where(and_(
                         TemplateTable.category == category,
+                        TemplateTable.template_type == TemplateType.WORKFLOW.value,
                         TemplateTable.status == TemplateStatus.ACTIVE.value
                     ))
                     .order_by(TemplateTable.usage_count.desc())
                 )
-                templates = result.scalars().all()
+                legacy_templates = legacy_result.scalars().all()
+                all_templates.extend([self._convert_to_pydantic(template) for template in legacy_templates])
                 
-                return [self._convert_to_pydantic(template) for template in templates]
+                return all_templates
                 
         except Exception as e:
             self.logger.error("Failed to get templates by category", error=str(e), category=category)
             raise
     
     async def get_template_categories(self) -> List[str]:
-        """Get all unique template categories"""
+        """Get all unique workflow template categories"""
         try:
             async with AsyncSessionLocal() as session:
-                result = await session.execute(
-                    select(TemplateTable.category)
-                    .where(TemplateTable.status == TemplateStatus.ACTIVE.value)
-                    .distinct()
-                    .order_by(TemplateTable.category)
-                )
-                categories = result.scalars().all()
+                all_categories = set()
                 
-                return categories
+                # Get categories from new WorkflowTemplateTable
+                workflow_result = await session.execute(
+                    select(WorkflowTemplateTable.category)
+                    .where(WorkflowTemplateTable.status == TemplateStatus.ACTIVE.value)
+                    .distinct()
+                )
+                workflow_categories = workflow_result.scalars().all()
+                all_categories.update(workflow_categories)
+                
+                # Get categories from legacy TemplateTable for workflow templates
+                legacy_result = await session.execute(
+                    select(TemplateTable.category)
+                    .where(and_(
+                        TemplateTable.template_type == TemplateType.WORKFLOW.value,
+                        TemplateTable.status == TemplateStatus.ACTIVE.value
+                    ))
+                    .distinct()
+                )
+                legacy_categories = legacy_result.scalars().all()
+                all_categories.update(legacy_categories)
+                
+                return sorted(list(all_categories))
                 
         except Exception as e:
             self.logger.error("Failed to get template categories", error=str(e))
             raise
     
-    async def get_template_names(self, ttype: str) -> List[str]:
-        """Get all unique template categories"""
+    async def get_template_names(self, ttype: str) -> List[Template]:
+        """Get all workflow template names"""
         try:
+            # Only handle workflow templates
+            if ttype != TemplateType.WORKFLOW.value:
+                raise ValueError("This service only handles workflow templates. Use AgentOrganizationService for agent templates.")
+                
             async with AsyncSessionLocal() as session:
-                result = await session.execute(
-                    select(TemplateTable.name)
+                all_templates = []
+                
+                # Get from new WorkflowTemplateTable
+                workflow_result = await session.execute(
+                    select(WorkflowTemplateTable)
+                    .where(WorkflowTemplateTable.status == TemplateStatus.ACTIVE.value)
+                    .order_by(WorkflowTemplateTable.name)
+                )
+                workflow_templates = workflow_result.scalars().all()
+                all_templates.extend([self._convert_to_pydantic(template) for template in workflow_templates])
+                
+                # Get from legacy TemplateTable for workflow templates
+                legacy_result = await session.execute(
+                    select(TemplateTable)
                     .where(and_(
                         TemplateTable.template_type == ttype,
                         TemplateTable.status == TemplateStatus.ACTIVE.value
                     ))
-                    .distinct()
                     .order_by(TemplateTable.name)
                 )
-                names = result.scalars().all()
-                print("Template names found: ", names)
-                return names
+                legacy_templates = legacy_result.scalars().all()
+                all_templates.extend([self._convert_to_pydantic(template) for template in legacy_templates])
+
+                return all_templates
                 
         except Exception as e:
-            self.logger.error("Failed to get template categories", error=str(e))
+            self.logger.error("Failed to get template names", error=str(e))
             raise
 
     async def update_template_usage(self, template_id: str) -> bool:
-        """Increment usage count for a template"""
+        """Increment usage count for a workflow template"""
         try:
             async with AsyncSessionLocal() as session:
-                await session.execute(
-                    text("UPDATE templates SET usage_count = usage_count + 1 WHERE id = :template_id"),
+                # Try to update in new WorkflowTemplateTable first
+                workflow_result = await session.execute(
+                    text("UPDATE workflow_templates SET usage_count = usage_count + 1 WHERE id = :template_id"),
                     {"template_id": template_id}
                 )
+                
+                # If no rows affected, try legacy TemplateTable for workflow templates
+                if workflow_result.rowcount == 0:
+                    legacy_result = await session.execute(
+                        text("UPDATE templates SET usage_count = usage_count + 1 WHERE id = :template_id AND template_type = 'workflow'"),
+                        {"template_id": template_id}
+                    )
+                    
+                    if legacy_result.rowcount == 0:
+                        self.logger.warning("Template not found for usage update", template_id=template_id)
+                        await session.rollback()
+                        return False
+                
                 await session.commit()
                 
                 self.logger.info("Template usage updated", template_id=template_id)
@@ -359,11 +566,17 @@ class TemplateService:
     
     def _calculate_relevance_score(
         self, 
-        template: TemplateTable, 
+        template, 
         query: Optional[str] = None, 
         tags: Optional[List[str]] = None
     ) -> float:
-        """Calculate relevance score for template search results"""
+        """Calculate relevance score for template search results
+        
+        Args:
+            template: Either WorkflowTemplateTable or TemplateTable instance
+            query: Search query string
+            tags: List of tags to match
+        """
         score = 0.0
         
         # Base score from usage count (normalized)
@@ -390,14 +603,22 @@ class TemplateService:
         
         return min(score, 1.0)
     
-    def _convert_to_pydantic(self, db_template: TemplateTable) -> Template:
+    def _convert_to_pydantic(self, db_template) -> Template:
         """Convert SQLAlchemy model to Pydantic model"""
+        # Handle both WorkflowTemplateTable and legacy TemplateTable
+        if hasattr(db_template, 'template_type'):
+            # Legacy TemplateTable
+            template_type = TemplateType(db_template.template_type)
+        else:
+            # New WorkflowTemplateTable - always workflow
+            template_type = TemplateType.WORKFLOW
+        
         return Template(
             id=db_template.id,
             name=db_template.name,
             description=db_template.description,
             category=db_template.category,
-            template_type=TemplateType(db_template.template_type),
+            template_type=template_type,
             complexity=db_template.complexity,
             estimated_time=db_template.estimated_time,
             tags=db_template.tags or [],
@@ -405,7 +626,7 @@ class TemplateService:
             usage_count=db_template.usage_count,
             status=TemplateStatus(db_template.status),
             template_data=db_template.template_data or {},
-            metadata=db_template.template_metadata or {},
+            metadata=getattr(db_template, 'template_metadata', {}) or {},
             created_by=db_template.created_by,
             created_at=db_template.created_at,
             updated_at=db_template.updated_at

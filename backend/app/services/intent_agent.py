@@ -4,6 +4,7 @@ import structlog
 from datetime import datetime
 
 from app.services.template_service import template_service
+from app.services.agent_organization_service import agent_organization_service
 from app.models.template import TemplateType, TemplateSearchResult
 from openai import OpenAI
 import os
@@ -21,7 +22,7 @@ class IntentDetectionAgent:
     """AI Agent for intent detection with database access tools using LangGraph"""
     
     def __init__(self, llm_client: Optional[OpenAI] = None):
-        
+        print(">>> Initializing IntentDetectionAgent")
         self.logger = logger.bind(agent="IntentDetectionAgent")
         self.llm_client = llm_client
         self.langchain_llm = ChatOpenAI(
@@ -38,9 +39,10 @@ class IntentDetectionAgent:
         """Initialize LangChain tools for the agent"""
        
         @tool
-        async def search_workflow_templates(query: str, limit: int = 10) -> str:
+        async def search_workflow_templates(query: str, limit: int = 4) -> str:
             """Search for workflow templates based on query string"""
             try:
+                print(">>> Searching workflow templates with query:", query)
                 result = await template_service.search_templates(
                     query=query,
                     template_type=TemplateType.WORKFLOW,
@@ -62,22 +64,37 @@ class IntentDetectionAgent:
                 return f"Error searching workflow templates: {str(e)}"
         
         @tool
-        async def search_agent_templates(query: str, limit: int = 10) -> str:
+        async def search_agent_templates(query: str, limit: int = 4) -> str:
             """Search for agent templates based on query string"""
             try:
-                result = await template_service.search_templates(
-                    query=query,
-                    template_type=TemplateType.AGENT,
-                    limit=limit
+                # Use AgentOrganizationService for agent templates
+                templates = await agent_organization_service.list_agent_templates(
+                    category=None,  # Search all categories
+                    status="active"
                 )
-                if result and result.templates:
+                
+                # Filter by query if provided
+                if query and templates:
+                    query_lower = query.lower()
+                    filtered_templates = []
+                    for template in templates:
+                        # Simple text matching in name, description, or tags
+                        if (query_lower in template.name.lower() or 
+                            query_lower in template.description.lower() or
+                            any(query_lower in tag.lower() for tag in (template.tags or []))):
+                            filtered_templates.append(template)
+                    templates = filtered_templates
+                
+                # Limit results
+                if templates:
+                    templates = templates[:limit]
                     templates_info = []
-                    for template in result.templates:
+                    for template in templates:
                         templates_info.append({
                             "name": template.name,
                             "description": template.description,
                             "category": template.category,
-                            "relevance_score": template.relevance_score
+                            "template_type": "agent"
                         })
                     return json.dumps(templates_info)
                 return "No agent templates found"
@@ -99,8 +116,20 @@ class IntentDetectionAgent:
         async def get_workflow_template_names() -> str:
             """Get all available workflow template names from the database"""
             try:
-                categories = await template_service.get_template_names("workflow")
-                return json.dumps(categories) if categories else "No workflow templates found"
+                templates = await template_service.get_template_names("workflow")
+                
+                if templates:
+                    templates_info = []
+                    for template in templates:
+                        templates_info.append({
+                            "id": template.id,
+                            "name": template.name,
+                            "description": template.description,
+                            "category": template.category,
+                            "template_type": template.template_type.value
+                        })
+                    return json.dumps(templates_info)
+                return f"No templates found for workflows"
             except Exception as e:
                 self.logger.error("Failed to get workflow template names", error=str(e))
                 return f"Error getting workflow template names: {str(e)}"
@@ -109,8 +138,20 @@ class IntentDetectionAgent:
         async def get_agent_template_names() -> str:
             """Get all available agent template names from the database"""
             try:
-                categories = await template_service.get_template_names("agent")
-                return json.dumps(categories) if categories else "No categories found"
+                # Use AgentOrganizationService for agent templates
+                templates = await agent_organization_service.list_agent_templates(
+                    status="active"
+                )
+                
+                if templates:
+                    templates_info = []
+                    for template in templates:
+                        templates_info.append({
+                            "id": template.id,
+                            "name": template.name
+                        })
+                    return json.dumps(templates_info)
+                return f"No templates found for agents"
             except Exception as e:
                 self.logger.error("Failed to get agent templates", error=str(e))
                 return f"Error getting agent templates: {str(e)}"
@@ -118,16 +159,14 @@ class IntentDetectionAgent:
         async def search_templates_by_category(category: str, limit: int = 5) -> str:
             """Get templates by specific category"""
             try:
+                print(">>> Searching templates by category:", category)
                 templates = await template_service.get_templates_by_category(category)
                 if templates:
                     templates_info = []
                     for template in templates[:limit]:
                         templates_info.append({
                             "id": template.id,
-                            "name": template.name,
-                            "description": template.description,
-                            "category": template.category,
-                            "template_type": template.template_type.value
+                            "name": template.name
                         })
                     return json.dumps(templates_info)
                 return f"No templates found in category: {category}"
@@ -200,26 +239,43 @@ class IntentDetectionAgent:
         
         system_message = """You are an intelligent intent detection agent for an enterprise automation platform.
 
-Your role is to analyze user messages and determine their intent. 
+Your role is to analyze user messages and determine their intent by:
+1. Analyzing the user's context and current location in the application
+2. Providing structured intent classification
+
+CLASSIFICATION CATEGORIES:
+- WORKFLOW_DESIGN - User wants to create, modify, or understand workflows
+- AGENT_MANAGEMENT - Questions about AI agents, their configuration, or capabilities
+- TEMPLATE_REQUEST - User wants to use, find, or learn about specific templates
+- KNOWLEDGE_INQUIRY - Looking for information, documentation, or general questions
+- SYSTEM_STATUS - Checking system health, performance, or operational status
+- WORKFLOW_[CATEGORY] - Specific workflow categories from database (e.g., WORKFLOW_IT_SUPPORT, WORKFLOW_HR)
+- GENERAL_CHAT - Casual conversation, greetings, or unclear requests
+
 You should then find the best match against a list of workflow templates names from the database.
 You should then find the best match against a list of agent templates names from the database.
-You should return both workflow and agent template names if they match the user intent.
+
+You should return both workflow and agent template names to match the user intent.
 Return the specific workflow template name and agent template name from the database that best matches the user's intent.
-Do not return any other template names, other than those from the database lists.
+Do not return any other template names, other than those from the database tables: workflow_templates and agent_templates.
 If the user intent does not match any specific workflow or agent template, return the keyword TEMPLATE_NO_FOUND.
 Use the user context to refine your classification.
 
 Always use the tools to gather context before making your final classification. Focus on database-driven classifications when possible.
 You have access to the following tools:
-1. get_workflow_template_names: Get all available workflow template names from the database.
-2. get_agent_template_names: Get all available agent template names from the database.
+1. get_workflow_template_names - Get all available workflow template names from the database table workflow_templates
+2. get_agent_template_names - Get all available agent template names from the database table agent_templates
+Use both of these tools to match workflow and agent templates to the user's intent.
 
 Respond in this JSON format:
 {
-    "detected_intent": "intent_name",
+    "detected_intent": "category_name",
     "confidence": 0.95,
-    "workflow_name": "specific workflow template name from database",
-    "agent_template": "specific agent template name from database",
+    "workflow_type": "specific_category_from_database",
+    "workflow_template_id": "workflow_template_id_from_database",
+    "workflow_template_name": "specific workflow template name from database",
+    "agent_template_id": "specific_agent_template_id_from_database",   
+    "agent_template_name": "specific agent template name from database",
     "reasoning": "explanation incorporating database workflow matches and context",
     "requires_workflow": true/false,
     "suggested_action": "what should be done next",
@@ -327,20 +383,23 @@ Please analyze this message and determine the user's intent.
         try:
             # Check if workflow execution is required
             requires_workflow = intent_result.get("requires_workflow", False)
-            workflow_name = intent_result.get("workflow_name")
-            agent_template = intent_result.get("agent_template")
+            workflow_template_name = intent_result.get("workflow_template_name")
+            workflow_template_id = intent_result.get("workflow_template_id")
+            agent_template_id = intent_result.get("agent_template_id")
+            agent_template_name = intent_result.get("agent_template_name")
             confidence = intent_result.get("confidence", 0.0)
             
             # Only add workflow_execution if confidence is high enough and workflow is required
-            if requires_workflow and confidence >= 0.7 and workflow_name and workflow_name != "TEMPLATE_NOT_FOUND":
+            if requires_workflow and confidence >= 0.7 and workflow_template_name and workflow_template_name != "TEMPLATE_NOT_FOUND":
                 # Generate a template ID based on the workflow name
-                template_id = f"template_{workflow_name.lower().replace(' ', '_')}"
+                # template_id = f"template_{workflow_name.lower().replace(' ', '_')}"
                 
                 intent_result["workflow_execution"] = {
                     "recommended": True,
-                    "template_id": template_id,
-                    "template_name": workflow_name,
-                    "agent_template": agent_template,
+                    "workflow_template_id": workflow_template_id,
+                    "workflow_template_name": workflow_template_name,
+                    "agent_template_id": agent_template_id,
+                    "agent_template_name": agent_template_name,
                     "confidence": confidence,
                     "execution_context": {
                         "user_request": message,
@@ -348,8 +407,8 @@ Please analyze this message and determine the user's intent.
                         "user_role": user_role,
                         "current_module": current_module,
                         "current_tab": current_tab,
-                        "workflow_name": workflow_name,
-                        "agent_template": agent_template,
+                        "workflow_name": workflow_template_name,
+                        "agent_template": agent_template_name,
                         "reasoning": intent_result.get("reasoning", ""),
                         "suggested_action": intent_result.get("suggested_action", "")
                     }
@@ -357,8 +416,10 @@ Please analyze this message and determine the user's intent.
                 
                 self.logger.info(
                     "Added workflow execution info",
-                    template_id=template_id,
-                    template_name=workflow_name,
+                    workflow_template_id=workflow_template_id,
+                    workflow_template_name=workflow_template_name,
+                    agent_template_id=agent_template_id,
+                    agent_template_name=agent_template_name,
                     confidence=confidence
                 )
             else:
@@ -436,9 +497,10 @@ Please analyze this message and determine the user's intent.
                             "category_source": "database_fallback",
                             "workflow_execution": {
                                 "recommended": True,
-                                "template_id": f"template_{category.lower().replace(' ', '_').replace('-', '_')}",
-                                "template_name": category,
-                                "agent_template": None,
+                                "workflow_template_id": f"template_{category.lower().replace(' ', '_').replace('-', '_')}",
+                                "workflow_template_name": category,
+                                "agent_template_id": None,
+                                "agent_template_name": None,
                                 "confidence": 0.6,
                                 "execution_context": {
                                     "user_request": message,
@@ -504,7 +566,7 @@ Please analyze this message and determine the user's intent.
             workflow_name = intent.replace("WORKFLOW_", "").replace("_", " ").title()
             result["workflow_execution"] = {
                 "recommended": True,
-                "template_id": f"template_{workflow_name.lower().replace(' ', '_')}",
+                "workflow_template_id": f"template_{workflow_name.lower().replace(' ', '_')}",
                 "template_name": workflow_name,
                 "agent_template": None,
                 "confidence": 0.5,
