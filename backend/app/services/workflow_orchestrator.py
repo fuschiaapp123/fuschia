@@ -12,6 +12,7 @@ from app.models.agent_organization import (
 from app.services.workflow_execution_agent import WorkflowExecutionAgent
 from app.services.template_service import template_service
 from app.services.workflow_execution_service import workflow_execution_service
+from app.services.websocket_manager import websocket_manager
 from openai import OpenAI
 
 
@@ -72,6 +73,9 @@ class WorkflowOrchestrator:
             # Store execution in memory for orchestration
             self.active_executions[execution.id] = execution
             self.logger.debug("Stored workflow execution in memory", execution_id=execution.id)
+            
+            # Register execution with WebSocket manager for real-time updates
+            websocket_manager.register_execution(execution.id, initiated_by)
             # Initialize agent instances
             await self._initialize_agent_instances(organization, execution)
             self.logger.debug("Initialized agent instances", execution_id=execution.id)
@@ -97,6 +101,13 @@ class WorkflowOrchestrator:
         execution.status = ExecutionStatus.RUNNING
         # Update status in database
         await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.RUNNING)
+        
+        # Send real-time execution update
+        await websocket_manager.send_execution_update(execution.id, {
+            'status': 'running',
+            'message': '🚀 Workflow execution started',
+            'total_tasks': len(execution.tasks)
+        })
         
         try:
             while not self._is_workflow_complete(execution):
@@ -160,6 +171,12 @@ class WorkflowOrchestrator:
                     
                     # Process results
                     for i, result in enumerate(task_results):
+                        self.logger.debug(
+                            "Processing task result",
+                            execution_id=execution.id,
+                            task_id=ready_tasks[i].id,
+                            result=result
+                        )
                         if isinstance(result, Exception):
                             self.logger.error(
                                 "Task execution exception",
@@ -178,6 +195,16 @@ class WorkflowOrchestrator:
                 execution.actual_completion = datetime.utcnow()
                 # Update status in database
                 await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.COMPLETED)
+                
+                # Send completion update
+                await websocket_manager.send_execution_update(execution.id, {
+                    'status': 'completed',
+                    'message': '✅ Workflow execution completed successfully!',
+                    'completed_tasks': len(execution.completed_tasks),
+                    'total_tasks': len(execution.tasks),
+                    'duration': (execution.actual_completion - execution.started_at).total_seconds()
+                })
+                
                 self.logger.info(
                     "Workflow execution completed successfully",
                     execution_id=execution.id,
@@ -187,6 +214,16 @@ class WorkflowOrchestrator:
                 execution.status = ExecutionStatus.FAILED
                 # Update status in database
                 await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.FAILED, "Workflow execution incomplete")
+                
+                # Send failure update
+                await websocket_manager.send_execution_update(execution.id, {
+                    'status': 'failed',
+                    'message': '❌ Workflow execution failed - some tasks could not be completed',
+                    'completed_tasks': len(execution.completed_tasks),
+                    'failed_tasks': len(execution.failed_tasks),
+                    'total_tasks': len(execution.tasks)
+                })
+                
                 self.logger.error(
                     "Workflow execution failed",
                     execution_id=execution.id
@@ -471,6 +508,9 @@ class WorkflowOrchestrator:
             'result': result,
             'timestamp': datetime.utcnow().isoformat()
         })
+        
+        # Send real-time task result to user via WebSocket
+        asyncio.create_task(websocket_manager.send_task_result(execution.id, result))
         
         # Handle human approval requirements
         if result.get('status') == TaskStatus.WAITING_APPROVAL.value:

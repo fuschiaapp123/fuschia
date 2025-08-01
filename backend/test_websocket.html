@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Test</h1>
+    <div id="status">Disconnected</div>
+    <div id="messages"></div>
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+    <button onclick="sendMessage()">Send Test Message</button>
+
+    <script>
+        let ws = null;
+        const userId = 'test-user-123';
+        
+        function connect() {
+            const wsUrl = `ws://localhost:8000/api/v1/ws/${userId}`;
+            console.log('Connecting to:', wsUrl);
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                document.getElementById('status').textContent = 'Connected';
+                console.log('WebSocket connected');
+            };
+            
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                console.log('Message received:', message);
+                
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML += `<div>${JSON.stringify(message)}</div>`;
+            };
+            
+            ws.onclose = function(event) {
+                document.getElementById('status').textContent = 'Disconnected';
+                console.log('WebSocket closed:', event.code, event.reason);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                document.getElementById('status').textContent = 'Error';
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+        
+        function sendMessage() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send('Hello from test client!');
+            }
+        }
+        
+        async function testBackendConnection() {
+            try {
+                const response = await fetch(`http://localhost:8000/api/v1/test/${userId}`);
+                const result = await response.json();
+                console.log('Backend test result:', result);
+            } catch (error) {
+                console.error('Backend test failed:', error);
+            }
+        }
+        
+        // Auto-test backend connection on load
+        window.onload = function() {
+            testBackendConnection();
+        };
+    </script>
+</body>
+</html>

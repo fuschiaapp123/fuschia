@@ -642,7 +642,7 @@ async def enhanced_chat_endpoint(request: ChatRequest):
                 execution = await orchestrator.initiate_workflow_execution(
                     workflow_template_id=intent_result.workflow_execution['workflow_template_id'],
                     organization_id=intent_result.workflow_execution['agent_template_id'],
-                    initiated_by="chat_user",  # Would be actual user ID in real implementation
+                    initiated_by="4b84eaae-d0bb-4bd7-9c36-45e8f5f7eedb",  # Use test user ID for WebSocket routing
                     initial_context=execution_context
                 )
                 # Debug: Workflow execution initiated successfully   

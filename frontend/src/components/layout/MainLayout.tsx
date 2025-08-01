@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Message } from './types';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useLLMStore } from '@/store/llmStore';
 import ChatAPI from './ChatAPI';
 import { parseYAMLWorkflow, convertToReactFlowData, convertToAgentFlowData, isValidYAML } from '@/utils/yamlParser';
+import { websocketService, TaskResult, ExecutionUpdate } from '@/services/websocketService';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -41,6 +42,87 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   ]);
   const [agentMode, setAgentMode] = useState(false);
   const [selectedAgent] = useState('default-agent');
+
+  // WebSocket integration for real-time task results
+  useEffect(() => {
+    if (currentUser?.id) {
+      // Connect to WebSocket for real-time updates
+      websocketService.connect(currentUser.id, {
+        onTaskResult: (taskResult: TaskResult) => {
+          // Add task result as a new message in chat
+          const newMessage: Message = {
+            id: `task-${Date.now()}`,
+            content: taskResult.content,
+            isUser: false,
+            sender: 'workflow_system',
+            timestamp: new Date(taskResult.timestamp),
+            status: 'complete',
+            agent_id: taskResult.agent_id,
+            agent_label: `Agent: ${taskResult.agent_id}`
+          };
+          
+          setMessages(prev => [...prev, newMessage]);
+        },
+        
+        onExecutionUpdate: (update: ExecutionUpdate) => {
+          // Add execution updates as system messages
+          const newMessage: Message = {
+            id: `exec-${Date.now()}`,
+            content: update.data.message,
+            isUser: false,
+            sender: 'workflow_system',
+            timestamp: new Date(update.timestamp),
+            status: 'complete',
+            agent_id: 'system',
+            agent_label: 'Workflow System'
+          };
+          
+          setMessages(prev => [...prev, newMessage]);
+        },
+        
+        onConnect: () => {
+          console.log('✅ Connected to workflow updates for user:', currentUser.id);
+          // Add a test message to verify connection
+          const welcomeMessage: Message = {
+            id: `welcome-${Date.now()}`,
+            content: '🔗 Connected to real-time workflow updates',
+            isUser: false,
+            sender: 'system',
+            timestamp: new Date(),
+            status: 'complete',
+            agent_id: 'system',
+            agent_label: 'System'
+          };
+          setMessages(prev => [...prev, welcomeMessage]);
+          
+          // Test WebSocket by sending a test message after connection
+          setTimeout(async () => {
+            try {
+              console.log('🧪 Testing WebSocket with backend...');
+              const response = await fetch(`/api/v1/test/${currentUser.id}`);
+              const result = await response.json();
+              console.log('🧪 Test response:', result);
+            } catch (error) {
+              console.error('🧪 Test failed:', error);
+            }
+          }, 2000);
+        },
+        
+        onDisconnect: () => {
+          console.log('❌ Disconnected from workflow updates');
+        },
+        
+        onError: (error) => {
+          console.error('❌ WebSocket error:', error);
+        }
+      });
+    }
+
+    // Cleanup on unmount
+    return () => {
+      websocketService.disconnect();
+    };
+  }, [currentUser?.id]);
 
   const handleSendMessage = async (userMessage: Message) => {
     const aiMessage: Message = {

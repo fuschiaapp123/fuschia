@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import auth, users, knowledge, chat, servicenow, workflows, workflow_execution, workflow_executions, agents, database
+from app.api.endpoints import auth, users, knowledge, chat, servicenow, workflows, workflow_execution, workflow_executions, agents, database, websocket
 
 api_router = APIRouter()
 
@@ -13,3 +13,4 @@ api_router.include_router(workflow_execution.router, prefix="/workflow-execution
 api_router.include_router(workflow_executions.router, prefix="/executions", tags=["workflow-executions"])
 api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(database.router, prefix="/database", tags=["database"])
+api_router.include_router(websocket.router, tags=["websocket"])
