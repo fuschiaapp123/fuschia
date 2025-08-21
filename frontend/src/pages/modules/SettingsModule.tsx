@@ -4,7 +4,9 @@ import { useAuthStore } from '@/store/authStore';
 import { LLMSettings } from '@/components/settings/LLMSettings';
 import { UserManagement } from '@/components/settings/UserManagement';
 import { UserProfile } from '@/components/settings/UserProfile';
+import { RoleManagement } from '@/components/settings/RoleManagement';
 import { TemplateSettingsComponent } from '@/components/settings/TemplateSettings';
+import { ToolsRegistry } from '@/components/settings/ToolsRegistry';
 
 export const SettingsModule: React.FC = () => {
   const { activeTab } = useAppStore();
@@ -46,6 +48,8 @@ export const SettingsModule: React.FC = () => {
         return <TemplateSettingsComponent />;
       case 'llm':
         return <LLMSettings />;
+      case 'tools':
+        return <ToolsRegistry />;
       case 'integrations':
         return (
           <div className="p-6">
@@ -74,6 +78,8 @@ export const SettingsModule: React.FC = () => {
         } else {
           return <UserProfile />;
         }
+      case 'roles':
+        return <RoleManagement />;
       case 'profile':
         return <UserProfile />;
       default:

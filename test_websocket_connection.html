@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Connection Test</title>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="status">Disconnected</div>
+    <div id="messages"></div>
+
+    <script>
+        const userId = '4b84eaae-d0bb-4bd7-9c36-45e8f5f7eedb'; // testuser1 ID
+        const wsUrl = `ws://localhost:8000/api/v1/ws/${userId}`;
+        
+        console.log('Attempting to connect to:', wsUrl);
+        
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function(event) {
+            console.log('WebSocket connected successfully');
+            document.getElementById('status').textContent = 'Connected';
+            
+            // Send a test message
+            ws.send('Test message from browser');
+        };
+        
+        ws.onmessage = function(event) {
+            console.log('Message received:', event.data);
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML += '<div>' + event.data + '</div>';
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            document.getElementById('status').textContent = 'Error: ' + error;
+        };
+        
+        ws.onclose = function(event) {
+            console.log('WebSocket closed:', event.code, event.reason);
+            document.getElementById('status').textContent = 'Disconnected: ' + event.code;
+        };
+    </script>
+</body>
+</html>

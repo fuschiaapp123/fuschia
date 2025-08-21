@@ -10,10 +10,20 @@ export const UserProfile: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     email: currentUser?.email || '',
     full_name: currentUser?.full_name || '',
+  });
+
+  const [passwordData, setPasswordData] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
   });
 
   useEffect(() => {
@@ -65,6 +75,43 @@ export const UserProfile: React.FC = () => {
     setError(null);
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      setPasswordLoading(true);
+      setPasswordError(null);
+      setPasswordSuccess(null);
+      
+      await userService.changePassword(passwordData);
+      
+      setIsChangingPassword(false);
+      setPasswordData({
+        current_password: '',
+        new_password: '',
+        confirm_password: '',
+      });
+      setPasswordSuccess('Password changed successfully!');
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setPasswordSuccess(null), 3000);
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'Failed to change password');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const cancelPasswordChange = () => {
+    setIsChangingPassword(false);
+    setPasswordData({
+      current_password: '',
+      new_password: '',
+      confirm_password: '',
+    });
+    setPasswordError(null);
+  };
+
 
   if (!currentUser) {
     return (
@@ -80,13 +127,21 @@ export const UserProfile: React.FC = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">My Profile</h2>
-        {!isEditing && (
-          <button
-            onClick={() => setIsEditing(true)}
-            className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
-          >
-            Edit Profile
-          </button>
+        {!isEditing && !isChangingPassword && (
+          <div className="flex space-x-3">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
+            >
+              Edit Profile
+            </button>
+            <button
+              onClick={() => setIsChangingPassword(true)}
+              className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
+            >
+              Change Password
+            </button>
+          </div>
         )}
       </div>
 
@@ -99,6 +154,18 @@ export const UserProfile: React.FC = () => {
       {success && (
         <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md">
           <p className="text-green-800">{success}</p>
+        </div>
+      )}
+
+      {passwordError && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-red-800">{passwordError}</p>
+        </div>
+      )}
+
+      {passwordSuccess && (
+        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md">
+          <p className="text-green-800">{passwordSuccess}</p>
         </div>
       )}
 
@@ -173,6 +240,76 @@ export const UserProfile: React.FC = () => {
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   )}
                   Update Profile
+                </button>
+              </div>
+            </div>
+          </form>
+        ) : isChangingPassword ? (
+          <form onSubmit={handleChangePassword} className="p-6">
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Change Password</h3>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={passwordData.current_password}
+                  onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Password (minimum 8 characters)
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={passwordData.new_password}
+                  onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={passwordData.confirm_password}
+                  onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={cancelPasswordChange}
+                  disabled={passwordLoading}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordLoading}
+                  className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 disabled:opacity-50 flex items-center"
+                >
+                  {passwordLoading && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  )}
+                  Change Password
                 </button>
               </div>
             </div>

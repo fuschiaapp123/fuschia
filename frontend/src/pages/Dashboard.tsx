@@ -7,6 +7,7 @@ import { ValueStreamsModule } from './modules/ValueStreamsModule';
 import { ProcessMiningModule } from './modules/ProcessMiningModule';
 import { AgentsModule } from './modules/AgentsModule';
 import { AnalyticsModule } from './modules/AnalyticsModule';
+import { MonitoringModule } from './modules/MonitoringModule';
 import { SettingsModule } from './modules/SettingsModule';
 import { DashboardHome } from '@/pages/DashboardHome';
 
@@ -25,7 +26,7 @@ export const Dashboard: React.FC = () => {
       setCurrentModule('home');
     } else {
       const moduleFromPath = location.pathname.split('/')[1];
-      const validModules = ['knowledge', 'workflow', 'workflows', 'value-streams', 'process-mining', 'agents', 'analytics', 'settings', 'integrations', 'team'];
+      const validModules = ['knowledge', 'workflow', 'workflows', 'value-streams', 'process-mining', 'agents', 'analytics', 'monitoring', 'settings', 'integrations', 'team'];
       if (moduleFromPath && validModules.includes(moduleFromPath)) {
         // Normalize 'workflows' to 'workflow'
         const normalizedModule = moduleFromPath === 'workflows' ? 'workflow' : moduleFromPath;
@@ -33,7 +34,7 @@ export const Dashboard: React.FC = () => {
         const finalModule = ['integrations', 'team'].includes(normalizedModule) ? 'settings' : normalizedModule;
         
         // Always update the module, even if it's the same, to ensure state consistency
-        setCurrentModule(finalModule as 'home' | 'knowledge' | 'workflow' | 'value-streams' | 'process-mining' | 'agents' | 'analytics' | 'settings');
+        setCurrentModule(finalModule as 'home' | 'knowledge' | 'workflow' | 'value-streams' | 'process-mining' | 'agents' | 'analytics' | 'monitoring' | 'settings');
       }
     }
   }, [location.pathname, isHomePage, setCurrentModule]);
@@ -63,6 +64,8 @@ export const Dashboard: React.FC = () => {
         return <AgentsModule />;
       case 'analytics':
         return <AnalyticsModule />;
+      case 'monitoring':
+        return <MonitoringModule />;
       case 'settings':
       case 'integrations':
       case 'team':

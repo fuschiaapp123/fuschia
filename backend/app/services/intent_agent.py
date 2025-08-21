@@ -1,295 +1,449 @@
-from typing import List, Optional, Dict, Any, Callable
+from typing import List, Optional, Dict, Any
 import json
+import os
+import uuid
 import structlog
 from datetime import datetime
+import time
+from pydantic import BaseModel, Field
+
+import dspy
+from dspy import Signature, InputField, OutputField
+import mlflow
 
 from app.services.template_service import template_service
 from app.services.agent_organization_service import agent_organization_service
-from app.models.template import TemplateType, TemplateSearchResult
+from app.services.mlflow_config import mlflow_tracker
+from app.services.tool_registry_service import tool_registry_service
 from openai import OpenAI
 import os
 
-from langgraph.prebuilt import create_react_agent
-from langchain_openai import ChatOpenAI
-from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-
 logger = structlog.get_logger()
+
+# Configure DSPy at module level (before any async tasks)
+_global_llm_instance = None
+
+try:
+    # Configure litellm to drop unsupported parameters via environment variable
+    os.environ["LITELLM_DROP_PARAMS"] = "True"
+    
+    # Also set it directly in case the env var isn't read yet
+    import litellm
+    litellm.drop_params = True
+    
+    _global_llm_instance = dspy.LM(
+        model="openai/gpt-3.5-turbo",
+        api_key=os.environ.get("OPENAI_API_KEY")
+    )
+    dspy.configure(lm=_global_llm_instance)
+    logger.info("DSPy configured globally at module level with litellm drop_params enabled")
+except Exception as e:
+    logger.error("Failed to configure DSPy at module level", error=str(e))
+    # Create a dummy LLM for fallback
+    _global_llm_instance = None
+
+
+class IntentDetectionOutput(BaseModel):
+    """Structured output for intent detection"""
+    detected_intent: str = Field(description="The primary intent category")
+    confidence: float = Field(description="Confidence score between 0.0 and 1.0")
+    workflow_type: str = Field(description="Specific workflow category from database")
+    workflow_template_id: str = Field(description="ID of matching workflow template")
+    workflow_template_name: str = Field(description="Name of matching workflow template")
+    agent_template_id: str = Field(description="ID of matching agent template")
+    agent_template_name: str = Field(description="Name of matching agent template")
+    reasoning: str = Field(description="Explanation of the classification decision")
+    requires_workflow: bool = Field(description="Whether a workflow should be triggered")
+    suggested_action: str = Field(description="Recommended next action")
+    category_source: str = Field(description="Source of classification: database|base|fallback")
+
+
+class IntentClassification(Signature):
+    """Classify user intent based on message and context"""
+    
+    # Input fields
+    user_message: str = InputField(desc="The user's message to classify")
+    user_role: str = InputField(desc="Role of the user (admin, user, etc.)")
+    current_module: str = InputField(desc="Current application module")
+    current_tab: str = InputField(desc="Current tab within the module")
+    available_workflows: str = InputField(desc="List of available workflow templates")
+    available_agents: str = InputField(desc="List of available agent templates")
+    
+    # Output fields
+    detected_intent: str = OutputField(desc="Primary intent category")
+    confidence: float = OutputField(desc="Confidence score (0.0-1.0)")
+    workflow_type: str = OutputField(desc="Specific workflow category")
+    workflow_template_id: str = OutputField(desc="Matching workflow template ID")
+    workflow_template_name: str = OutputField(desc="Matching workflow template name")
+    agent_template_id: str = OutputField(desc="Matching agent template ID")
+    agent_template_name: str = OutputField(desc="Matching agent template name")
+    reasoning: str = OutputField(desc="Classification reasoning")
+    requires_workflow: bool = OutputField(desc="Whether workflow should be triggered")
+    suggested_action: str = OutputField(desc="Recommended next action")
+    category_source: str = OutputField(desc="Classification source: database|base|fallback")
+
+
+class TemplateRetrieval(Signature):
+    """Retrieve relevant templates based on query"""
+    
+    query: str = InputField(desc="Search query for templates")
+    template_type: str = InputField(desc="Type of template: workflow or agent")
+    
+    relevant_templates: str = OutputField(desc="JSON list of relevant templates with IDs and names")
+
+
+class IntentWithTools(Signature):
+    """Enhanced intent classification with tool usage"""
+    
+    # Input fields
+    user_message: str = InputField(desc="The user's message to classify")
+    user_role: str = InputField(desc="Role of the user (admin, user, etc.)")
+    current_module: str = InputField(desc="Current application module")
+    current_tab: str = InputField(desc="Current tab within the module")
+    available_workflows: str = InputField(desc="List of available workflow templates")
+    available_agents: str = InputField(desc="List of available agent templates")
+    available_tools: str = InputField(desc="List of available tools for function calling")
+    
+    # Output fields
+    detected_intent: str = OutputField(desc="Primary intent category")
+    confidence: float = OutputField(desc="Confidence score (0.0-1.0)")
+    workflow_type: str = OutputField(desc="Specific workflow category")
+    workflow_template_id: str = OutputField(desc="Matching workflow template ID")
+    workflow_template_name: str = OutputField(desc="Matching workflow template name")
+    agent_template_id: str = OutputField(desc="Matching agent template ID")
+    agent_template_name: str = OutputField(desc="Matching agent template name")
+    reasoning: str = OutputField(desc="Classification reasoning")
+    requires_workflow: bool = OutputField(desc="Whether workflow should be triggered")
+    suggested_action: str = OutputField(desc="Recommended next action")
+    category_source: str = OutputField(desc="Classification source: database|base|fallback")
+    tool_calls: str = OutputField(desc="JSON array of tool calls to make if any")
+    requires_tools: bool = OutputField(desc="Whether tools should be called")
 
 
 class IntentDetectionAgent:
-    """AI Agent for intent detection with database access tools using LangGraph"""
+    """AI Agent for intent detection using DSPy framework"""
     
     def __init__(self, llm_client: Optional[OpenAI] = None):
-        print(">>> Initializing IntentDetectionAgent")
-        self.logger = logger.bind(agent="IntentDetectionAgent")
+        print(">>> Initializing DSPy IntentDetectionAgent")
+        self.logger = logger.bind(agent="DSPyIntentDetectionAgent")
         self.llm_client = llm_client
-        self.langchain_llm = ChatOpenAI(
-            model="gpt-3.5-turbo",
-            temperature=0.3,
-            api_key=os.environ.get("OPENAI_API_KEY")
-        )
-        self.tools = self._initialize_tools()
         
-        self.agent = self._create_langgraph_agent()
+        # Use the global LLM instance configured at module level
+        self.llm = _global_llm_instance
         
+        # Initialize DSPy modules (they will use the global configuration)
+        self.template_retriever = dspy.Predict(TemplateRetrieval)
+        self.intent_classifier = dspy.Predict(IntentClassification)
+        self.intent_with_tools_classifier = dspy.Predict(IntentWithTools)
+        
+    async def get_workflow_templates(self, _query: str = "", _limit: int = 10) -> str:
+        """Get workflow templates from database"""
+        try:
+            templates = await template_service.get_template_names("workflow")
+                
+            if templates:
+                templates_info = []
+                for template in templates:
+                    templates_info.append({
+                        "id": template.id,
+                        "name": template.name,
+                        "description": template.description,
+                        "category": template.category,
+                        "template_type": template.template_type.value
+                    })
+                return json.dumps(templates_info)
+            return f"No templates found for workflows"
+        except Exception as e:
+            self.logger.error("Error retrieving workflow templates", error=str(e))
+            return "[]"
     
-    def _initialize_tools(self) -> List[Callable]:
-        """Initialize LangChain tools for the agent"""
-       
-        @tool
-        async def search_workflow_templates(query: str, limit: int = 4) -> str:
-            """Search for workflow templates based on query string"""
-            try:
-                print(">>> Searching workflow templates with query:", query)
-                result = await template_service.search_templates(
-                    query=query,
-                    template_type=TemplateType.WORKFLOW,
-                    limit=limit
-                )
-                if result and result.templates:
-                    templates_info = []
-                    for template in result.templates:
-                        templates_info.append({
-                            "name": template.name,
-                            "description": template.description,
-                            "category": template.category,
-                            "relevance_score": template.relevance_score
-                        })
-                    return json.dumps(templates_info)
-                return "No workflow templates found"
-            except Exception as e:
-                self.logger.error("Failed to search workflow templates", error=str(e))
-                return f"Error searching workflow templates: {str(e)}"
-        
-        @tool
-        async def search_agent_templates(query: str, limit: int = 4) -> str:
-            """Search for agent templates based on query string"""
-            try:
-                # Use AgentOrganizationService for agent templates
-                templates = await agent_organization_service.list_agent_templates(
-                    category=None,  # Search all categories
-                    status="active"
-                )
+    async def get_agent_templates(self, _query: str = "", _limit: int = 10) -> str:
+        """Get agent templates from database"""
+        try:
+            # Use AgentOrganizationService for agent templates
+            templates = await agent_organization_service.list_agent_templates(
+                status="active"
+            )
+            
+            if templates:
+                templates_info = []
+                for template in templates:
+                    templates_info.append({
+                        "id": template.id,
+                        "name": template.name
+                    })
+                return json.dumps(templates_info)
+            return f"No templates found for agents"
+        except Exception as e:
+            self.logger.error("Error retrieving agent templates", error=str(e))
+            return "[]"
+    
+    def _get_intent_categories(self) -> str:
+        """Get available intent categories"""
+        categories = [
+            "WORKFLOW_DESIGN - User wants to create, modify, or understand workflows",
+            "AGENT_MANAGEMENT - Questions about AI agents, their configuration, or capabilities",
+            "TEMPLATE_REQUEST - User wants to use, find, or learn about specific templates",
+            "KNOWLEDGE_INQUIRY - Looking for information, documentation, or general questions",
+            "SYSTEM_STATUS - Checking system health, performance, or operational status",
+            "WORKFLOW_IT_SUPPORT - IT support related workflows",
+            "WORKFLOW_HR - HR related workflows",
+            "WORKFLOW_CUSTOMER_SERVICE - Customer service related workflows",
+            "GENERAL_CHAT - Casual conversation, greetings, or unclear requests"
+        ]
+        return "\n".join(categories)
+    
+    async def execute_tool_calls(self, tool_calls_json: str, agent_id: Optional[str] = None) -> Dict[str, Any]:
+        """Execute tool calls and return results"""
+        try:
+            if not tool_calls_json or tool_calls_json.strip() == "[]":
+                return {"tool_results": [], "success": True}
+            
+            tool_calls = json.loads(tool_calls_json)
+            if not isinstance(tool_calls, list):
+                return {"tool_results": [], "success": False, "error": "Invalid tool calls format"}
+            
+            results = []
+            for tool_call in tool_calls:
+                if not isinstance(tool_call, dict) or "tool_name" not in tool_call:
+                    continue
                 
-                # Filter by query if provided
-                if query and templates:
-                    query_lower = query.lower()
-                    filtered_templates = []
-                    for template in templates:
-                        # Simple text matching in name, description, or tags
-                        if (query_lower in template.name.lower() or 
-                            query_lower in template.description.lower() or
-                            any(query_lower in tag.lower() for tag in (template.tags or []))):
-                            filtered_templates.append(template)
-                    templates = filtered_templates
+                tool_name = tool_call.get("tool_name")
+                parameters = tool_call.get("parameters", {})
                 
-                # Limit results
-                if templates:
-                    templates = templates[:limit]
-                    templates_info = []
-                    for template in templates:
-                        templates_info.append({
-                            "name": template.name,
-                            "description": template.description,
-                            "category": template.category,
-                            "template_type": "agent"
-                        })
-                    return json.dumps(templates_info)
-                return "No agent templates found"
-            except Exception as e:
-                self.logger.error("Failed to search agent templates", error=str(e))
-                return f"Error searching agent templates: {str(e)}"
-        
-        @tool
-        async def get_template_categories() -> str:
-            """Get all available template categories from the database"""
-            try:
-                categories = await template_service.get_template_categories()
-                return json.dumps(categories) if categories else "No categories found"
-            except Exception as e:
-                self.logger.error("Failed to get template categories", error=str(e))
-                return f"Error getting template categories: {str(e)}"
-        
-        @tool
-        async def get_workflow_template_names() -> str:
-            """Get all available workflow template names from the database"""
-            try:
-                templates = await template_service.get_template_names("workflow")
+                # Find tool by name
+                available_tools = tool_registry_service.get_tools()
+                tool = next((t for t in available_tools if t.name == tool_name), None)
                 
-                if templates:
-                    templates_info = []
-                    for template in templates:
-                        templates_info.append({
-                            "id": template.id,
-                            "name": template.name,
-                            "description": template.description,
-                            "category": template.category,
-                            "template_type": template.template_type.value
-                        })
-                    return json.dumps(templates_info)
-                return f"No templates found for workflows"
-            except Exception as e:
-                self.logger.error("Failed to get workflow template names", error=str(e))
-                return f"Error getting workflow template names: {str(e)}"
-        
-        @tool
-        async def get_agent_template_names() -> str:
-            """Get all available agent template names from the database"""
-            try:
-                # Use AgentOrganizationService for agent templates
-                templates = await agent_organization_service.list_agent_templates(
-                    status="active"
+                if not tool:
+                    results.append({
+                        "tool_name": tool_name,
+                        "success": False,
+                        "error": f"Tool '{tool_name}' not found"
+                    })
+                    continue
+                
+                # Execute tool
+                from app.models.tool_registry import ToolExecutionRequest
+                execution_request = ToolExecutionRequest(
+                    tool_id=tool.id,
+                    parameters=parameters,
+                    agent_id=agent_id,
+                    execution_id=str(uuid.uuid4())
                 )
                 
-                if templates:
-                    templates_info = []
-                    for template in templates:
-                        templates_info.append({
-                            "id": template.id,
-                            "name": template.name
-                        })
-                    return json.dumps(templates_info)
-                return f"No templates found for agents"
-            except Exception as e:
-                self.logger.error("Failed to get agent templates", error=str(e))
-                return f"Error getting agent templates: {str(e)}"
-        @tool
-        async def search_templates_by_category(category: str, limit: int = 5) -> str:
-            """Get templates by specific category"""
-            try:
-                print(">>> Searching templates by category:", category)
-                templates = await template_service.get_templates_by_category(category)
-                if templates:
-                    templates_info = []
-                    for template in templates[:limit]:
-                        templates_info.append({
-                            "id": template.id,
-                            "name": template.name
-                        })
-                    return json.dumps(templates_info)
-                return f"No templates found in category: {category}"
-            except Exception as e:
-                self.logger.error("Failed to get templates by category", error=str(e), category=category)
-                return f"Error getting templates by category: {str(e)}"
+                execution_result = tool_registry_service.execute_tool(execution_request)
+                
+                results.append({
+                    "tool_name": tool_name,
+                    "success": execution_result.success,
+                    "result": execution_result.result,
+                    "error": execution_result.error_message,
+                    "execution_time_ms": execution_result.execution_time_ms
+                })
+            
+            return {"tool_results": results, "success": True}
+            
+        except json.JSONDecodeError:
+            return {"tool_results": [], "success": False, "error": "Invalid JSON in tool calls"}
+        except Exception as e:
+            self.logger.error("Failed to execute tool calls", error=str(e))
+            return {"tool_results": [], "success": False, "error": str(e)}
+    
+    @mlflow.trace(name="dspy_intent_detection_with_tools", span_type="LLM")
+    async def detect_intent_with_tools(
+        self,
+        message: str,
+        user_role: Optional[str] = None,
+        current_module: Optional[str] = None,
+        current_tab: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        model: str = "gpt-3.5-turbo"
+    ) -> Dict[str, Any]:
+        """
+        Enhanced intent detection with tool calling capabilities
+        """
+        # Start MLflow tracking and tracing
+        start_time = time.time()
         
-        @tool
-        async def analyze_user_context(current_module: str, current_tab: Optional[str] = None) -> str:
-            """Analyze user context based on current module and tab location"""
-            module_contexts = {
-                "workflow": {
-                    "capabilities": "Create, edit, and manage business process workflows",
-                    "suggested_actions": "Design new workflows, use templates, optimize existing processes",
-                    "common_intents": ["WORKFLOW_DESIGN", "TEMPLATE_REQUEST"]
-                },
-                "agents": {
-                    "capabilities": "Configure and manage AI agents for automation",
-                    "suggested_actions": "Create agent organizations, configure agent tools, test agent workflows",
-                    "common_intents": ["AGENT_MANAGEMENT", "TEMPLATE_REQUEST"]
-                },
-                "knowledge": {
-                    "capabilities": "Manage organizational knowledge and documentation",
-                    "suggested_actions": "Search knowledge base, create documentation, manage knowledge graphs",
-                    "common_intents": ["KNOWLEDGE_INQUIRY", "SYSTEM_STATUS"]
-                },
-                "analytics": {
-                    "capabilities": "View performance metrics and generate reports",
-                    "suggested_actions": "Review workflow performance, analyze agent metrics, generate reports",
-                    "common_intents": ["SYSTEM_STATUS", "KNOWLEDGE_INQUIRY"]
-                },
-                "settings": {
-                    "capabilities": "Configure system settings and user management",
-                    "suggested_actions": "Manage users, configure integrations, update system settings",
-                    "common_intents": ["SUPPORT_REQUEST", "SYSTEM_STATUS"]
-                }
+        # Create trace context for automatic span creation
+        trace_context = {
+            "user_role": user_role,
+            "current_module": current_module,
+            "current_tab": current_tab,
+            "agent_id": agent_id,
+            "model": model,
+            "tools_enabled": True
+        }
+        
+        # This will create automatic traces via autolog
+        mlflow_tracker.trace_intent_detection(message, trace_context)
+        
+        mlflow_tracker.start_intent_detection_run(
+            user_message=message,
+            user_role=user_role,
+            current_module=current_module,
+            current_tab=current_tab,
+            model_name=model
+        )
+        
+        try:
+            self.logger.info(
+                "Starting enhanced intent detection with tools",
+                message=message[:100],
+                user_role=user_role,
+                current_module=current_module,
+                current_tab=current_tab,
+                agent_id=agent_id
+            )
+            
+            # Get available templates
+            workflow_templates = await self.get_workflow_templates()
+            agent_templates = await self.get_agent_templates()
+            
+            # Get available tools
+            if agent_id:
+                available_tools = tool_registry_service.get_tools_for_dspy(agent_id=agent_id)
+            else:
+                available_tools = tool_registry_service.get_tools_for_dspy()
+            
+            # Prepare context
+            role = user_role or "user"
+            module = current_module or "unknown"
+            tab = current_tab or "unknown"
+            
+            # Prepare signature inputs for prompt versioning
+            signature_inputs = {
+                "user_message": message,
+                "user_role": role,
+                "current_module": module,
+                "current_tab": tab,
+                "available_workflows": workflow_templates,
+                "available_agents": agent_templates,
+                "available_tools": json.dumps(available_tools)
             }
             
-            context = module_contexts.get(current_module, {
-                "capabilities": "General platform assistance",
-                "suggested_actions": "Navigate to specific modules for detailed help",
-                "common_intents": ["GENERAL_CHAT", "KNOWLEDGE_INQUIRY"]
+            # Use DSPy to classify intent with tools capability
+            if self.llm is not None:
+                # Ensure autolog traces go to the correct experiment
+                import mlflow
+                from app.services.mlflow_config import MLflowConfig
+                mlflow.set_experiment(MLflowConfig.INTENT_CLASSIFICATION_EXPERIMENT)
+                
+                with dspy.context(lm=self.llm):
+                    prediction = self.intent_with_tools_classifier(
+                        user_message=message,
+                        user_role=role,
+                        current_module=module,
+                        current_tab=tab,
+                        available_workflows=workflow_templates,
+                        available_agents=agent_templates,
+                        available_tools=json.dumps(available_tools)
+                    )
+            else:
+                # Fallback if DSPy configuration failed
+                raise Exception("DSPy LLM not configured - global configuration failed")
+            
+            # Convert DSPy prediction to expected format
+            result = {
+                "detected_intent": prediction.detected_intent,
+                "confidence": float(prediction.confidence),
+                "workflow_type": prediction.workflow_type,
+                "workflow_template_id": prediction.workflow_template_id,
+                "workflow_template_name": prediction.workflow_template_name,
+                "agent_template_id": prediction.agent_template_id,
+                "agent_template_name": prediction.agent_template_name,
+                "reasoning": prediction.reasoning,
+                "requires_workflow": bool(prediction.requires_workflow),
+                "suggested_action": prediction.suggested_action,
+                "category_source": prediction.category_source,
+                "timestamp": datetime.now().isoformat(),
+                "agent_type": "dspy_predict_with_tools",
+                "tool_calls": prediction.tool_calls,
+                "requires_tools": bool(prediction.requires_tools)
+            }
+            
+            # Execute tool calls if needed
+            if result.get("requires_tools") and result.get("tool_calls"):
+                tool_execution_result = await self.execute_tool_calls(
+                    result["tool_calls"], 
+                    agent_id=agent_id
+                )
+                result["tool_execution"] = tool_execution_result
+            
+            # Calculate response time
+            response_time_ms = (time.time() - start_time) * 1000
+            
+            # Log to MLflow
+            available_templates = {
+                "workflows": json.loads(workflow_templates) if workflow_templates else [],
+                "agents": json.loads(agent_templates) if agent_templates else []
+            }
+            
+            mlflow_tracker.log_prediction_result(
+                result=result,
+                response_time_ms=response_time_ms,
+                signature_inputs=signature_inputs,
+                available_templates=available_templates
+            )
+            
+            self.logger.info(
+                "Enhanced intent detection completed",
+                detected_intent=result["detected_intent"],
+                confidence=result["confidence"],
+                requires_workflow=result["requires_workflow"],
+                requires_tools=result["requires_tools"],
+                response_time_ms=response_time_ms
+            )
+            
+            mlflow_tracker.end_run(status="FINISHED")
+            return result
+            
+        except Exception as e:
+            self.logger.error("Enhanced intent detection failed", error=str(e))
+            
+            # Log error to MLflow
+            mlflow_tracker.log_error(e, {
+                "message": message,
+                "user_role": user_role,
+                "current_module": current_module,
+                "current_tab": current_tab,
+                "agent_id": agent_id
             })
             
-            if current_tab:
-                context["current_tab"] = current_tab
-                context["tab_specific_help"] = f"Currently in {current_tab} tab of {current_module} module"
+            # Fallback response
+            response_time_ms = (time.time() - start_time) * 1000
+            fallback_result = {
+                "detected_intent": "GENERAL_CHAT",
+                "confidence": 0.5,
+                "workflow_type": "general",
+                "workflow_template_id": "",
+                "workflow_template_name": "",
+                "agent_template_id": "",
+                "agent_template_name": "",
+                "reasoning": f"Error in enhanced intent detection: {str(e)}",
+                "requires_workflow": False,
+                "suggested_action": "Provide general assistance",
+                "category_source": "fallback",
+                "timestamp": datetime.now().isoformat(),
+                "agent_type": "dspy_predict_with_tools_fallback",
+                "tool_calls": "[]",
+                "requires_tools": False,
+                "error": True
+            }
             
-            return json.dumps(context)
-        
-        # Store reference to self for tool access
-        # search_workflow_templates.agent_ref = self
-        # search_agent_templates.agent_ref = self
-        # get_template_categories.agent_ref = self
-        # search_templates_by_category.agent_ref = self
-        # analyze_user_context.agent_ref = self
-     
-        return [
-            search_workflow_templates,
-            search_agent_templates,
-            get_template_categories,
-            get_workflow_template_names,
-            get_agent_template_names,
-            search_templates_by_category,
-            analyze_user_context
-        ]
-    
-    def _create_langgraph_agent(self):
-        """Create a LangGraph ReAct agent with the tools"""
-        
-        system_message = """You are an intelligent intent detection agent for an enterprise automation platform.
+            # Log fallback result
+            mlflow_tracker.log_prediction_result(
+                result=fallback_result,
+                response_time_ms=response_time_ms,
+                signature_inputs={},
+                available_templates={"workflows": [], "agents": []}
+            )
+            
+            mlflow_tracker.end_run(status="FAILED")
+            return fallback_result
 
-Your role is to analyze user messages and determine their intent by:
-1. Analyzing the user's context and current location in the application
-2. Providing structured intent classification
-
-CLASSIFICATION CATEGORIES:
-- WORKFLOW_DESIGN - User wants to create, modify, or understand workflows
-- AGENT_MANAGEMENT - Questions about AI agents, their configuration, or capabilities
-- TEMPLATE_REQUEST - User wants to use, find, or learn about specific templates
-- KNOWLEDGE_INQUIRY - Looking for information, documentation, or general questions
-- SYSTEM_STATUS - Checking system health, performance, or operational status
-- WORKFLOW_[CATEGORY] - Specific workflow categories from database (e.g., WORKFLOW_IT_SUPPORT, WORKFLOW_HR)
-- GENERAL_CHAT - Casual conversation, greetings, or unclear requests
-
-You should then find the best match against a list of workflow templates names from the database.
-You should then find the best match against a list of agent templates names from the database.
-
-You should return both workflow and agent template names to match the user intent.
-Return the specific workflow template name and agent template name from the database that best matches the user's intent.
-Do not return any other template names, other than those from the database tables: workflow_templates and agent_templates.
-If the user intent does not match any specific workflow or agent template, return the keyword TEMPLATE_NO_FOUND.
-Use the user context to refine your classification.
-
-Always use the tools to gather context before making your final classification. Focus on database-driven classifications when possible.
-You have access to the following tools:
-1. get_workflow_template_names - Get all available workflow template names from the database table workflow_templates
-2. get_agent_template_names - Get all available agent template names from the database table agent_templates
-Use both of these tools to match workflow and agent templates to the user's intent.
-
-Respond in this JSON format:
-{
-    "detected_intent": "category_name",
-    "confidence": 0.95,
-    "workflow_type": "specific_category_from_database",
-    "workflow_template_id": "workflow_template_id_from_database",
-    "workflow_template_name": "specific workflow template name from database",
-    "agent_template_id": "specific_agent_template_id_from_database",   
-    "agent_template_name": "specific agent template name from database",
-    "reasoning": "explanation incorporating database workflow matches and context",
-    "requires_workflow": true/false,
-    "suggested_action": "what should be done next",
-    "category_source": "database|base|fallback"
-}
-Return only valid JSON without any additional text or explanations.
-Do not return multiple JSON blocks"""
-        
-        return create_react_agent(
-            self.langchain_llm,
-            self.tools,
-            state_modifier=system_message
-        )
-    
+    @mlflow.trace(name="dspy_intent_detection", span_type="LLM")
     async def detect_intent_with_context(
         self,
         message: str,
@@ -299,78 +453,168 @@ Do not return multiple JSON blocks"""
         model: str = "gpt-3.5-turbo"
     ) -> Dict[str, Any]:
         """
-        Main intent detection method using LangGraph agent
+        Main intent detection method using DSPy with MLflow observability and tracing
         """
+        # Start MLflow tracking and tracing
+        start_time = time.time()
+        
+        # Create trace context for automatic span creation
+        trace_context = {
+            "user_role": user_role,
+            "current_module": current_module,
+            "current_tab": current_tab,
+            "model": model
+        }
+        
+        # This will create automatic traces via autolog
+        mlflow_tracker.trace_intent_detection(message, trace_context)
+        
+        mlflow_tracker.start_intent_detection_run(
+            user_message=message,
+            user_role=user_role,
+            current_module=current_module,
+            current_tab=current_tab,
+            model_name=model
+        )
+        
         try:
             self.logger.info(
-                "Starting intent detection with LangGraph",
+                "Starting intent detection with DSPy",
                 message=message[:100],
                 user_role=user_role,
                 current_module=current_module,
                 current_tab=current_tab
             )
             
-            # Build context message for the agent
-            context_info = []
-            if user_role:
-                context_info.append(f"User Role: {user_role}")
-            if current_module:
-                context_info.append(f"Current Module: {current_module}")
-            if current_tab:
-                context_info.append(f"Current Tab: {current_tab}")
+            # Get available templates
+            workflow_templates = await self.get_workflow_templates()
+            agent_templates = await self.get_agent_templates()
             
-            context_message = f"""
-User Message: {message}
+            # Prepare context
+            role = user_role or "user"
+            module = current_module or "unknown"
+            tab = current_tab or "unknown"
+            
+            # Prepare signature inputs for prompt versioning
+            signature_inputs = {
+                "user_message": message,
+                "user_role": role,
+                "current_module": module,
+                "current_tab": tab,
+                "available_workflows": workflow_templates,
+                "available_agents": agent_templates
+            }
+            
+            # Use DSPy to classify intent with proper async context
+            # Ensure we're in the correct MLflow experiment for autolog traces
+            if self.llm is not None:
+                # Ensure autolog traces go to the correct experiment
+                import mlflow
+                from app.services.mlflow_config import MLflowConfig
+                mlflow.set_experiment(MLflowConfig.INTENT_CLASSIFICATION_EXPERIMENT)
+                
+                with dspy.context(lm=self.llm):
+                    prediction = self.intent_classifier(
+                        user_message=message,
+                        user_role=role,
+                        current_module=module,
+                        current_tab=tab,
+                        available_workflows=workflow_templates,
+                        available_agents=agent_templates
+                    )
+            else:
+                # Fallback if DSPy configuration failed
+                raise Exception("DSPy LLM not configured - global configuration failed")
+            
+            # Convert DSPy prediction to expected format
+            result = {
+                "detected_intent": prediction.detected_intent,
+                "confidence": float(prediction.confidence),
+                "workflow_type": prediction.workflow_type,
+                "workflow_template_id": prediction.workflow_template_id,
+                "workflow_template_name": prediction.workflow_template_name,
+                "agent_template_id": prediction.agent_template_id,
+                "agent_template_name": prediction.agent_template_name,
+                "reasoning": prediction.reasoning,
+                "requires_workflow": bool(prediction.requires_workflow),
+                "suggested_action": prediction.suggested_action,
+                "category_source": prediction.category_source,
+                "timestamp": datetime.now().isoformat(),
+                "agent_type": "dspy_predict"
+            }
 
-Context Information:
-{chr(10).join(context_info) if context_info else "No specific context provided"}
+            # Add workflow_execution dictionary if workflow is required
+            await self._add_workflow_execution_info(result, message, user_role, current_module, current_tab)
 
-Please analyze this message and determine the user's intent.
-"""
             
-            # Execute the agent
-            # print("Context message:", context_message)
-            result = await self.agent.ainvoke({
-                "messages": [HumanMessage(content=context_message)]
-            })
+            # Calculate response time
+            response_time_ms = (time.time() - start_time) * 1000
             
+            # Log to MLflow
+            available_templates = {
+                "workflows": json.loads(workflow_templates) if workflow_templates else [],
+                "agents": json.loads(agent_templates) if agent_templates else []
+            }
             
-            # Extract the final response
-            final_message = result["messages"][-1]
-            response_content = final_message.content
+            mlflow_tracker.log_prediction_result(
+                result=result,
+                response_time_ms=response_time_ms,
+                signature_inputs=signature_inputs,
+                available_templates=available_templates
+            )
             
-            # Try to parse as JSON
-            try:
-                intent_result = json.loads(response_content)
-                
-                # Ensure required fields exist
-                if not isinstance(intent_result, dict):
-                    raise ValueError("Response is not a dictionary")
-                
-                # Add metadata
-                intent_result["timestamp"] = datetime.now().isoformat()
-                intent_result["agent_type"] = "langgraph_react"
-                
-                # Add workflow_execution dictionary if workflow is required
-                await self._add_workflow_execution_info(intent_result, message, user_role, current_module, current_tab)
-                
-                self.logger.info(
-                    "LangGraph intent detection completed",
-                    detected_intent=intent_result.get("detected_intent"),
-                    confidence=intent_result.get("confidence")
-                )
-                # print("Returning intent_result:", intent_result)
-                return intent_result
-                
-            except (json.JSONDecodeError, ValueError) as e:
-                self.logger.warning("Failed to parse LangGraph response as JSON", error=str(e))
-                # Fallback parsing
-                return await self._parse_fallback_response(message, response_content)
+            self.logger.info(
+                "Intent detection completed",
+                detected_intent=result["detected_intent"],
+                confidence=result["confidence"],
+                requires_workflow=result["requires_workflow"],
+                response_time_ms=response_time_ms
+            )
+            
+            mlflow_tracker.end_run(status="FINISHED")
+            return result
             
         except Exception as e:
-            self.logger.error("LangGraph intent detection failed", error=str(e))
-            return await self._fallback_intent_response(message, str(e))
-    
+            self.logger.error("Intent detection failed", error=str(e))
+            
+            # Log error to MLflow
+            mlflow_tracker.log_error(e, {
+                "message": message,
+                "user_role": user_role,
+                "current_module": current_module,
+                "current_tab": current_tab
+            })
+            
+            # Fallback response
+            response_time_ms = (time.time() - start_time) * 1000
+            fallback_result = {
+                "detected_intent": "GENERAL_CHAT",
+                "confidence": 0.5,
+                "workflow_type": "general",
+                "workflow_template_id": "",
+                "workflow_template_name": "",
+                "agent_template_id": "",
+                "agent_template_name": "",
+                "reasoning": f"Error in intent detection: {str(e)}",
+                "requires_workflow": False,
+                "suggested_action": "Provide general assistance",
+                "category_source": "fallback",
+                "timestamp": datetime.now().isoformat(),
+                "agent_type": "dspy_predict_fallback",
+                "error": True
+            }
+            
+            # Log fallback result
+            mlflow_tracker.log_prediction_result(
+                result=fallback_result,
+                response_time_ms=response_time_ms,
+                signature_inputs={},
+                available_templates={"workflows": [], "agents": []}
+            )
+            
+            mlflow_tracker.end_run(status="FAILED")
+            return fallback_result
+
     async def _add_workflow_execution_info(
         self,
         intent_result: Dict[str, Any],
@@ -436,157 +680,18 @@ Please analyze this message and determine the user's intent.
                 "recommended": False,
                 "reason": f"Error processing workflow execution: {str(e)}"
             }
-    
-    async def _parse_fallback_response(self, message: str, response_text: str) -> Dict[str, Any]:
-        """Parse non-JSON LangGraph response as fallback"""
-        
-        # Try to extract intent from response text
-        response_lower = response_text.lower()
-        
-        if "workflow" in response_lower:
-            intent = "WORKFLOW_DESIGN"
-        elif "agent" in response_lower:
-            intent = "AGENT_MANAGEMENT"
-        elif "template" in response_lower:
-            intent = "TEMPLATE_REQUEST"
-        elif "support" in response_lower or "help" in response_lower:
-            intent = "SUPPORT_REQUEST"
-        else:
-            intent = "GENERAL_CHAT"
-        
-        result = {
-            "detected_intent": intent,
-            "confidence": 0.6,
-            "workflow_type": None,
-            "reasoning": f"Parsed from LangGraph response: {response_text[:200]}...",
-            "requires_workflow": intent in ["SUPPORT_REQUEST", "TEMPLATE_REQUEST"],
-            "suggested_action": "Provide contextual assistance",
-            "timestamp": datetime.now().isoformat(),
-            "agent_type": "langgraph_react",
-            "fallback_parsing": True,
-            "workflow_execution": {
-                "recommended": False,
-                "reason": "Fallback parsing - no specific workflow template identified"
-            }
-        }
-        return result
-    
-    async def _fallback_intent_response(self, message: str, error: str) -> Dict[str, Any]:
-        """Generate fallback response when LangGraph agent fails"""
-        
-        # Try to get some database context even in fallback
-        try:
-            # Quick database lookup for fallback
-            categories = await template_service.get_template_categories()
-            if categories:
-                message_lower = message.lower()
-                
-                # Check if message matches any database categories
-                for category in categories:
-                    if category.lower() in message_lower:
-                        return {
-                            "detected_intent": f"WORKFLOW_{category.upper().replace(' ', '_').replace('-', '_')}",
-                            "confidence": 0.6,
-                            "workflow_type": category,
-                            "reasoning": f"Fallback match to database category '{category}' based on keyword matching",
-                            "requires_workflow": True,
-                            "suggested_action": f"Browse {category} templates or create new {category} workflow",
-                            "timestamp": datetime.now().isoformat(),
-                            "agent_type": "langgraph_react",
-                            "fallback": True,
-                            "category_source": "database_fallback",
-                            "workflow_execution": {
-                                "recommended": True,
-                                "workflow_template_id": f"template_{category.lower().replace(' ', '_').replace('-', '_')}",
-                                "workflow_template_name": category,
-                                "agent_template_id": None,
-                                "agent_template_name": None,
-                                "confidence": 0.6,
-                                "execution_context": {
-                                    "user_request": message,
-                                    "detected_intent": f"WORKFLOW_{category.upper().replace(' ', '_').replace('-', '_')}",
-                                    "user_role": None,
-                                    "current_module": None,
-                                    "current_tab": None,
-                                    "workflow_name": category,
-                                    "agent_template": None,
-                                    "reasoning": f"Fallback match to database category '{category}' based on keyword matching",
-                                    "suggested_action": f"Browse {category} templates or create new {category} workflow"
-                                }
-                            }
-                        }
-        except Exception:
-            # If database lookup fails, continue with keyword fallback
-            pass
-        
-        # Simple keyword-based fallback when database is unavailable
-        message_lower = message.lower()
-        
-        if any(keyword in message_lower for keyword in ['workflow', 'process', 'automation']):
-            intent = "WORKFLOW_DESIGN"
-            requires_workflow = False
-        elif any(keyword in message_lower for keyword in ['agent', 'ai', 'bot']):
-            intent = "AGENT_MANAGEMENT"
-            requires_workflow = False
-        elif any(keyword in message_lower for keyword in ['template', 'example']):
-            intent = "TEMPLATE_REQUEST"
-            requires_workflow = False
-        elif any(keyword in message_lower for keyword in ['password', 'login', 'access', 'error']):
-            intent = "WORKFLOW_IT_SUPPORT"
-            requires_workflow = True
-        elif any(keyword in message_lower for keyword in ['payroll', 'benefits', 'hr']):
-            intent = "WORKFLOW_HR"
-            requires_workflow = True
-        elif any(keyword in message_lower for keyword in ['customer', 'billing', 'account']):
-            intent = "WORKFLOW_CUSTOMER_SERVICE"
-            requires_workflow = True
-        else:
-            intent = "GENERAL_CHAT"
-            requires_workflow = False
-        
-        result = {
-            "detected_intent": intent,
-            "confidence": 0.5,
-            "workflow_type": None,
-            "reasoning": f"Fallback intent detection due to LangGraph error: {error}",
-            "requires_workflow": requires_workflow,
-            "suggested_action": "Provide general assistance",
-            "timestamp": datetime.now().isoformat(),
-            "agent_type": "langgraph_react",
-            "fallback": True,
-            "category_source": "keyword_fallback",
-            "workflow_execution": {
-                "recommended": False,
-                "reason": "Fallback mode - LangGraph agent failed"
-            }
-        }
-        
-        # Add workflow execution info for keyword-based matches that require workflow
-        if requires_workflow and intent.startswith("WORKFLOW_"):
-            workflow_name = intent.replace("WORKFLOW_", "").replace("_", " ").title()
-            result["workflow_execution"] = {
-                "recommended": True,
-                "workflow_template_id": f"template_{workflow_name.lower().replace(' ', '_')}",
-                "template_name": workflow_name,
-                "agent_template": None,
-                "confidence": 0.5,
-                "execution_context": {
-                    "user_request": message,
-                    "detected_intent": intent,
-                    "user_role": None,
-                    "current_module": None,
-                    "current_tab": None,
-                    "workflow_name": workflow_name,
-                    "agent_template": None,
-                    "reasoning": f"Fallback keyword match for {workflow_name}",
-                    "suggested_action": "Provide general assistance"
-                }
-            }
-        
-        return result
 
+# Global instance to avoid multiple DSPy configurations
+_global_intent_agent: Optional[IntentDetectionAgent] = None
 
-# Create global agent instance
+# Create factory function for backward compatibility
 def create_intent_agent(llm_client: Optional[OpenAI] = None) -> IntentDetectionAgent:
-    """Factory function to create intent detection agent"""
-    return IntentDetectionAgent(llm_client=llm_client)
+    """Factory function to create intent detection agent (singleton pattern)"""
+    global _global_intent_agent
+    
+    if _global_intent_agent is None:
+        if _global_llm_instance is None:
+            raise Exception("DSPy configuration failed - cannot create intent agent")
+        _global_intent_agent = IntentDetectionAgent(llm_client)
+    
+    return _global_intent_agent

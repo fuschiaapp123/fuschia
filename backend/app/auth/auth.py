@@ -50,9 +50,20 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
     
-    user = await user_service.get_user_by_email(email=token_data.email)
-    if user is None:
+    user_in_db = await user_service.get_user_by_email(email=token_data.email)
+    if user_in_db is None:
         raise credentials_exception
+    
+    # Convert UserInDB to User model for consistency
+    user = User(
+        id=user_in_db.id,
+        email=user_in_db.email,
+        full_name=user_in_db.full_name,
+        role=user_in_db.role,
+        is_active=user_in_db.is_active,
+        created_at=user_in_db.created_at,
+        updated_at=user_in_db.updated_at
+    )
     return user
 
 

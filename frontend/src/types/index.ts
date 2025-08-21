@@ -60,5 +60,5 @@ export interface AuthState {
 export interface AppState {
   sidebarCollapsed: boolean;
   activeTab: string;
-  currentModule: 'home' | 'knowledge' | 'workflow' | 'value-streams' | 'process-mining' | 'agents' | 'analytics' | 'settings';
+  currentModule: 'home' | 'knowledge' | 'workflow' | 'value-streams' | 'process-mining' | 'agents' | 'analytics' | 'monitoring' | 'settings';
 }

@@ -5,6 +5,8 @@ import { Message } from './types';
 import { useLLMStore } from '@/store/llmStore';
 import { LLM_PROVIDERS, getProviderById } from '@/config/llmProviders';
 import { triggerWorkflow } from './ChatAPI';
+import { websocketService } from '@/services/websocketService';
+import { useAuthStore } from '@/store/authStore';
 
 interface ChatPanelProps {
   messages: Message[];
@@ -30,6 +32,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
   const [workflowMode, setWorkflowMode] = useState(false);
+  const [pendingHumanInTheLoopRequests, setPendingHumanInTheLoopRequests] = useState<any[]>([]);
+  
+  const { user: currentUser } = useAuthStore();
   
   const currentProvider = getProviderById(selectedProvider);
   const currentModel = currentProvider?.models.find(m => m.id === selectedModel);
@@ -43,8 +48,86 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [selectedProvider, selectedModel, currentProvider, onModelChange]);
 
+  // Check for pending Human-in-the-Loop requests
+  useEffect(() => {
+    const checkPendingRequests = async () => {
+      if (currentUser?.id) {
+        try {
+          const response = await fetch(`/api/v1/pending_requests/${currentUser.id}`);
+          const data = await response.json();
+          setPendingHumanInTheLoopRequests(data.pending_requests || []);
+        } catch (error) {
+          console.error('Failed to fetch pending requests:', error);
+        }
+      }
+    };
+
+    // Check for pending requests every 2 seconds
+    const interval = setInterval(checkPendingRequests, 2000);
+    
+    // Initial check
+    checkPendingRequests();
+    
+    return () => clearInterval(interval);
+  }, [currentUser?.id]);
+
+  // Check if the last few messages contain Human-in-the-Loop requests
+  const hasRecentHumanInTheLoopRequest = () => {
+    const recentMessages = messages.slice(-5); // Check last 5 messages
+    return recentMessages.some(msg => 
+      msg.content.includes('**Information Needed**') || 
+      msg.content.includes('**Question from Agent**') ||
+      msg.content.includes('**Approval Required**') ||
+      msg.content.includes('**Need Clarification**') ||
+      msg.content.includes('**Decision Required**')
+    );
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return; 
+    
+    // Check if this is a response to a Human-in-the-Loop request
+    if (pendingHumanInTheLoopRequests.length > 0 || hasRecentHumanInTheLoopRequest()) {
+      console.log('🤖 Detected Human-in-the-Loop response, sending via WebSocket');
+      
+      try {
+        // Send response directly via WebSocket
+        websocketService.send({
+          type: 'chat_message',
+          content: inputMessage.trim()
+        });
+        
+        // Also add the user message to the chat panel
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          content: inputMessage,
+          isUser: true,
+          sender: 'user',
+          timestamp: new Date(),
+          status: 'complete'
+        };
+        onSendMessage(userMessage);
+        
+        console.log('✅ Human-in-the-Loop response sent via WebSocket');
+        
+      } catch (error) {
+        console.error('❌ Failed to send Human-in-the-Loop response:', error);
+        
+        // Fallback to normal chat if WebSocket fails
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          content: inputMessage,
+          isUser: true,
+          sender: 'user',
+          timestamp: new Date(),
+          status: 'complete'
+        };
+        onSendMessage(userMessage);
+      }
+      
+      setInputMessage('');
+      return;
+    }
     
     if (workflowMode) {
       // Trigger workflow instead of regular chat
@@ -333,20 +416,37 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
           {/* Input */}
           <div className="p-4 border-t border-gray-200">
+            {/* Human-in-the-Loop indicator */}
+            {(pendingHumanInTheLoopRequests.length > 0 || hasRecentHumanInTheLoopRequest()) && (
+              <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs text-blue-700 font-medium">
+                    🤖 Agent is waiting for your response
+                  </span>
+                </div>
+              </div>
+            )}
+            
             <div className="flex items-center space-x-2">
               <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder={workflowMode ? 
-                  "Describe your issue (e.g., 'I can't login' or 'Need to check payroll')..." : 
-                  "Ask me anything..."
+                placeholder={
+                  (pendingHumanInTheLoopRequests.length > 0 || hasRecentHumanInTheLoopRequest()) 
+                    ? "Type your response to the agent's question..." 
+                    : workflowMode 
+                      ? "Describe your issue (e.g., 'I can't login' or 'Need to check payroll')..." 
+                      : "Ask me anything..."
                 }
                 className={cn(
                   "flex-1 resize-none border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:border-transparent",
-                  workflowMode 
-                    ? "border-green-300 focus:ring-green-500" 
-                    : "border-gray-300 focus:ring-fuschia-500"
+                  (pendingHumanInTheLoopRequests.length > 0 || hasRecentHumanInTheLoopRequest())
+                    ? "border-blue-300 focus:ring-blue-500"
+                    : workflowMode 
+                      ? "border-green-300 focus:ring-green-500" 
+                      : "border-gray-300 focus:ring-fuschia-500"
                 )}
                 rows={1}
               />

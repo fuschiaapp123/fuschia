@@ -509,8 +509,21 @@ class WorkflowOrchestrator:
             'timestamp': datetime.utcnow().isoformat()
         })
         
-        # Send real-time task result to user via WebSocket
-        asyncio.create_task(websocket_manager.send_task_result(execution.id, result))
+        # Send real-time task result to monitoring console via WebSocket
+        agent_id = result.get('agent_id')
+        agent_name = 'Unknown Agent'
+        if agent_id and agent_id in self.agent_instances:
+            agent_instance = self.agent_instances[agent_id]
+            agent_name = agent_instance.agent_node.name
+        
+        workflow_name = f"Workflow-{execution.workflow_template_id[:8]}..."
+        
+        asyncio.create_task(websocket_manager.send_task_result_as_agent_thought(
+            execution.id, 
+            result, 
+            agent_name, 
+            workflow_name
+        ))
         
         # Handle human approval requirements
         if result.get('status') == TaskStatus.WAITING_APPROVAL.value:

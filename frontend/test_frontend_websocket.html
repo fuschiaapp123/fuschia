@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend WebSocket Test - testuser1</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Frontend WebSocket Test for testuser1</h1>
+    <button onclick="connectWebSocket()">Connect WebSocket</button>
+    <button onclick="sendTestMessage()">Send Test Message</button>
+    <button onclick="checkBackendConnections()">Check Backend Connections</button>
+    <button onclick="triggerAgentThought()">Trigger Agent Thought</button>
+    
+    <div id="status">Status: Disconnected</div>
+    <div id="logs"></div>
+
+    <script>
+        const userId = '4b84eaae-d0bb-4bd7-9c36-45e8f5f7eedb'; // testuser1 ID
+        const wsUrl = `ws://localhost:8000/api/v1/ws/${encodeURIComponent(userId)}`;
+        let ws = null;
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logsDiv = document.getElementById('logs');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log ${type}`;
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logsDiv.appendChild(logEntry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+        
+        function updateStatus(status, type = 'info') {
+            document.getElementById('status').textContent = `Status: ${status}`;
+            document.getElementById('status').className = type;
+        }
+        
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('Already connected', 'info');
+                return;
+            }
+            
+            log(`Attempting to connect to: ${wsUrl}`, 'info');
+            updateStatus('Connecting...', 'info');
+            
+            // Mimic the frontend WebSocket service behavior
+            console.log('WebSocketService: Connection attempt for user:', userId);
+            console.log('WebSocketService: Creating new WebSocket connection...');
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function(event) {
+                log('✅ WebSocket connected successfully!', 'success');
+                updateStatus('Connected', 'success');
+                
+                console.log('WebSocket connected successfully for user:', userId);
+                console.log('WebSocket URL:', wsUrl);
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    log(`📨 Received: ${JSON.stringify(message, null, 2)}`, 'info');
+                    
+                    if (message.type === 'agent_thought') {
+                        log(`🧠 Agent Thought: ${message.message}`, 'success');
+                    }
+                } catch (e) {
+                    log(`📨 Raw message: ${event.data}`, 'info');
+                }
+            };
+            
+            ws.onerror = function(error) {
+                log(`❌ WebSocket error: ${error}`, 'error');
+                updateStatus('Error', 'error');
+                console.error('WebSocket error for user:', userId, error);
+            };
+            
+            ws.onclose = function(event) {
+                log(`🔌 WebSocket closed: ${event.code} - ${event.reason}`, 'info');
+                updateStatus('Disconnected', 'info');
+                console.log('WebSocket disconnected:', event.code, event.reason);
+            };
+        }
+        
+        function sendTestMessage() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const testMessage = JSON.stringify({type: 'test', message: 'Hello from frontend test', timestamp: new Date().toISOString()});
+                ws.send(testMessage);
+                log('📤 Test message sent', 'info');
+            } else {
+                log('❌ WebSocket not connected', 'error');
+            }
+        }
+        
+        function checkBackendConnections() {
+            fetch('http://localhost:8000/api/v1/debug/websocket-connections')
+                .then(response => response.json())
+                .then(data => {
+                    log(`Backend connections: ${JSON.stringify(data, null, 2)}`, 'info');
+                    
+                    const testuser1Connected = data.active_connections[userId];
+                    if (testuser1Connected) {
+                        log(`✅ testuser1 has ${testuser1Connected} active connections`, 'success');
+                    } else {
+                        log(`❌ testuser1 has no active connections`, 'error');
+                    }
+                })
+                .catch(error => {
+                    log(`❌ Error checking backend: ${error}`, 'error');
+                });
+        }
+        
+        function triggerAgentThought() {
+            fetch(`http://localhost:8000/api/v1/test/agent-thoughts/${userId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            })
+            .then(response => response.json())
+            .then(data => {
+                log(`🧠 Agent thought triggered: ${JSON.stringify(data)}`, 'success');
+            })
+            .catch(error => {
+                log(`❌ Error triggering agent thought: ${error}`, 'error');
+            });
+        }
+        
+        // Auto-connect on page load
+        window.onload = function() {
+            log('Page loaded - ready to test WebSocket connection', 'info');
+        };
+    </script>
+</body>
+</html>

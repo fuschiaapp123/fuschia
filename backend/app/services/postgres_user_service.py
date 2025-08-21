@@ -291,6 +291,51 @@ class PostgresUserService:
             except Exception as e:
                 logger.error("Failed to get user count by role", error=str(e))
                 return {}
+    
+    async def change_password(self, user_id: str, current_password: str, new_password: str) -> bool:
+        """Change user password after verifying current password"""
+        async with AsyncSessionLocal() as session:
+            try:
+                # Get user with password hash
+                result = await session.execute(
+                    select(UserTable).where(UserTable.id == user_id)
+                )
+                db_user = result.scalar_one_or_none()
+                
+                if not db_user:
+                    logger.warning("Password change failed - user not found", user_id=user_id)
+                    return False
+                
+                # Verify current password
+                if not verify_password(current_password, db_user.hashed_password):
+                    logger.warning("Password change failed - invalid current password", user_id=user_id)
+                    return False
+                
+                # Hash new password
+                new_hashed_password = get_password_hash(new_password)
+                
+                # Update password
+                result = await session.execute(
+                    update(UserTable)
+                    .where(UserTable.id == user_id)
+                    .values(
+                        hashed_password=new_hashed_password,
+                        updated_at=datetime.utcnow()
+                    )
+                )
+                
+                if result.rowcount > 0:
+                    await session.commit()
+                    logger.info("Password changed successfully", user_id=user_id)
+                    return True
+                else:
+                    logger.warning("Password change failed - no rows updated", user_id=user_id)
+                    return False
+                    
+            except Exception as e:
+                await session.rollback()
+                logger.error("Password change failed", user_id=user_id, error=str(e))
+                return False
 
 
 # Create global instance

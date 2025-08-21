@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useLLMStore } from '@/store/llmStore';
 import ChatAPI from './ChatAPI';
 import { parseYAMLWorkflow, convertToReactFlowData, convertToAgentFlowData, isValidYAML } from '@/utils/yamlParser';
-import { websocketService, TaskResult, ExecutionUpdate } from '@/services/websocketService';
+import { websocketService, ExecutionUpdate } from '@/services/websocketService';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -46,54 +46,105 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // WebSocket integration for real-time task results
   useEffect(() => {
     if (currentUser?.id) {
+      console.log('MainLayout: Setting up WebSocket connection for user:', currentUser.id);
+      console.log('MainLayout: Current WebSocket info:', websocketService.getConnectionInfo());
+      
       // Connect to WebSocket for real-time updates
       websocketService.connect(currentUser.id, {
-        onTaskResult: (taskResult: TaskResult) => {
-          // Add task result as a new message in chat
-          const newMessage: Message = {
-            id: `task-${Date.now()}`,
-            content: taskResult.content,
-            isUser: false,
-            sender: 'workflow_system',
-            timestamp: new Date(taskResult.timestamp),
-            status: 'complete',
-            agent_id: taskResult.agent_id,
-            agent_label: `Agent: ${taskResult.agent_id}`
-          };
-          
-          setMessages(prev => [...prev, newMessage]);
-        },
+        // Note: Task results are now sent to the Monitoring Thoughts & Actions console
+        // instead of the chat panel for better workflow visibility
         
         onExecutionUpdate: (update: ExecutionUpdate) => {
+          console.log('📨 MainLayout: Received execution update:', update);
+          console.log('📨 MainLayout: Message content:', update.data.message);
+          console.log('📨 MainLayout: Current messages count:', messages.length);
+          
+          // Create unique ID using execution_id + timestamp + random component
+          const uniqueId = `exec-${update.execution_id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+          
           // Add execution updates as system messages
           const newMessage: Message = {
-            id: `exec-${Date.now()}`,
+            id: uniqueId,
             content: update.data.message,
             isUser: false,
-            sender: 'workflow_system',
+            sender: 'workflow',
             timestamp: new Date(update.timestamp),
             status: 'complete',
             agent_id: 'system',
             agent_label: 'Workflow System'
           };
           
-          setMessages(prev => [...prev, newMessage]);
+          console.log('📨 MainLayout: Created new message:', newMessage);
+          
+          setMessages(prev => {
+            // More robust duplicate detection - but less aggressive for Human-in-the-Loop messages
+            const isDuplicate = prev.some(msg => {
+              // Check for exact content match within last 10 messages
+              const isContentMatch = msg.content === newMessage.content;
+              const isRecentMessage = Math.abs(new Date(msg.timestamp).getTime() - new Date(newMessage.timestamp).getTime()) < 2000; // Reduced to 2 seconds
+              const isSameSender = msg.sender === newMessage.sender;
+              
+              // Don't filter Human-in-the-Loop messages too aggressively
+              const isHumanInTheLoopMessage = newMessage.content.includes('**Information Needed**') || 
+                                            newMessage.content.includes('**Question from Agent**') ||
+                                            newMessage.content.includes('**Approval Required**') ||
+                                            newMessage.content.includes('**Need Clarification**') ||
+                                            newMessage.content.includes('**Decision Required**');
+              
+              if (isHumanInTheLoopMessage) {
+                // For Human-in-the-Loop messages, only filter if identical content AND very recent (< 1 second)
+                return isContentMatch && Math.abs(new Date(msg.timestamp).getTime() - new Date(newMessage.timestamp).getTime()) < 1000;
+              }
+              
+              return isContentMatch && isRecentMessage && isSameSender;
+            });
+            
+            if (isDuplicate) {
+              console.log('📨 MainLayout: Skipping duplicate message:', newMessage.content.substring(0, 50) + '...');
+              return prev;
+            }
+            
+            // Also prevent too many messages from accumulating
+            const updated = [...prev, newMessage];
+            
+            // Keep only last 50 messages to prevent memory issues
+            const trimmed = updated.length > 50 ? updated.slice(-50) : updated;
+            
+            console.log('📨 MainLayout: Updated messages count:', trimmed.length);
+            console.log('📨 MainLayout: Last message:', trimmed[trimmed.length - 1]);
+            return trimmed;
+          });
         },
         
         onConnect: () => {
           console.log('✅ Connected to workflow updates for user:', currentUser.id);
+          
+          // Clear any duplicate or stale messages on fresh connection
+          setMessages(prev => {
+            const uniqueMessages = prev.filter((msg, index, arr) => {
+              // Keep only unique messages based on content
+              return arr.findIndex(m => m.content === msg.content) === index;
+            });
+            
+            if (uniqueMessages.length !== prev.length) {
+              console.log('🧹 Cleaned duplicate messages on connection:', prev.length, '→', uniqueMessages.length);
+            }
+            
+            return uniqueMessages;
+          });
+          
           // Add a test message to verify connection
-          const welcomeMessage: Message = {
-            id: `welcome-${Date.now()}`,
-            content: '🔗 Connected to real-time workflow updates',
-            isUser: false,
-            sender: 'system',
-            timestamp: new Date(),
-            status: 'complete',
-            agent_id: 'system',
-            agent_label: 'System'
-          };
-          setMessages(prev => [...prev, welcomeMessage]);
+          // const welcomeMessage: Message = {
+          //   id: `welcome-${Date.now()}`,
+          //   content: '🔗 Connected to real-time workflow updates',
+          //   isUser: false,
+          //   sender: 'workflow',
+          //   timestamp: new Date(),
+          //   status: 'complete',
+          //   agent_id: 'system',
+          //   agent_label: 'System'
+          // };
+          // setMessages(prev => [...prev, welcomeMessage]);
           
           // Test WebSocket by sending a test message after connection
           setTimeout(async () => {

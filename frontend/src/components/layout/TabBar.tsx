@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAppStore } from '@/store/appStore';
 import { useAuthStore } from '@/store/authStore';
+import { canAccessTab } from '@/utils/roles';
 import { cn } from '@/utils/cn';
 import { X, Plus } from 'lucide-react';
 
@@ -43,12 +44,19 @@ const defaultTabs: Record<string, Tab[]> = {
     { id: 'agents', title: 'Agents' },
     { id: 'reports', title: 'Reports' },
   ],
+  monitoring: [
+    { id: 'workflows', title: 'Workflow Executions' },
+    { id: 'agents', title: 'Agent Organizations' },
+    { id: 'thoughts', title: 'Thoughts & Actions' },
+  ],
   settings: [
     { id: 'general', title: 'General' },
     { id: 'templates', title: 'Templates' },
     { id: 'llm', title: 'LLM Providers' },
+    { id: 'tools', title: 'Tools Registry' },
     { id: 'integrations', title: 'Integrations' },
     { id: 'users', title: 'Users' },
+    { id: 'roles', title: 'Roles & Permissions' },
     { id: 'profile', title: 'My Profile' },
   ],
 };
@@ -58,31 +66,12 @@ export const TabBar: React.FC = () => {
   const { user: currentUser } = useAuthStore();
   
   const getFilteredTabs = () => {
-    let tabs = defaultTabs[currentModule] || [];
+    const tabs = defaultTabs[currentModule] || [];
     
-    // Filter settings tabs based on user role
-    if (currentModule === 'settings' && currentUser) {
-      tabs = tabs.filter(tab => {
-        // Everyone can see general, templates, llm, and profile tabs
-        if (['general', 'templates', 'llm', 'profile'].includes(tab.id)) {
-          return true;
-        }
-        
-        // Only admins can see integrations and user management
-        if (tab.id === 'integrations') {
-          return currentUser.role === 'admin';
-        }
-        
-        // Admins and managers can see user management, others see profile
-        if (tab.id === 'users') {
-          return currentUser.role === 'admin' || currentUser.role === 'manager';
-        }
-        
-        return true;
-      });
-    }
-    
-    return tabs;
+    // Filter tabs based on role permissions
+    return tabs.filter(tab => {
+      return canAccessTab(currentUser?.role, currentModule, tab.id);
+    });
   };
 
   const tabs = getFilteredTabs();

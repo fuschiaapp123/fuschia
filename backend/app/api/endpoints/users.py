@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List
 
-from app.models.user import User, UserCreate, UserUpdate, UserRole
+from app.models.user import User, UserCreate, UserUpdate, UserRole, PasswordChange
 from app.services.postgres_user_service import postgres_user_service
 from app.auth.auth import get_current_active_user
 
@@ -247,6 +247,48 @@ async def get_available_roles(
     ]
     
     return {"roles": roles}
+
+
+@router.post("/me/change-password")
+async def change_password(
+    password_data: PasswordChange,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Change current user's password"""
+    # Validate that new password and confirm password match
+    if password_data.new_password != password_data.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password and confirm password do not match"
+        )
+    
+    # Prevent using the same password
+    if password_data.current_password == password_data.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password"
+        )
+    
+    try:
+        success = await postgres_user_service.change_password(
+            current_user.id, 
+            password_data.current_password, 
+            password_data.new_password
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to change password. Please check your current password."
+            )
+        
+        return {"message": "Password changed successfully"}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while changing password"
+        )
 
 
 def _get_role_description(role: UserRole) -> str:

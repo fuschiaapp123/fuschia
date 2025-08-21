@@ -41,6 +41,14 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Neo4j connection failed: {e}")
         logger.info("Starting without Neo4j connection")
     
+    # Initialize WebSocket manager message processing
+    try:
+        from app.services.websocket_manager import initialize_websocket_manager
+        await initialize_websocket_manager()
+        logger.info("WebSocket manager message processing initialized")
+    except Exception as e:
+        logger.error(f"WebSocket manager initialization failed: {e}")
+    
     yield
     
     logger.info("Shutting down Fuschia Backend API")

@@ -155,6 +155,25 @@ class UserService {
 
     return response.json();
   }
+
+  async changePassword(passwordData: {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+  }): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/users/me/change-password`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(passwordData),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to change password: ${error}`);
+    }
+
+    return response.json();
+  }
 }
 
 export const userService = new UserService();
