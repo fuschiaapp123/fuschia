@@ -49,5 +49,6 @@
     "workflow",
     "enterprise"
   ],
-  "author": "Fuschia Team"
+  "author": "Fuschia Team",
+  "license": "MIT"
 }
