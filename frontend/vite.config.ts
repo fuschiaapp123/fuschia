@@ -12,6 +12,8 @@ export default defineConfig({
   preview: {
     // This is for the production preview server
     port: Number(process.env.PORT) || 4173,
-    host: true
+    host: true,
+    // Allow requests from your custom domain and any Railway-provided domain
+    allowedHosts: ['app.fuschia.io', '.railway.app']
   }
 })
