@@ -365,9 +365,7 @@ class AgentService {
       errors.push('Agent name is required');
     }
 
-    if (agentData.skills.length === 0) {
-      errors.push('At least one skill is required');
-    }
+    // Skills are optional - agents can work with just tools
 
     if (!agentData.description.trim()) {
       errors.push('Agent description is required');

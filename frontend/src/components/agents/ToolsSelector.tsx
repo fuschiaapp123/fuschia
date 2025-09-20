@@ -15,6 +15,9 @@ interface ToolFunction {
     required: boolean;
   }>;
   tags: string[];
+  tool_type?: string; // Add tool_type for system tools
+  version?: string;
+  requires_auth?: boolean;
 }
 
 interface ToolAssociation {
@@ -40,6 +43,18 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
   const [availableTools, setAvailableTools] = useState<ToolFunction[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Helper function to check if a tool is selected using flexible matching
+  const isToolSelected = (tool: ToolFunction, selectedTools: string[]): boolean => {
+    return selectedTools.some(toolId => 
+      tool.id === toolId || 
+      tool.name === toolId || 
+      tool.id === `system_${toolId}` ||
+      tool.name === toolId.replace('_tool', '') ||
+      toolId === `${tool.name}_tool` ||
+      toolId === `system_${tool.name}`
+    );
+  };
+
 
   useEffect(() => {
     fetchAvailableTools();
@@ -53,8 +68,15 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
 
   const fetchAvailableTools = async () => {
     try {
-      const response = await api.get('/tools/?status=active');
-      setAvailableTools(response.data);
+      // Fetch both registry tools and system tools
+      const [registryResponse, systemResponse] = await Promise.all([
+        api.get('/tools/?status=active'),
+        api.get('/tools/system-tools/')
+      ]);
+      
+      // Combine both types of tools
+      const allTools = [...registryResponse.data, ...systemResponse.data];
+      setAvailableTools(allTools);
     } catch (error) {
       console.error('Failed to fetch tools:', error);
     } finally {
@@ -66,10 +88,20 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
     if (!agentId) return;
     
     try {
-      const response = await api.get(`/tools/agents/${agentId}/tools`);
-      const agentTools = response.data;
-      const toolIds = agentTools.map((tool: ToolFunction) => tool.id);
-      onToolsChange(toolIds);
+      // Fetch both registry tools and system tools for the agent
+      const [registryResponse, systemResponse] = await Promise.all([
+        api.get(`/tools/agents/${agentId}/tools`),
+        api.get(`/agents/${agentId}/system-tools`).catch(() => ({ data: { system_tools: [] } })) // Fallback if endpoint fails
+      ]);
+      
+      const registryTools = registryResponse.data;
+      const systemTools = systemResponse.data.system_tools || [];
+      
+      // Combine registry tool IDs and system tool IDs
+      const registryToolIds = registryTools.map((tool: ToolFunction) => tool.id);
+      const allToolIds = [...registryToolIds, ...systemTools];
+      
+      onToolsChange(allToolIds);
     } catch (error) {
       console.error('Failed to fetch agent tools:', error);
     }
@@ -108,10 +140,19 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
     if (!agentId) return;
 
     try {
-      await api.post(`/tools/agents/${agentId}/associate/${toolId}`, {
-        enabled,
-        priority: 0
-      });
+      // Check if this is a system tool
+      if (toolId.startsWith('system_')) {
+        // Use the system tools endpoint
+        await api.post(`/agents/${agentId}/tools/${toolId}/associate`, {
+          enabled
+        });
+      } else {
+        // Use the regular tools registry endpoint
+        await api.post(`/tools/agents/${agentId}/associate/${toolId}`, {
+          enabled,
+          priority: 0
+        });
+      }
     } catch (error) {
       console.error('Failed to associate tool:', error);
     }
@@ -148,13 +189,28 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
           className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
         >
           <option value="">Select a tool to add...</option>
-          {filteredTools
-            .filter(tool => !selectedTools.includes(tool.id))
-            .map(tool => (
-              <option key={tool.id} value={tool.id}>
-                {tool.name} - {tool.description}
-              </option>
-            ))}
+          
+          {/* Registry Tools */}
+          <optgroup label="Registry Tools">
+            {filteredTools
+              .filter(tool => !isToolSelected(tool, selectedTools) && (!tool.tool_type || tool.tool_type !== 'system'))
+              .map(tool => (
+                <option key={tool.id} value={tool.id}>
+                  {tool.name} - {tool.description}
+                </option>
+              ))}
+          </optgroup>
+          
+          {/* System Tools */}
+          <optgroup label="System Tools">
+            {filteredTools
+              .filter(tool => !isToolSelected(tool, selectedTools) && tool.tool_type === 'system')
+              .map(tool => (
+                <option key={tool.id} value={tool.id}>
+                  🔧 {tool.name} - {tool.description}
+                </option>
+              ))}
+          </optgroup>
         </select>
       </div>
 
@@ -164,16 +220,33 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
           <h4 className="text-sm font-medium text-fuschia-800 mb-2">Selected Tools:</h4>
           <div className="flex flex-wrap gap-1">
             {selectedTools.map(toolId => {
-              const tool = availableTools.find(t => t.id === toolId);
+              // Try to find tool by multiple matching strategies
+              const tool = availableTools.find(t => 
+                t.id === toolId || 
+                t.name === toolId || 
+                t.id === `system_${toolId}` ||
+                t.name === toolId.replace('_tool', '') ||
+                toolId === `${t.name}_tool` ||
+                toolId === `system_${t.name}`
+              );
+              const isSystemTool = tool?.tool_type === 'system';
               return tool ? (
                 <span
                   key={toolId}
-                  className="inline-flex items-center px-2 py-1 text-xs bg-fuschia-100 text-fuschia-700 rounded"
+                  className={`inline-flex items-center px-2 py-1 text-xs rounded ${
+                    isSystemTool 
+                      ? 'bg-blue-100 text-blue-700' 
+                      : 'bg-fuschia-100 text-fuschia-700'
+                  }`}
                 >
-                  {tool.name}
+                  {isSystemTool ? '🔧 ' : ''}{tool.name}
                   <button
                     onClick={() => handleToolToggle(toolId)}
-                    className="ml-1 text-fuschia-500 hover:text-fuschia-700"
+                    className={`ml-1 hover:opacity-75 ${
+                      isSystemTool 
+                        ? 'text-blue-500' 
+                        : 'text-fuschia-500'
+                    }`}
                   >
                     <X className="w-3 h-3" />
                   </button>

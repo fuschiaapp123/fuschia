@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Node } from '@xyflow/react';
-import { AgentData, AgentTool } from './AgentDesigner';
+import { AgentData } from './AgentDesigner';
 import { agentService } from '@/services/agentService';
 import { ToolsSelector } from './ToolsSelector';
 import { Plus, X, Save, AlertCircle } from 'lucide-react';
@@ -30,25 +30,33 @@ export const AgentPropertyForm: React.FC<AgentPropertyFormProps> = ({
   });
 
   const [newSkill, setNewSkill] = useState('');
-  const [newTool, setNewTool] = useState('');
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   useEffect(() => {
     if (agent?.data) {
+      const tools = Array.isArray(agent.data.tools) ? agent.data.tools : [];
+      
       setFormData({
-        name: agent.data.name || '',
-        role: agent.data.role || 'executor',
-        skills: agent.data.skills || [],
-        tools: agent.data.tools || [],
-        description: agent.data.description || '',
-        status: agent.data.status || 'offline',
-        level: agent.data.level || 2,
-        department: agent.data.department || '',
-        maxConcurrentTasks: agent.data.maxConcurrentTasks || 1,
-        strategy: agent.data.strategy || 'hybrid',
+        name: agent.data?.name || '',
+        role: agent.data?.role || 'executor',
+        skills: Array.isArray(agent.data?.skills) ? agent.data.skills : [],
+        tools: [], // No longer using legacy tools array
+        description: agent.data?.description || '',
+        status: agent.data?.status || 'offline',
+        level: agent.data?.level || 2,
+        department: agent.data?.department || '',
+        maxConcurrentTasks: agent.data?.maxConcurrentTasks || 1,
+        strategy: agent.data?.strategy || 'hybrid',
       });
+      
+      // Initialize ToolsSelector with tool names from agent data
+      // Extract tool names from tool objects or use strings directly
+      const toolIds = tools.map((tool: any) => 
+        typeof tool === 'string' ? tool : tool.name || tool.id
+      ).filter(Boolean);
+      setSelectedToolIds(toolIds);
     }
   }, [agent]);
 
@@ -56,43 +64,26 @@ export const AgentPropertyForm: React.FC<AgentPropertyFormProps> = ({
     if (e) e.preventDefault();
     if (!agent) return;
 
+    // Use only selected tools from ToolsSelector - no duplicates
+    const uniqueToolNames = [...new Set(selectedToolIds)]; // Remove any duplicates
+    
     // Create AgentTool objects for backend compatibility
-    const agentTools = formData.tools.map(toolName => {
-      // Check if this is a skill-generated tool
-      const skillBasedTool = formData.skills.find(skill => {
-        const correspondingTool = mapSkillToAgentTool(skill);
-        return correspondingTool.name === toolName;
-      });
-
-      if (skillBasedTool) {
-        // Use the full tool definition for skill-based tools
-        const toolDefinition = mapSkillToAgentTool(skillBasedTool);
-        return {
-          name: toolDefinition.name,
-          description: toolDefinition.description,
-          parameters: {},
-          required_permissions: toolDefinition.required_permissions,
-          tool_type: toolDefinition.tool_type,
-          configuration: toolDefinition.configuration
-        };
-      } else {
-        // Create a basic tool definition for manually added tools
-        return {
-          name: toolName,
-          description: `Manual tool: ${toolName}`,
-          parameters: {},
-          required_permissions: [],
-          tool_type: 'manual',
-          configuration: { manually_added: true }
-        };
-      }
+    const agentTools = uniqueToolNames.map(toolName => {
+      return {
+        name: toolName,
+        description: `Tool: ${toolName}`,
+        parameters: {},
+        required_permissions: [],
+        tool_type: 'registry',
+        configuration: { selected_from_ui: true }
+      };
     });
 
     // Enhanced form data with structured agent tools
     const enhancedFormData = {
       ...formData,
+      tools: uniqueToolNames, // Include only selected tools (no duplicates)
       agentTools: agentTools, // Add structured tools for backend
-      // Keep the original tools array for UI compatibility
     };
 
     // Validate the form data
@@ -131,164 +122,18 @@ export const AgentPropertyForm: React.FC<AgentPropertyFormProps> = ({
     if (newSkill.trim() && !formData.skills.includes(newSkill.trim())) {
       const skillName = newSkill.trim();
       
-      // Map skill to agent tool automatically
-      const agentTool = mapSkillToAgentTool(skillName);
-      
       setFormData(prev => ({
         ...prev,
         skills: [...prev.skills, skillName],
-        tools: [...prev.tools.filter(tool => !tool.startsWith(`${skillName}_tool`)), agentTool.name],
       }));
       setNewSkill('');
     }
   };
 
-  // Function to map skills to agent tools
-  const mapSkillToAgentTool = (skillName: string): AgentTool => {
-    const normalizedSkill = skillName.toLowerCase().trim();
-    
-    // Predefined skill-to-tool mappings
-    const skillMappings: Record<string, AgentTool> = {
-      'data analysis': {
-        name: 'data_analysis_tool',
-        description: 'Tool for performing data analysis tasks including statistical analysis, data visualization, and insights generation',
-        parameters: {},
-        required_permissions: ['data_read', 'analytics_execute'],
-        tool_type: 'database',
-        configuration: {
-          supported_formats: ['csv', 'json', 'sql'],
-          capabilities: ['statistical_analysis', 'data_visualization', 'trend_analysis']
-        }
-      },
-      'email processing': {
-        name: 'email_processing_tool',
-        description: 'Tool for sending, receiving, and processing email communications',
-        parameters: {},
-        required_permissions: ['email_send', 'email_read'],
-        tool_type: 'api',
-        configuration: {
-          providers: ['smtp', 'outlook', 'gmail'],
-          capabilities: ['send_email', 'parse_email', 'email_filtering']
-        }
-      },
-      'database operations': {
-        name: 'database_operations_tool',
-        description: 'Tool for performing database queries, updates, and data management operations',
-        parameters: {},
-        required_permissions: ['database_read', 'database_write'],
-        tool_type: 'database',
-        configuration: {
-          supported_databases: ['postgresql', 'mysql', 'mongodb'],
-          capabilities: ['query', 'insert', 'update', 'delete', 'schema_management']
-        }
-      },
-      'api integration': {
-        name: 'api_integration_tool',
-        description: 'Tool for integrating with external APIs and web services',
-        parameters: {},
-        required_permissions: ['api_access'],
-        tool_type: 'api',
-        configuration: {
-          supported_protocols: ['rest', 'graphql', 'soap'],
-          capabilities: ['get_request', 'post_request', 'authentication', 'response_parsing']
-        }
-      },
-      'file management': {
-        name: 'file_management_tool',
-        description: 'Tool for file operations including reading, writing, and processing files',
-        parameters: {},
-        required_permissions: ['file_read', 'file_write'],
-        tool_type: 'file',
-        configuration: {
-          supported_formats: ['txt', 'csv', 'json', 'xml', 'pdf'],
-          capabilities: ['read_file', 'write_file', 'file_conversion', 'file_validation']
-        }
-      },
-      'notification': {
-        name: 'notification_tool',
-        description: 'Tool for sending notifications through various channels',
-        parameters: {},
-        required_permissions: ['notification_send'],
-        tool_type: 'api',
-        configuration: {
-          channels: ['email', 'slack', 'teams', 'webhook'],
-          capabilities: ['send_notification', 'notification_templates', 'delivery_tracking']
-        }
-      },
-      'web scraping': {
-        name: 'web_scraping_tool',
-        description: 'Tool for extracting data from websites and web pages',
-        parameters: {},
-        required_permissions: ['web_access'],
-        tool_type: 'api',
-        configuration: {
-          capabilities: ['html_parsing', 'data_extraction', 'pagination_handling', 'rate_limiting']
-        }
-      },
-      'document processing': {
-        name: 'document_processing_tool',
-        description: 'Tool for processing and analyzing documents',
-        parameters: {},
-        required_permissions: ['file_read', 'document_process'],
-        tool_type: 'file',
-        configuration: {
-          supported_formats: ['pdf', 'docx', 'txt', 'html'],
-          capabilities: ['text_extraction', 'document_parsing', 'content_analysis']
-        }
-      }
-    };
-    
-    // Check for exact matches first
-    if (skillMappings[normalizedSkill]) {
-      return skillMappings[normalizedSkill];
-    }
-    
-    // Check for partial matches
-    for (const [key, mapping] of Object.entries(skillMappings)) {
-      if (normalizedSkill.includes(key) || key.includes(normalizedSkill)) {
-        return mapping;
-      }
-    }
-    
-    // Default mapping for unrecognized skills
-    return {
-      name: `${normalizedSkill.replace(/\s+/g, '_')}_tool`,
-      description: `Custom tool for ${skillName} related tasks`,
-      parameters: {},
-      required_permissions: [],
-      tool_type: 'generic',
-      configuration: {
-        skill_based: true,
-        custom_skill: skillName
-      }
-    };
-  };
-
   const removeSkill = (skillToRemove: string) => {
-    // Find the corresponding tool for this skill
-    const correspondingTool = mapSkillToAgentTool(skillToRemove);
-    
     setFormData(prev => ({
       ...prev,
       skills: prev.skills.filter(skill => skill !== skillToRemove),
-      tools: prev.tools.filter(tool => tool !== correspondingTool.name),
-    }));
-  };
-
-  const addTool = () => {
-    if (newTool.trim() && !formData.tools.includes(newTool.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        tools: [...prev.tools, newTool.trim()],
-      }));
-      setNewTool('');
-    }
-  };
-
-  const removeTool = (toolToRemove: string) => {
-    setFormData(prev => ({
-      ...prev,
-      tools: prev.tools.filter(tool => tool !== toolToRemove),
     }));
   };
 
@@ -454,7 +299,7 @@ export const AgentPropertyForm: React.FC<AgentPropertyFormProps> = ({
             type="text"
             value={newSkill}
             onChange={(e) => setNewSkill(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
+            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
             className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500 focus:border-transparent"
             placeholder="Add a skill (e.g., Data Analysis, Email Processing)"
           />
@@ -494,49 +339,6 @@ export const AgentPropertyForm: React.FC<AgentPropertyFormProps> = ({
           onToolsChange={setSelectedToolIds}
         />
 
-        {/* Legacy Tools from Skills (if any) */}
-        {formData.tools.length > 0 && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">Legacy Tools from Skills</h4>
-            <div className="flex flex-wrap gap-2">
-              {formData.tools.map((tool, index) => {
-                // Check if this tool was auto-generated from a skill
-                const isAutoGenerated = formData.skills.some(skill => {
-                  const correspondingTool = mapSkillToAgentTool(skill);
-                  return correspondingTool.name === tool;
-                });
-
-                return (
-                  <span
-                    key={index}
-                    className={`inline-flex items-center px-3 py-1 text-sm rounded-full ${
-                      isAutoGenerated 
-                        ? 'bg-blue-100 text-blue-800 border border-blue-200' 
-                        : 'bg-green-100 text-green-800'
-                    }`}
-                    title={isAutoGenerated ? 'Auto-generated from skill' : 'Manually added tool'}
-                  >
-                    {isAutoGenerated && <span className="w-2 h-2 bg-blue-400 rounded-full mr-2"></span>}
-                    {tool}
-                    <button
-                      type="button"
-                      onClick={() => removeTool(tool)}
-                      className={`ml-2 ${
-                        isAutoGenerated 
-                          ? 'text-blue-600 hover:text-blue-800' 
-                          : 'text-green-600 hover:text-green-800'
-                      }`}
-                      disabled={isAutoGenerated}
-                      title={isAutoGenerated ? 'Remove the corresponding skill to remove this tool' : 'Remove tool'}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Form Actions */}

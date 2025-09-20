@@ -51,7 +51,9 @@ export const MonitoringModule: React.FC = () => {
     if (!user?.id) return;
 
     console.log('MonitoringModule: Setting up WebSocket connection for user:', user.id);
+    console.log('MonitoringModule: User object:', user);
     console.log('MonitoringModule: Current WebSocket info:', websocketService.getConnectionInfo());
+    console.log('MonitoringModule: Is WebSocket already connected?', websocketService.isConnected());
 
     // If not connected, wait a bit and try again (handles race conditions)
     const connectWithRetry = () => {

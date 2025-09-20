@@ -303,10 +303,22 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
   }, []);
 
   const addNewNode = useCallback(() => {
+    // Calculate position based on existing nodes to avoid overlap
+    const existingPositions = nodes.map(node => node.position);
+    let newX = 100;
+    let newY = 100;
+    
+    // Find a good position that doesn't overlap with existing nodes
+    if (existingPositions.length > 0) {
+      const maxY = Math.max(...existingPositions.map(pos => pos.y));
+      newY = maxY + 150; // Place below the lowest node
+      newX = 100 + (nodes.length % 3) * 250; // Stagger horizontally
+    }
+    
     const newNode: Node = {
-      id: `${nodes.length + 1}`,
+      id: `node-${Date.now()}`, // Use timestamp for unique ID
       type: 'workflowStep',
-      position: { x: Math.random() * 400, y: Math.random() * 400 },
+      position: { x: newX, y: newY },
       data: {
         label: 'New step',
         type: 'action',
@@ -316,7 +328,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
       },
     };
     setNodes((nds) => [...nds, newNode]);
-  }, [nodes.length, setNodes]);
+  }, [nodes, setNodes]);
 
   const runWorkflow = useCallback(async () => {
     if (nodes.length === 0) {

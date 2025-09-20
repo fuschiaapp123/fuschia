@@ -9,6 +9,7 @@ import { useLLMStore } from '@/store/llmStore';
 import ChatAPI from './ChatAPI';
 import { parseYAMLWorkflow, convertToReactFlowData, convertToAgentFlowData, isValidYAML } from '@/utils/yamlParser';
 import { websocketService, ExecutionUpdate } from '@/services/websocketService';
+import { canvasUpdateService, CanvasUpdateData } from '@/services/canvasUpdateService';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -50,6 +51,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       console.log('MainLayout: Current WebSocket info:', websocketService.getConnectionInfo());
       
       // Connect to WebSocket for real-time updates
+      console.log('🔌 MainLayout: Attempting WebSocket connection for user ID:', currentUser.id);
+      console.log('🔌 MainLayout: User object:', currentUser);
+      console.log('🔌 MainLayout: Is WebSocket already connected?', websocketService.isConnected());
+      
       websocketService.connect(currentUser.id, {
         // Note: Task results are now sent to the Monitoring Thoughts & Actions console
         // instead of the chat panel for better workflow visibility
@@ -57,7 +62,61 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         onExecutionUpdate: (update: ExecutionUpdate) => {
           console.log('📨 MainLayout: Received execution update:', update);
           console.log('📨 MainLayout: Message content:', update.data.message);
+          console.log('📨 MainLayout: Update data type:', (update.data as any).type);
           console.log('📨 MainLayout: Current messages count:', messages.length);
+          
+          // Check for canvas updates first
+          if ((update.data as any).type === 'canvas_update' || (update.data as any).type === 'potential_canvas_update') {
+            console.log('🎨 MainLayout: Processing canvas update');
+            
+            const canvasUpdateData: CanvasUpdateData = {
+              type: (update.data as any).type,
+              canvas_type: (update.data as any).canvas_type,
+              yaml_content: (update.data as any).yaml_content,
+              content: (update.data as any).content,
+              message: update.data.message,
+              task_id: (update.data as any).task_id,
+              agent_name: (update.data as any).agent_name
+            };
+            
+            const result = canvasUpdateService.processCanvasUpdate(canvasUpdateData);
+            console.log('🎨 MainLayout: Canvas update result:', result);
+            
+            // Show notification about canvas update
+            if (result.success) {
+              // Create success message
+              const canvasMessage: Message = {
+                id: `canvas-${update.execution_id}-${Date.now()}`,
+                content: `🎨 **Canvas Updated Successfully**\n\n${result.message}\n- Nodes: ${result.nodes_updated}\n- Edges: ${result.edges_updated}\n- Canvas Type: ${result.canvas_type}`,
+                isUser: false,
+                sender: 'workflow',
+                timestamp: new Date(update.timestamp),
+                status: 'complete',
+                agent_id: 'canvas',
+                agent_label: 'Canvas Manager'
+              };
+              
+              setMessages(prev => {
+                const isDuplicate = prev.some(msg => 
+                  msg.content === canvasMessage.content && 
+                  Math.abs(new Date(msg.timestamp).getTime() - new Date(canvasMessage.timestamp).getTime()) < 1000
+                );
+                
+                if (isDuplicate) {
+                  console.log('📨 MainLayout: Duplicate canvas message detected, skipping');
+                  return prev;
+                }
+                
+                return [...prev, canvasMessage];
+              });
+              
+              // Don't process as regular message, return early
+              return;
+            } else {
+              // Show error message but continue with regular message processing
+              console.warn('🎨 MainLayout: Canvas update failed:', result.message);
+            }
+          }
           
           // Create unique ID using execution_id + timestamp + random component
           const uniqueId = `exec-${update.execution_id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
@@ -175,7 +234,43 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     };
   }, [currentUser?.id]);
 
+  const [pendingHumanInTheLoopRequests, setPendingHumanInTheLoopRequests] = useState<any[]>([]);
+
+  // Check for pending Human-in-the-Loop requests (same logic as ChatPanel)
+  useEffect(() => {
+    const checkPendingRequests = async () => {
+      if (currentUser?.id) {
+        try {
+          const response = await fetch(`/api/v1/chat/pending-requests`);
+          const data = await response.json();
+          setPendingHumanInTheLoopRequests(data.pending_requests || []);
+        } catch (error) {
+          console.error('Failed to fetch pending requests:', error);
+        }
+      }
+    };
+
+    // Check for pending requests every 2 seconds
+    const interval = setInterval(checkPendingRequests, 2000);
+    
+    // Initial check
+    checkPendingRequests();
+    
+    return () => clearInterval(interval);
+  }, [currentUser?.id]);
+
   const handleSendMessage = async (userMessage: Message) => {
+    // Check if this is a human-in-the-loop response that should NOT trigger ChatAPI
+    if (userMessage.metadata?.human_loop_response || 
+        userMessage.metadata?.websocket_only ||
+        pendingHumanInTheLoopRequests.length > 0) {
+      console.log('🤖 MainLayout: Skipping ChatAPI for human-in-the-loop response');
+      
+      // Just add the user message to display, don't call ChatAPI
+      setMessages(prev => [...prev, userMessage]);
+      return;
+    }
+
     const aiMessage: Message = {
       id: Math.random().toString(),
       content: '',
@@ -193,6 +288,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       setMessages(prev => [...prev, aiMessage]);
 
       const chatContext = `${currentModule}_${activeTab}`;
+      
       const response = await ChatAPI(
         chatContext, 
         userMessage.content, 

@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { cn } from '@/utils/cn';
-import { Play, Copy, Download, Clock, Users, CheckCircle } from 'lucide-react';
+import { Play, Copy, Download, Clock, Users, CheckCircle, Loader, Trash2 } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { templateService } from '@/services/templateService';
+import { templatesApiService } from '@/services/templatesApiService';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface WorkflowTemplate {
   id: string;
@@ -17,116 +19,7 @@ interface WorkflowTemplate {
   preview: string[];
 }
 
-const workflowTemplates: WorkflowTemplate[] = [
-  {
-    id: '1',
-    name: 'Employee Onboarding',
-    description: 'Automate the complete employee onboarding process from form submission to IT setup',
-    category: 'HR',
-    estimatedTime: '2-3 hours',
-    complexity: 'Medium',
-    usageCount: 234,
-    steps: 8,
-    tags: ['HR', 'Onboarding', 'IT Setup'],
-    preview: [
-      'New hire form submitted',
-      'Create user accounts',
-      'Send welcome email',
-      'Assign equipment',
-      'Schedule orientation'
-    ]
-  },
-  {
-    id: '2',
-    name: 'Incident Management',
-    description: 'Automated IT incident triage and resolution workflow with escalation rules',
-    category: 'IT Operations',
-    estimatedTime: '30 minutes',
-    complexity: 'Advanced',
-    usageCount: 456,
-    steps: 12,
-    tags: ['IT', 'Support', 'Escalation'],
-    preview: [
-      'Incident reported',
-      'Auto-classify severity',
-      'Assign to team',
-      'Send notifications',
-      'Track resolution'
-    ]
-  },
-  {
-    id: '3',
-    name: 'Invoice Processing',
-    description: 'Streamline invoice approval and payment processing workflow',
-    category: 'Finance',
-    estimatedTime: '1 hour',
-    complexity: 'Simple',
-    usageCount: 189,
-    steps: 6,
-    tags: ['Finance', 'Approval', 'Payment'],
-    preview: [
-      'Invoice received',
-      'Extract data',
-      'Route for approval',
-      'Process payment',
-      'Update records'
-    ]
-  },
-  {
-    id: '4',
-    name: 'Lead Qualification',
-    description: 'Automatically qualify and route sales leads based on scoring criteria',
-    category: 'Sales',
-    estimatedTime: '45 minutes',
-    complexity: 'Medium',
-    usageCount: 312,
-    steps: 7,
-    tags: ['Sales', 'CRM', 'Scoring'],
-    preview: [
-      'Lead captured',
-      'Score lead quality',
-      'Route to sales rep',
-      'Send follow-up',
-      'Track progress'
-    ]
-  },
-  {
-    id: '5',
-    name: 'Content Approval',
-    description: 'Multi-stage content review and approval workflow for marketing materials',
-    category: 'Marketing',
-    estimatedTime: '1-2 hours',
-    complexity: 'Simple',
-    usageCount: 98,
-    steps: 5,
-    tags: ['Marketing', 'Approval', 'Content'],
-    preview: [
-      'Content submitted',
-      'Review assignment',
-      'Collect feedback',
-      'Make revisions',
-      'Final approval'
-    ]
-  },
-  {
-    id: '6',
-    name: 'Customer Escalation',
-    description: 'Automated customer support escalation based on priority and SLA rules',
-    category: 'Customer Support',
-    estimatedTime: '20 minutes',
-    complexity: 'Advanced',
-    usageCount: 167,
-    steps: 9,
-    tags: ['Support', 'SLA', 'Escalation'],
-    preview: [
-      'Support ticket created',
-      'Check SLA status',
-      'Auto-escalate if needed',
-      'Notify managers',
-      'Track resolution time'
-    ]
-  }
-];
+// Workflow templates are now fetched from the database
 
 const getComplexityColor = (complexity: string) => {
   switch (complexity) {
@@ -145,9 +38,11 @@ interface WorkflowTemplateCardProps {
   template: WorkflowTemplate;
   onUse: (template: WorkflowTemplate) => void;
   onClone: (template: WorkflowTemplate) => void;
+  onDelete: (template: WorkflowTemplate) => void;
+  isCloning?: boolean;
 }
 
-const WorkflowTemplateCard: React.FC<WorkflowTemplateCardProps> = ({ template, onUse, onClone }) => {
+const WorkflowTemplateCard: React.FC<WorkflowTemplateCardProps> = ({ template, onUse, onClone, onDelete, isCloning = false }) => {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-4">
@@ -228,12 +123,25 @@ const WorkflowTemplateCard: React.FC<WorkflowTemplateCardProps> = ({ template, o
         </button>
         <button
           onClick={() => onClone(template)}
-          className="flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+          disabled={isCloning}
+          className="flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title={isCloning ? "Cloning template..." : "Clone template"}
         >
-          <Copy className="w-4 h-4" />
+          {isCloning ? (
+            <Loader className="w-4 h-4 animate-spin" />
+          ) : (
+            <Copy className="w-4 h-4" />
+          )}
         </button>
         <button className="flex items-center justify-center px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
           <Download className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => onDelete(template)}
+          className="flex items-center justify-center px-3 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors"
+          title="Delete template"
+        >
+          <Trash2 className="w-4 h-4" />
         </button>
       </div>
     </div>
@@ -242,6 +150,74 @@ const WorkflowTemplateCard: React.FC<WorkflowTemplateCardProps> = ({ template, o
 
 export const WorkflowTemplates: React.FC = () => {
   const { setActiveTab, setWorkflowData } = useAppStore();
+  
+  // State for templates and loading
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
+  const [apiTemplates, setApiTemplates] = useState<any[]>([]); // Store original API data for cloning
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
+  const [selectedComplexity, setSelectedComplexity] = useState<string>('All Complexity');
+  
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    template: WorkflowTemplate | null;
+    isLoading: boolean;
+  }>({ isOpen: false, template: null, isLoading: false });
+  
+  // Clone loading state
+  const [cloningTemplateId, setCloningTemplateId] = useState<string | null>(null);
+
+  // Fetch templates from API
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await templatesApiService.fetchWorkflowTemplates(100); // Fetch up to 100 templates
+        
+        // Store original API data for cloning
+        setApiTemplates(response.workflows);
+        
+        // Convert API responses to frontend format
+        const convertedTemplates = response.workflows.map(apiTemplate =>
+          templatesApiService.convertApiToWorkflowTemplate(apiTemplate)
+        );
+        
+        setWorkflowTemplates(convertedTemplates);
+        setCategories(['All Categories', ...response.categories]);
+        
+      } catch (err) {
+        console.error('Failed to fetch workflow templates:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load workflow templates. Please try again later.';
+        setError(errorMessage);
+        
+        // Fallback to built-in templates from templateService if API fails
+        try {
+          const builtInTemplates = templateService.getBuiltInTemplates();
+          const convertedBuiltIn = builtInTemplates.map(template => ({
+            ...template,
+            estimatedTime: template.estimatedTime,
+            usageCount: template.usageCount,
+            steps: template.steps,
+            preview: template.preview,
+          }));
+          setWorkflowTemplates(convertedBuiltIn);
+          setCategories(['All Categories', ...templateService.getAvailableCategories('workflow')]);
+          console.warn('Using fallback built-in templates');
+        } catch (fallbackErr) {
+          console.error('Fallback also failed:', fallbackErr);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTemplates();
+  }, []);
 
   const handleUseTemplate = (template: WorkflowTemplate) => {
     // Find the full template data from the service
@@ -260,23 +236,123 @@ export const WorkflowTemplates: React.FC = () => {
     }
   };
 
-  const handleCloneTemplate = (template: WorkflowTemplate) => {
-    const fullTemplate = templateService.getAllTemplates().find(t => t.name === template.name);
-    if (fullTemplate) {
-      // Create a copy with a new ID and name
-      const clonedTemplate = templateService.createTemplateFromWorkflow(
-        `${template.name} (Copy)`,
-        `Copy of ${template.description}`,
-        template.category,
-        fullTemplate.nodes,
-        fullTemplate.edges
-      );
+  const handleCloneTemplate = async (template: WorkflowTemplate) => {
+    try {
+      // Set loading state
+      setCloningTemplateId(template.id);
       
-      // Save the cloned template
-      templateService.saveCustomTemplate(clonedTemplate);
+      // Find the original API template data
+      const originalApiTemplate = apiTemplates.find(api => api.id === template.id);
+      if (!originalApiTemplate) {
+        alert('Original template data not found. Please refresh and try again.');
+        return;
+      }
+
+      // Clone the template using the API
+      const clonedTemplate = await templatesApiService.cloneWorkflowTemplate(originalApiTemplate);
+      
+      // Convert the new template to frontend format and add to the list
+      const convertedClone = templatesApiService.convertApiToWorkflowTemplate(clonedTemplate);
+      setWorkflowTemplates(prev => [convertedClone, ...prev]);
+      setApiTemplates(prev => [clonedTemplate, ...prev]);
+      
       alert('Template cloned successfully!');
+    } catch (error) {
+      console.error('Failed to clone template:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to clone template';
+      alert(errorMessage);
+    } finally {
+      // Clear loading state
+      setCloningTemplateId(null);
     }
   };
+
+  const handleDeleteTemplate = (template: WorkflowTemplate) => {
+    setDeleteConfirm({
+      isOpen: true,
+      template: template,
+      isLoading: false
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm.template) return;
+
+    setDeleteConfirm(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      const result = await templatesApiService.deleteWorkflowTemplate(deleteConfirm.template.id);
+      
+      // Remove template from local state
+      setWorkflowTemplates(prev => prev.filter(t => t.id !== deleteConfirm.template!.id));
+      
+      // Close dialog
+      setDeleteConfirm({ isOpen: false, template: null, isLoading: false });
+      
+      // Show success message
+      alert(result.message || 'Template deleted successfully!');
+      
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete template';
+      alert(errorMessage);
+      
+      // Reset loading state but keep dialog open
+      setDeleteConfirm(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirm({ isOpen: false, template: null, isLoading: false });
+  };
+
+  // Filter templates based on selected category and complexity
+  const filteredTemplates = workflowTemplates.filter(template => {
+    const categoryMatch = selectedCategory === 'All Categories' || template.category === selectedCategory;
+    const complexityMatch = selectedComplexity === 'All Complexity' || template.complexity === selectedComplexity;
+    return categoryMatch && complexityMatch;
+  });
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Workflow Templates</h2>
+          <p className="text-gray-600">
+            Get started quickly with pre-built workflow templates for common business processes
+          </p>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <Loader className="w-8 h-8 animate-spin text-fuschia-500" />
+          <span className="ml-2 text-gray-600">Loading templates...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && workflowTemplates.length === 0) {
+    return (
+      <div className="p-6">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Workflow Templates</h2>
+          <p className="text-gray-600">
+            Get started quickly with pre-built workflow templates for common business processes
+          </p>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <p className="text-red-600 mb-2">{error}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -285,45 +361,84 @@ export const WorkflowTemplates: React.FC = () => {
         <p className="text-gray-600">
           Get started quickly with pre-built workflow templates for common business processes
         </p>
+        {error && (
+          <div className="mt-2 p-2 bg-yellow-100 border border-yellow-400 rounded text-yellow-800 text-sm">
+            ⚠️ {error} (Showing available templates)
+          </div>
+        )}
       </div>
       
       <div className="mb-6">
         <div className="flex items-center space-x-4">
-          <select className="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option>All Categories</option>
-            <option>HR</option>
-            <option>IT Operations</option>
-            <option>Finance</option>
-            <option>Sales</option>
-            <option>Marketing</option>
-            <option>Customer Support</option>
+          <select 
+            className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          >
+            {categories.map(category => (
+              <option key={category} value={category}>{category}</option>
+            ))}
           </select>
           
-          <select className="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option>All Complexity</option>
-            <option>Simple</option>
-            <option>Medium</option>
-            <option>Advanced</option>
+          <select 
+            className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+            value={selectedComplexity}
+            onChange={(e) => setSelectedComplexity(e.target.value)}
+          >
+            <option value="All Complexity">All Complexity</option>
+            <option value="Simple">Simple</option>
+            <option value="Medium">Medium</option>
+            <option value="Advanced">Advanced</option>
           </select>
           
           <div className="flex-1" />
           
           <span className="text-sm text-gray-500">
-            {workflowTemplates.length} templates available
+            {filteredTemplates.length} of {workflowTemplates.length} templates available
           </span>
         </div>
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {workflowTemplates.map((template) => (
+        {filteredTemplates.map((template) => (
           <WorkflowTemplateCard
             key={template.id}
             template={template}
             onUse={handleUseTemplate}
             onClone={handleCloneTemplate}
+            onDelete={handleDeleteTemplate}
+            isCloning={cloningTemplateId === template.id}
           />
         ))}
       </div>
+      
+      {filteredTemplates.length === 0 && !loading && (
+        <div className="text-center py-12">
+          <p className="text-gray-500">No templates found matching your criteria.</p>
+          <button
+            onClick={() => {
+              setSelectedCategory('All Categories');
+              setSelectedComplexity('All Complexity');
+            }}
+            className="mt-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+          >
+            Clear Filters
+          </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        title="Delete Template"
+        message={`Are you sure you want to delete "${deleteConfirm.template?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDestructive={true}
+        isLoading={deleteConfirm.isLoading}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   );
 };

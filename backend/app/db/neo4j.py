@@ -28,7 +28,8 @@ class Neo4jDriver:
         try:
             logger.info("Attempting to connect to Neo4j", uri=settings.neo4j_uri, username=settings.neo4j_username)
             self._last_connection_attempt = current_time
-            
+            logger.info("Password used for Neo4j connection", password=settings.NEO4J_PASSWORD)
+
             self._driver = AsyncGraphDatabase.driver(
                 settings.neo4j_uri,
                 auth=(settings.neo4j_username, settings.NEO4J_PASSWORD),

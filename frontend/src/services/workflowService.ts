@@ -10,6 +10,7 @@ export interface WorkflowSaveRequest {
   complexity?: 'simple' | 'medium' | 'advanced';
   estimatedTime?: string;
   tags?: string[];
+  use_memory_enhancement?: boolean;
 }
 
 export interface WorkflowSaveResponse {
@@ -33,6 +34,10 @@ class WorkflowService {
       // Get auth token
       const token = useAuthStore.getState().token;
       
+      // DEBUG: Log what we're about to send
+      console.log('🔍 DEBUG: Preparing to save workflow:');
+      console.log('   - use_memory_enhancement from workflowData:', workflowData.use_memory_enhancement);
+      
       // Prepare the request payload
       const payload = {
         name: workflowData.name,
@@ -43,6 +48,7 @@ class WorkflowService {
         estimated_time: workflowData.estimatedTime || 'Variable',
         tags: workflowData.tags || [workflowData.category, 'Custom'],
         preview_steps: this.extractPreviewSteps(workflowData.nodes),
+        use_memory_enhancement: workflowData.use_memory_enhancement || false,
         template_data: {
           nodes: workflowData.nodes.map(node => ({
             ...node,
@@ -62,6 +68,10 @@ class WorkflowService {
           edgeCount: workflowData.edges.length,
         }
       };
+
+      // DEBUG: Log the complete payload
+      console.log('🔍 DEBUG: Complete payload to send:', JSON.stringify(payload, null, 2));
+      console.log('🔍 DEBUG: payload.use_memory_enhancement:', payload.use_memory_enhancement);
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',

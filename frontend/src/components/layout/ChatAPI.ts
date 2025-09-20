@@ -1,4 +1,5 @@
 import { ChatRequest, ChatResponse } from '@/types/llm';
+import { useAuthStore } from '@/store/authStore';
 
 // Enhanced chat response interface
 interface EnhancedChatResponse extends ChatResponse {
@@ -28,6 +29,25 @@ const baseUrl = 'http://localhost:8000';
 
 function parseJSON(response: Response) {
     return response.json();
+}
+
+// Helper function to create authenticated headers
+function createAuthHeaders(): Headers {
+    const headers = new Headers();
+    headers.append("Content-Type", "application/json");
+    
+    // Get token from auth store
+    const token = useAuthStore.getState().token;
+    console.log('🔑 Auth token available:', !!token, token ? `${token.substring(0, 20)}...` : 'none');
+    
+    if (token) {
+        headers.append("Authorization", `Bearer ${token}`);
+        console.log('✅ Added Authorization header to request');
+    } else {
+        console.warn('⚠️ No auth token available - request will be anonymous');
+    }
+    
+    return headers;
 }
 
 interface ChatAPIOptions {
@@ -103,8 +123,7 @@ const ChatAPI = async (
             current_tab: currentTab
         };
         
-        const myHeaders = new Headers();
-        myHeaders.append("Content-Type", "application/json");
+        const myHeaders = createAuthHeaders();
         
         try {
             const response = await fetch(chatUrl, {

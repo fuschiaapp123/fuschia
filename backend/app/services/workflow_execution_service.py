@@ -89,6 +89,20 @@ class WorkflowExecutionService:
                                     task.dependencies.append(source_task_id)
                                     break
                 
+                # Extract memory enhancement setting from context or inherit from template
+                context = execution_context or {}
+                use_memory_enhancement = (
+                    context.get('use_memory_enhancement', False) or 
+                    context.get('memory_enabled', False) or
+                    template.use_memory_enhancement  # Inherit from template if not specified in context
+                )
+                
+                # DEBUG: Log memory enhancement inheritance
+                print(f"🔍 DEBUG: Memory enhancement inheritance:")
+                print(f"   - Template use_memory_enhancement: {template.use_memory_enhancement}")
+                print(f"   - Context use_memory_enhancement: {context.get('use_memory_enhancement', 'not set')}")
+                print(f"   - Final use_memory_enhancement: {use_memory_enhancement}")
+                
                 # Create workflow execution
                 execution = WorkflowExecution(
                     id=execution_id,
@@ -96,7 +110,8 @@ class WorkflowExecutionService:
                     organization_id=organization_id,
                     status=ExecutionStatus.PENDING,
                     tasks=tasks,
-                    execution_context=execution_context or {},
+                    execution_context=context,
+                    use_memory_enhancement=use_memory_enhancement,
                     initiated_by=initiated_by,
                     started_at=datetime.utcnow(),
                     estimated_completion=datetime.utcnow() + timedelta(hours=2)  # Default estimate
@@ -112,6 +127,7 @@ class WorkflowExecutionService:
                     completed_tasks=[],
                     failed_tasks=[],
                     execution_context=execution.execution_context,
+                    use_memory_enhancement=execution.use_memory_enhancement,
                     human_approvals_pending=[],
                     human_feedback=[],
                     started_at=execution.started_at,
@@ -200,6 +216,7 @@ class WorkflowExecutionService:
                     failed_tasks=db_execution.failed_tasks,
                     tasks=tasks,
                     execution_context=db_execution.execution_context,
+                    use_memory_enhancement=db_execution.use_memory_enhancement,
                     human_approvals_pending=db_execution.human_approvals_pending,
                     human_feedback=db_execution.human_feedback,
                     started_at=db_execution.started_at,

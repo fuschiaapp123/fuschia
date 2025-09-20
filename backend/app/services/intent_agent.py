@@ -36,6 +36,11 @@ try:
         api_key=os.environ.get("OPENAI_API_KEY")
     )
     dspy.configure(lm=_global_llm_instance)
+    # Disable caching globally to avoid stale responses : SR
+    # dspy.configure_cache(
+    #     enable_disk_cache=False,
+    #     enable_memory_cache=False,
+    #     )
     logger.info("DSPy configured globally at module level with litellm drop_params enabled")
 except Exception as e:
     logger.error("Failed to configure DSPy at module level", error=str(e))
@@ -59,7 +64,7 @@ class IntentDetectionOutput(BaseModel):
 
 
 class IntentClassification(Signature):
-    """Classify user intent based on message and context"""
+    """Classify user intent based on message and context. Determine best matching workflow and agent templates"""
     
     # Input fields
     user_message: str = InputField(desc="The user's message to classify")
@@ -71,12 +76,12 @@ class IntentClassification(Signature):
     
     # Output fields
     detected_intent: str = OutputField(desc="Primary intent category")
-    confidence: float = OutputField(desc="Confidence score (0.0-1.0)")
+    confidence: float = OutputField(desc="Confidence score (0.0-1.0) based on template")
     workflow_type: str = OutputField(desc="Specific workflow category")
     workflow_template_id: str = OutputField(desc="Matching workflow template ID")
-    workflow_template_name: str = OutputField(desc="Matching workflow template name")
+    workflow_template_name: str = OutputField(desc="Best workflow template match that can be used to resolve the user message")
     agent_template_id: str = OutputField(desc="Matching agent template ID")
-    agent_template_name: str = OutputField(desc="Matching agent template name")
+    agent_template_name: str = OutputField(desc="Best agent template match that can resolve the user message")
     reasoning: str = OutputField(desc="Classification reasoning")
     requires_workflow: bool = OutputField(desc="Whether workflow should be triggered")
     suggested_action: str = OutputField(desc="Recommended next action")
@@ -124,7 +129,7 @@ class IntentDetectionAgent:
     """AI Agent for intent detection using DSPy framework"""
     
     def __init__(self, llm_client: Optional[OpenAI] = None):
-        print(">>> Initializing DSPy IntentDetectionAgent")
+        
         self.logger = logger.bind(agent="DSPyIntentDetectionAgent")
         self.llm_client = llm_client
         

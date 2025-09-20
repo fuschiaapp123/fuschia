@@ -1,0 +1,212 @@
+sqlite> .tables
+agent_organizations      tool_execution_logs      workflow_tasks         
+agent_templates          tool_functions           workflow_templates     
+agent_tool_associations  users                  
+templates                workflow_executions    
+sqlite> .schema agent_organizations
+CREATE TABLE agent_organizations (
+	id VARCHAR NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	description VARCHAR(1000) NOT NULL, 
+	agent_template_id VARCHAR, 
+	entry_points JSON NOT NULL, 
+	max_execution_time_minutes INTEGER NOT NULL, 
+	require_human_supervision BOOLEAN NOT NULL, 
+	allow_parallel_execution BOOLEAN NOT NULL, 
+	agents_data JSON NOT NULL, 
+	connections_data JSON NOT NULL, 
+	usage_count INTEGER NOT NULL, 
+	status VARCHAR NOT NULL, 
+	organization_metadata JSON, 
+	created_by VARCHAR, 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(agent_template_id) REFERENCES templates (id), 
+	FOREIGN KEY(created_by) REFERENCES users (id)
+);
+CREATE INDEX ix_agent_organizations_agent_template_id ON agent_organizations (agent_template_id);
+CREATE INDEX ix_agent_organizations_name ON agent_organizations (name);
+CREATE INDEX ix_agent_organizations_id ON agent_organizations (id);
+sqlite> .schema agent_templates
+CREATE TABLE agent_templates (
+	id VARCHAR NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	description VARCHAR(1000) NOT NULL, 
+	category VARCHAR(100) NOT NULL, 
+	complexity VARCHAR NOT NULL, 
+	estimated_time VARCHAR(50) NOT NULL, 
+	tags JSON NOT NULL, 
+	preview_steps JSON NOT NULL, 
+	is_template BOOLEAN NOT NULL, 
+	template_id VARCHAR, 
+	entry_points JSON NOT NULL, 
+	max_execution_time_minutes INTEGER NOT NULL, 
+	require_human_supervision BOOLEAN NOT NULL, 
+	allow_parallel_execution BOOLEAN NOT NULL, 
+	agents_data JSON NOT NULL, 
+	connections_data JSON NOT NULL, 
+	usage_count INTEGER NOT NULL, 
+	status VARCHAR NOT NULL, 
+	template_metadata JSON, 
+	created_by VARCHAR, 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(template_id) REFERENCES agent_templates (id), 
+	FOREIGN KEY(created_by) REFERENCES users (id)
+);
+CREATE INDEX ix_agent_templates_template_id ON agent_templates (template_id);
+CREATE INDEX ix_agent_templates_name ON agent_templates (name);
+CREATE INDEX ix_agent_templates_id ON agent_templates (id);
+CREATE INDEX ix_agent_templates_category ON agent_templates (category);
+sqlite> .schema agent_tool_associations
+CREATE TABLE agent_tool_associations (
+	id VARCHAR NOT NULL, 
+	agent_id VARCHAR NOT NULL, 
+	tool_id VARCHAR NOT NULL, 
+	enabled BOOLEAN NOT NULL, 
+	priority INTEGER NOT NULL, 
+	configuration JSON NOT NULL, 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(tool_id) REFERENCES tool_functions (id) ON DELETE CASCADE
+);
+CREATE INDEX ix_agent_tool_associations_id ON agent_tool_associations (id);
+CREATE INDEX ix_agent_tool_associations_tool_id ON agent_tool_associations (tool_id);
+CREATE INDEX ix_agent_tool_associations_agent_id ON agent_tool_associations (agent_id);
+sqlite> .schema tool_execution_logs
+CREATE TABLE tool_execution_logs (
+	id VARCHAR NOT NULL, 
+	tool_id VARCHAR, 
+	agent_id VARCHAR NOT NULL, 
+	execution_id VARCHAR NOT NULL, 
+	input_parameters JSON NOT NULL, 
+	output_result JSON, 
+	execution_time_ms INTEGER NOT NULL, 
+	success BOOLEAN NOT NULL, 
+	error_message VARCHAR(2000), 
+	timestamp DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(tool_id) REFERENCES tool_functions (id) ON DELETE SET NULL
+);
+CREATE INDEX ix_tool_execution_logs_execution_id ON tool_execution_logs (execution_id);
+CREATE INDEX ix_tool_execution_logs_id ON tool_execution_logs (id);
+CREATE INDEX ix_tool_execution_logs_timestamp ON tool_execution_logs (timestamp);
+CREATE INDEX ix_tool_execution_logs_agent_id ON tool_execution_logs (agent_id);
+CREATE INDEX ix_tool_execution_logs_tool_id ON tool_execution_logs (tool_id);
+sqlite> .schema tool_functions
+CREATE TABLE tool_functions (
+	id VARCHAR NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	description VARCHAR(1000) NOT NULL, 
+	category VARCHAR NOT NULL, 
+	function_code VARCHAR NOT NULL, 
+	parameters JSON NOT NULL, 
+	return_type VARCHAR(100) NOT NULL, 
+	status VARCHAR NOT NULL, 
+	created_by VARCHAR NOT NULL, 
+	version INTEGER NOT NULL, 
+	tags JSON NOT NULL, 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(created_by) REFERENCES users (id)
+);
+CREATE INDEX ix_tool_functions_id ON tool_functions (id);
+CREATE INDEX ix_tool_functions_status ON tool_functions (status);
+CREATE INDEX ix_tool_functions_category ON tool_functions (category);
+CREATE UNIQUE INDEX ix_tool_functions_name ON tool_functions (name);
+sqlite> .schema users
+CREATE TABLE users (
+	id VARCHAR NOT NULL, 
+	email VARCHAR NOT NULL, 
+	full_name VARCHAR NOT NULL, 
+	role VARCHAR NOT NULL, 
+	is_active BOOLEAN NOT NULL, 
+	hashed_password VARCHAR NOT NULL, 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id)
+);
+CREATE INDEX ix_users_id ON users (id);
+CREATE UNIQUE INDEX ix_users_email ON users (email);
+sqlite> .schema workflow_executions
+CREATE TABLE workflow_executions (
+	id VARCHAR NOT NULL, 
+	workflow_template_id VARCHAR NOT NULL, 
+	organization_id VARCHAR, 
+	status VARCHAR NOT NULL, 
+	current_tasks JSON NOT NULL, 
+	completed_tasks JSON NOT NULL, 
+	failed_tasks JSON NOT NULL, 
+	execution_context JSON NOT NULL, 
+	human_approvals_pending JSON NOT NULL, 
+	human_feedback JSON NOT NULL, 
+	started_at DATETIME NOT NULL, 
+	estimated_completion DATETIME, 
+	actual_completion DATETIME, 
+	initiated_by VARCHAR NOT NULL, 
+	agent_actions JSON NOT NULL, 
+	error_log JSON NOT NULL, 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME, use_memory_enhancement BOOLEAN NOT NULL DEFAULT FALSE, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(workflow_template_id) REFERENCES workflow_templates (id), 
+	FOREIGN KEY(organization_id) REFERENCES agent_organizations (id), 
+	FOREIGN KEY(initiated_by) REFERENCES users (id)
+);
+CREATE INDEX ix_workflow_executions_status ON workflow_executions (status);
+CREATE INDEX ix_workflow_executions_id ON workflow_executions (id);
+CREATE INDEX ix_workflow_executions_organization_id ON workflow_executions (organization_id);
+CREATE INDEX ix_workflow_executions_initiated_by ON workflow_executions (initiated_by);
+CREATE INDEX ix_workflow_executions_workflow_template_id ON workflow_executions (workflow_template_id);
+CREATE INDEX ix_workflow_executions_started_at ON workflow_executions (started_at);
+sqlite> .schema workflow_tasks
+CREATE TABLE workflow_tasks (
+	id VARCHAR NOT NULL, 
+	execution_id VARCHAR NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	description VARCHAR(1000), 
+	objective VARCHAR(1000), 
+	completion_criteria VARCHAR(1000), 
+	status VARCHAR NOT NULL, 
+	assigned_agent_id VARCHAR, 
+	started_at DATETIME, 
+	completed_at DATETIME, 
+	dependencies JSON NOT NULL, 
+	context JSON NOT NULL, 
+	results JSON NOT NULL, 
+	human_feedback VARCHAR(2000), 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(execution_id) REFERENCES workflow_executions (id) ON DELETE CASCADE
+);
+CREATE INDEX ix_workflow_tasks_status ON workflow_tasks (status);
+CREATE INDEX ix_workflow_tasks_execution_id ON workflow_tasks (execution_id);
+CREATE INDEX ix_workflow_tasks_id ON workflow_tasks (id);
+sqlite> .schema workflow_templates
+CREATE TABLE workflow_templates (
+	id VARCHAR NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	description VARCHAR(1000) NOT NULL, 
+	category VARCHAR(100) NOT NULL, 
+	complexity VARCHAR NOT NULL, 
+	estimated_time VARCHAR(50) NOT NULL, 
+	tags JSON NOT NULL, 
+	preview_steps JSON NOT NULL, 
+	usage_count INTEGER NOT NULL, 
+	status VARCHAR NOT NULL, 
+	template_data JSON NOT NULL, 
+	template_metadata JSON, 
+	created_by VARCHAR, 
+	created_at DATETIME NOT NULL, 
+	updated_at DATETIME, use_memory_enhancement BOOLEAN NOT NULL DEFAULT FALSE, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(created_by) REFERENCES users (id)
+);
+CREATE INDEX ix_workflow_templates_category ON workflow_templates (category);
+CREATE INDEX ix_workflow_templates_id ON workflow_templates (id);
+CREATE INDEX ix_workflow_templates_name ON workflow_templates (name);

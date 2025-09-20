@@ -88,7 +88,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     
     // Check if this is a response to a Human-in-the-Loop request
     if (pendingHumanInTheLoopRequests.length > 0 || hasRecentHumanInTheLoopRequest()) {
-      console.log('🤖 Detected Human-in-the-Loop response, sending via WebSocket');
+      console.log('🤖 Detected Human-in-the-Loop response, sending via WebSocket ONLY');
       
       try {
         // Send response directly via WebSocket
@@ -97,18 +97,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           content: inputMessage.trim()
         });
         
-        // Also add the user message to the chat panel
+        // Add the user message to the chat panel for display, but mark it as human-in-the-loop
         const userMessage: Message = {
           id: Date.now().toString(),
           content: inputMessage,
           isUser: true,
           sender: 'user',
           timestamp: new Date(),
-          status: 'complete'
+          status: 'complete',
+          metadata: {
+            human_loop_response: true,
+            websocket_only: true
+          }
         };
+        
+        // Pass the message to MainLayout, but the metadata will prevent ChatAPI call
         onSendMessage(userMessage);
         
-        console.log('✅ Human-in-the-Loop response sent via WebSocket');
+        console.log('✅ Human-in-the-Loop response sent via WebSocket only');
         
       } catch (error) {
         console.error('❌ Failed to send Human-in-the-Loop response:', error);
@@ -120,7 +126,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           isUser: true,
           sender: 'user',
           timestamp: new Date(),
-          status: 'complete'
+          status: 'complete',
+          metadata: {
+            human_loop_response: true,
+            websocket_failed: true
+          }
         };
         onSendMessage(userMessage);
       }

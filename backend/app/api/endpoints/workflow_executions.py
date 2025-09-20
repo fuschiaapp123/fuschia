@@ -7,6 +7,18 @@ from app.services.workflow_execution_service import workflow_execution_service
 from app.models.agent_organization import ExecutionStatus, TaskStatus
 from app.auth.auth import get_current_user
 from app.models.user import User
+from openai import OpenAI
+import os
+
+# Initialize orchestrator with LLM client
+try:
+    llm_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+except Exception:
+    llm_client = None
+
+# Import orchestrator
+from app.services.workflow_orchestrator import WorkflowOrchestrator
+orchestrator = WorkflowOrchestrator(llm_client=llm_client)
 
 router = APIRouter()
 
@@ -16,6 +28,7 @@ class ExecutionCreateRequest(BaseModel):
     organization_id: Optional[str] = Field(None, description="ID of the agent organization to use")
     execution_context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Initial execution context")
     priority: int = Field(default=1, ge=1, le=10, description="Execution priority (1=highest, 10=lowest)")
+    use_memory_enhancement: bool = Field(default=True, description="Use Graphiti memory enhancement for agents")
 
 
 class TaskResponse(BaseModel):
@@ -79,12 +92,22 @@ async def execute_workflow(
         # Override template_id from URL
         request.workflow_template_id = template_id
         
-        execution = await workflow_execution_service.create_execution(
+        # Enhanced context with memory settings
+        enhanced_context = {
+            **(request.execution_context or {}),
+            "user_id": current_user.id,
+            "user_role": current_user.role.value,
+            "priority": request.priority,
+            "use_memory_enhancement": request.use_memory_enhancement,
+            "memory_enabled": request.use_memory_enhancement
+        }
+        
+        # Use orchestrator for consistent execution path (includes memory enhancement)
+        execution = await orchestrator.initiate_workflow_execution(
             workflow_template_id=request.workflow_template_id,
+            organization_id=request.organization_id or "default-org",
             initiated_by=current_user.id,
-            organization_id=request.organization_id,
-            execution_context=request.execution_context,
-            priority=request.priority
+            initial_context=enhanced_context
         )
         
         # Convert tasks to response format

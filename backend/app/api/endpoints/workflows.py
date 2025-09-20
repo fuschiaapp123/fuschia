@@ -22,6 +22,7 @@ class WorkflowSaveRequest(BaseModel):
     preview_steps: List[str] = Field(default_factory=list)
     template_data: Dict[str, Any] = Field(default_factory=dict)
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    use_memory_enhancement: bool = Field(default=False, description="Enable memory-enhanced execution")
 
 
 class WorkflowSaveResponse(BaseModel):
@@ -41,6 +42,7 @@ class WorkflowSaveResponse(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
     tags: List[str] = Field(default_factory=list)
     preview_steps: List[str] = Field(default_factory=list)
+    use_memory_enhancement: bool = Field(default=False)
 
 
 class WorkflowListResponse(BaseModel):
@@ -60,6 +62,11 @@ async def save_workflow(
     Otherwise, a new workflow will be created.
     """
     try:
+        # DEBUG: Log the incoming request data
+        print(f"🔍 DEBUG: Received workflow save request:")
+        print(f"   - Name: {workflow_data.name}")
+        print(f"   - use_memory_enhancement: {workflow_data.use_memory_enhancement}")
+        print(f"   - All fields: {workflow_data.dict()}")
         # Map complexity string to enum
         complexity_map = {
             "simple": TemplateComplexity.SIMPLE,
@@ -88,7 +95,8 @@ async def save_workflow(
             tags=workflow_data.tags if workflow_data.tags else [workflow_data.category, "Custom"],
             preview_steps=workflow_data.preview_steps,
             template_data=workflow_data.template_data,
-            metadata=workflow_data.metadata or {}
+            metadata=workflow_data.metadata or {},
+            use_memory_enhancement=workflow_data.use_memory_enhancement
         )
         
         # Save to database (upsert: update if exists, create if new)
@@ -109,7 +117,8 @@ async def save_workflow(
             usage_count=saved_template.usage_count,
             status=saved_template.status.value,
             created_at=saved_template.created_at,
-            created_by=saved_template.created_by
+            created_by=saved_template.created_by,
+            use_memory_enhancement=saved_template.use_memory_enhancement
         )
         
     except Exception as e:
@@ -157,7 +166,8 @@ async def get_workflows(
                     template_data=full_template.template_data,
                     metadata=full_template.metadata,
                     tags=full_template.tags,
-                    preview_steps=full_template.preview_steps
+                    preview_steps=full_template.preview_steps,
+                    use_memory_enhancement=full_template.use_memory_enhancement
                 ))
         
         return WorkflowListResponse(
@@ -210,7 +220,8 @@ async def get_workflow(
             "usage_count": template.usage_count,
             "status": template.status.value,
             "created_at": template.created_at,
-            "created_by": template.created_by
+            "created_by": template.created_by,
+            "use_memory_enhancement": template.use_memory_enhancement
         }
         
     except HTTPException:

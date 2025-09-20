@@ -5,6 +5,7 @@ export interface ExecutionCreateRequest {
   organization_id?: string;
   execution_context?: Record<string, any>;
   priority?: number;
+  use_memory_enhancement?: boolean;
 }
 
 export interface TaskResponse {

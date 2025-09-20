@@ -11,13 +11,17 @@ import {
   Zap,
   Download,
   Play,
-  Eye,
-  Star
+  Copy,
+  Star,
+  Loader,
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAppStore } from '@/store/appStore';
 import { AgentData } from './AgentDesigner';
 import { templateService, AgentTemplate } from '@/services/templateService';
+import { templatesApiService } from '@/services/templatesApiService';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 // AgentTemplate is now imported from templateService
 
@@ -535,23 +539,92 @@ export const AgentTemplates: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedTemplate, setSelectedTemplate] = useState<LocalAgentTemplate | null>(null);
   const [availableTemplates, setAvailableTemplates] = useState<LocalAgentTemplate[]>([]);
-
-  const categories = ['all', 'enterprise', 'development', 'customer-service', 'data-analytics', 'security'];
+  const [apiTemplates, setApiTemplates] = useState<any[]>([]); // Store original API data for cloning
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<string[]>(['all']);
+  
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    template: LocalAgentTemplate | null;
+    isLoading: boolean;
+  }>({ isOpen: false, template: null, isLoading: false });
+  
+  // Clone loading state
+  const [cloningTemplateId, setCloningTemplateId] = useState<string | null>(null);
 
   // Load available templates on component mount
   useEffect(() => {
-    // Combine built-in templates with those from templateService
-    const serviceTemplates = templateService.getAllAgentTemplates();
-    
-    // Convert service templates to LocalAgentTemplate format with icons
-    const templatesWithIcons: LocalAgentTemplate[] = serviceTemplates.map(template => ({
-      ...template,
-      icon: categoryIcons[template.category as keyof typeof categoryIcons] || <Users className="w-6 h-6" />
-    }));
+    const fetchAgentTemplates = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Fetch templates from database API
+        const response = await templatesApiService.fetchAgentTemplates(100); // Fetch up to 100 templates
+        
+        // Store original API data for cloning
+        setApiTemplates(response.templates);
+        
+        // Convert API responses to frontend format
+        const apiTemplates = response.templates.map(apiTemplate => {
+          const converted = templatesApiService.convertApiToAgentTemplate(apiTemplate);
+          return {
+            ...converted,
+            icon: categoryIcons[converted.category as keyof typeof categoryIcons] || <Users className="w-6 h-6" />
+          } as LocalAgentTemplate;
+        });
+        
+        console.log(`🎯 Agent Templates: Loaded ${apiTemplates.length} templates from database`);
+        console.log(`🎯 Agent Templates: Template names:`, apiTemplates.map(t => t.name));
+        
+        // Use database templates exclusively (don't mix with hardcoded templates)
+        setAvailableTemplates(apiTemplates);
+        
+        // Update categories from API response
+        const responseCategories = response.categories || [];
+        const templateCategories = Array.from(new Set(apiTemplates.map(t => t.category)));
+        const allCategories = ['all', ...responseCategories, ...templateCategories];
+        const uniqueCategories = Array.from(new Set(allCategories));
+        setCategories(uniqueCategories);
+        
+        console.log(`🎯 Agent Templates: Categories found:`, uniqueCategories);
+        
+      } catch (err) {
+        console.error('Failed to fetch agent templates:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load agent templates. Please try again later.';
+        setError(errorMessage);
+        
+        // Fallback to built-in templates if API fails
+        console.warn('🔄 Agent Templates: API failed, falling back to built-in templates');
+        try {
+          const serviceTemplates = templateService.getAllAgentTemplates();
+          const templatesWithIcons: LocalAgentTemplate[] = serviceTemplates.map(template => ({
+            ...template,
+            icon: categoryIcons[template.category as keyof typeof categoryIcons] || <Users className="w-6 h-6" />
+          }));
+          
+          // Use hardcoded templates only as fallback (not mixed with database)
+          const fallbackTemplates = [...agentTemplates, ...templatesWithIcons];
+          setAvailableTemplates(fallbackTemplates);
+          
+          // Extract categories from fallback templates
+          const templateCategories = Array.from(new Set(fallbackTemplates.map(t => t.category)));
+          setCategories(['all', ...templateCategories]);
+          
+          console.log(`🎯 Agent Templates: Fallback loaded ${fallbackTemplates.length} built-in templates`);
+        } catch (fallbackErr) {
+          console.error('Fallback also failed:', fallbackErr);
+          // Use just the hardcoded templates as last resort
+          setAvailableTemplates(agentTemplates);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    // Add built-in templates (they already have icons)
-    const allTemplates = [...agentTemplates, ...templatesWithIcons];
-    setAvailableTemplates(allTemplates);
+    fetchAgentTemplates();
   }, []);
 
   const filteredTemplates = selectedCategory === 'all' 
@@ -569,9 +642,123 @@ export const AgentTemplates: React.FC = () => {
     setActiveTab('designer'); // This should switch to the Agent Designer tab
   };
 
-  const handleTemplatePreview = (template: LocalAgentTemplate) => {
-    setSelectedTemplate(template);
+  const handleCloneTemplate = async (template: LocalAgentTemplate) => {
+    try {
+      // Set loading state
+      setCloningTemplateId(template.id);
+      
+      // Find the original API template data
+      const originalApiTemplate = apiTemplates.find(api => api.id === template.id);
+      if (!originalApiTemplate) {
+        alert('Original template data not found. Please refresh and try again.');
+        return;
+      }
+
+      // Clone the template using the API
+      const clonedTemplate = await templatesApiService.cloneAgentTemplate(originalApiTemplate);
+      
+      // Convert the new template to frontend format and add to the list
+      const convertedClone = templatesApiService.convertApiToAgentTemplate(clonedTemplate);
+      const cloneWithIcon = {
+        ...convertedClone,
+        icon: categoryIcons[convertedClone.category as keyof typeof categoryIcons] || <Users className="w-6 h-6" />
+      } as LocalAgentTemplate;
+      
+      setAvailableTemplates(prev => [cloneWithIcon, ...prev]);
+      setApiTemplates(prev => [clonedTemplate, ...prev]);
+      
+      alert('Template cloned successfully!');
+    } catch (error) {
+      console.error('Failed to clone template:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to clone template';
+      alert(errorMessage);
+    } finally {
+      // Clear loading state
+      setCloningTemplateId(null);
+    }
   };
+
+
+  const handleDeleteTemplate = (template: LocalAgentTemplate) => {
+    setDeleteConfirm({
+      isOpen: true,
+      template: template,
+      isLoading: false
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm.template) return;
+
+    setDeleteConfirm(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      // Note: Agent template delete endpoint doesn't exist yet
+      const result = await templatesApiService.deleteAgentTemplate(deleteConfirm.template.id);
+      
+      // Remove template from local state
+      setAvailableTemplates(prev => prev.filter(t => t.id !== deleteConfirm.template!.id));
+      
+      // Close dialog
+      setDeleteConfirm({ isOpen: false, template: null, isLoading: false });
+      
+      // Show success message
+      alert(result.message || 'Agent template deleted successfully!');
+      
+    } catch (error) {
+      console.error('Failed to delete agent template:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete agent template';
+      alert(errorMessage);
+      
+      // Reset loading state but keep dialog open
+      setDeleteConfirm(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirm({ isOpen: false, template: null, isLoading: false });
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Agent Organization Templates</h2>
+          <p className="text-gray-600">
+            Choose from pre-built multi-agent organization templates or create your own custom structure
+          </p>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <Loader className="w-8 h-8 animate-spin text-fuschia-500" />
+          <span className="ml-2 text-gray-600">Loading agent templates...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && availableTemplates.length === 0) {
+    return (
+      <div className="p-6">
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Agent Organization Templates</h2>
+          <p className="text-gray-600">
+            Choose from pre-built multi-agent organization templates or create your own custom structure
+          </p>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <p className="text-red-600 mb-2">{error}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -580,6 +767,11 @@ export const AgentTemplates: React.FC = () => {
         <p className="text-gray-600">
           Choose from pre-built multi-agent organization templates or create your own custom structure
         </p>
+        {error && (
+          <div className="mt-2 p-2 bg-yellow-100 border border-yellow-400 rounded text-yellow-800 text-sm">
+            ⚠️ {error} (Showing available templates)
+          </div>
+        )}
       </div>
 
       {/* Category Filter */}
@@ -680,13 +872,26 @@ export const AgentTemplates: React.FC = () => {
                   <span>Use Template</span>
                 </button>
                 <button
-                  onClick={() => handleTemplatePreview(template)}
-                  className="p-2 text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  onClick={() => handleCloneTemplate(template)}
+                  disabled={cloningTemplateId === template.id}
+                  className="p-2 text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={cloningTemplateId === template.id ? "Cloning template..." : "Clone template"}
                 >
-                  <Eye className="w-4 h-4" />
+                  {cloningTemplateId === template.id ? (
+                    <Loader className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
                 </button>
                 <button className="p-2 text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
                   <Download className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDeleteTemplate(template)}
+                  className="p-2 text-red-500 hover:text-red-700 border border-red-300 rounded-md hover:bg-red-50 transition-colors"
+                  title="Delete template"
+                >
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -751,6 +956,19 @@ export const AgentTemplates: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        title="Delete Agent Template"
+        message={`Are you sure you want to delete "${deleteConfirm.template?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDestructive={true}
+        isLoading={deleteConfirm.isLoading}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   );
 };

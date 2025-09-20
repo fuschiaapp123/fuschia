@@ -135,9 +135,7 @@ async def create_agent_template(
                         name=tool.get('name', tool) if isinstance(tool, str) else tool.get('name', 'default_tool'),
                         description=tool.get('description', f'Tool: {tool}') if isinstance(tool, dict) else f'Tool: {tool}',
                         tool_type=tool.get('tool_type', 'general') if isinstance(tool, dict) else 'general'
-                    ) for tool in (agent_data.get('agentTools', []) or [
-                        tool_name for tool_name in agent_data.get('tools', [])
-                    ])
+                    ) for tool in agent_data.get('agentTools', [])
                 ],
                 max_concurrent_tasks=agent_data.get('maxConcurrentTasks', 3),
                 requires_human_approval=agent_data.get('requiresHumanApproval', False),
@@ -393,6 +391,169 @@ async def test_agent_service():
             "message": f"Agent service test failed: {str(e)}",
             "traceback": traceback.format_exc()
         }
+
+
+@router.post("/agents/{agent_id}/tools/{tool_id}/associate")
+async def associate_system_tool_with_agent(
+    agent_id: str,
+    tool_id: str,
+    enabled: bool = True,
+    current_user: User = Depends(get_current_user)
+):
+    """Associate a system tool with an agent by updating the agent configuration"""
+    try:
+        from app.db.postgres import AsyncSessionLocal, AgentTemplateTable
+        
+        # Check if this is a system tool
+        if not tool_id.startswith("system_"):
+            raise HTTPException(status_code=400, detail="This endpoint is only for system tools")
+        
+        # Get the system tool name without prefix
+        system_tool_name = tool_id[7:]  # Remove "system_" prefix
+        
+        # Find the agent in the database
+        async with AsyncSessionLocal() as session:
+            # This is a simplified implementation - you may need to adjust based on your agent storage
+            # For now, we'll store system tool associations in agent metadata
+            result = await session.execute(
+                select(AgentTemplateTable).where(AgentTemplateTable.id == agent_id)
+            )
+            agent_template = result.scalar_one_or_none()
+            
+            if not agent_template:
+                raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+            
+            # Update agent's system tools in metadata
+            if not agent_template.template_metadata:
+                agent_template.template_metadata = {}
+            
+            if 'system_tools' not in agent_template.template_metadata:
+                agent_template.template_metadata['system_tools'] = []
+            
+            system_tools = agent_template.template_metadata['system_tools']
+            
+            if enabled:
+                # Add system tool if not already present
+                if tool_id not in system_tools:
+                    system_tools.append(tool_id)
+            else:
+                # Remove system tool if present
+                if tool_id in system_tools:
+                    system_tools.remove(tool_id)
+            
+            agent_template.template_metadata['system_tools'] = system_tools
+            
+            # Mark as modified and commit
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(agent_template, 'template_metadata')
+            await session.commit()
+        
+        return {
+            "message": f"System tool {tool_id} {'associated' if enabled else 'disassociated'} with agent {agent_id}",
+            "agent_id": agent_id,
+            "tool_id": tool_id,
+            "enabled": enabled
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to associate system tool: {str(e)}")
+
+
+@router.get("/agents/{agent_id}/system-tools")
+async def get_agent_system_tools(
+    agent_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get system tools associated with an agent"""
+    try:
+        from app.db.postgres import AsyncSessionLocal, AgentTemplateTable
+        
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(AgentTemplateTable).where(AgentTemplateTable.id == agent_id)
+            )
+            agent_template = result.scalar_one_or_none()
+            
+            if not agent_template:
+                raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+            
+            # Get system tools from metadata
+            system_tools = []
+            if (agent_template.template_metadata and 
+                'system_tools' in agent_template.template_metadata):
+                system_tools = agent_template.template_metadata['system_tools']
+            
+            return {
+                "agent_id": agent_id,
+                "system_tools": system_tools
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get agent system tools: {str(e)}")
+
+
+@router.delete("/templates/{template_id}")
+async def delete_agent_template(
+    template_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete an agent template (mark as inactive).
+    """
+    try:
+        from app.db.postgres import AsyncSessionLocal, AgentTemplateTable, init_db
+        
+        # Ensure database tables exist
+        try:
+            await init_db()
+        except Exception as init_error:
+            print(f"Database initialization warning: {init_error}")
+        
+        # Check if template exists and get details
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(AgentTemplateTable).where(
+                    and_(
+                        AgentTemplateTable.id == template_id,
+                        AgentTemplateTable.is_template
+                    )
+                )
+            )
+            
+            existing_template = result.scalar_one_or_none()
+            
+            if not existing_template:
+                raise HTTPException(status_code=404, detail="Agent template not found")
+            
+            # Check if user owns the template or is admin
+            if existing_template.created_by != current_user.id and current_user.role.value != "admin":
+                raise HTTPException(status_code=403, detail="Not authorized to delete this agent template")
+            
+            # Soft delete by marking as inactive
+            existing_template.status = "inactive"
+            
+            # Mark as modified and commit
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(existing_template, 'status')
+            await session.commit()
+            
+            return {
+                "status": "success",
+                "message": f"Agent template '{existing_template.name}' deleted successfully",
+                "template_id": template_id
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_details = f"Error in delete_agent_template: {str(e)}\nTraceback: {traceback.format_exc()}"
+        print(error_details)  # Log to console for debugging
+        raise HTTPException(status_code=500, detail=f"Failed to delete agent template: {str(e)}")
 
 
 @router.post("/organizations", response_model=AgentOrganizationResponse)

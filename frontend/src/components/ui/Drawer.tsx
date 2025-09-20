@@ -7,7 +7,7 @@ interface DrawerProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 }
 
 export const Drawer: React.FC<DrawerProps> = ({
@@ -23,6 +23,10 @@ export const Drawer: React.FC<DrawerProps> = ({
         return 'w-80';
       case 'lg':
         return 'w-[600px]';
+      case 'xl':
+        return 'w-[800px]';
+      case '2xl':
+        return 'w-[1000px]';
       default:
         return 'w-96';
     }

@@ -35,6 +35,11 @@ class TemplateService:
                 
                 template_id = str(uuid.uuid4())
                 
+                # DEBUG: Log the template data being saved
+                print(f"🔍 DEBUG: Creating WorkflowTemplateTable:")
+                print(f"   - Name: {template_data.name}")
+                print(f"   - use_memory_enhancement: {template_data.use_memory_enhancement}")
+                
                 db_template = WorkflowTemplateTable(
                     id=template_id,
                     name=template_data.name,
@@ -48,9 +53,12 @@ class TemplateService:
                     status=template_data.status.value,
                     template_data=template_data.template_data,
                     template_metadata=template_data.metadata,
+                    use_memory_enhancement=template_data.use_memory_enhancement,
                     created_by=created_by,
                     created_at=datetime.utcnow()
                 )
+                
+                print(f"🔍 DEBUG: WorkflowTemplateTable created with use_memory_enhancement: {db_template.use_memory_enhancement}")
                 
                 session.add(db_template)
                 await session.commit()
@@ -166,6 +174,11 @@ class TemplateService:
                 existing_template = result.scalar_one_or_none()
                 
                 if existing_template:
+                    # DEBUG: Log the update operation
+                    print(f"🔍 DEBUG: Updating existing template:")
+                    print(f"   - Name: {template_data.name}")
+                    print(f"   - use_memory_enhancement: {template_data.use_memory_enhancement}")
+                    
                     # Update WorkflowTemplateTable
                     existing_template.name = template_data.name
                     existing_template.description = template_data.description
@@ -180,7 +193,10 @@ class TemplateService:
                         "updated": datetime.utcnow().isoformat(),
                         "updated_by": updated_by
                     }
+                    existing_template.use_memory_enhancement = template_data.use_memory_enhancement
                     existing_template.updated_at = datetime.utcnow()
+                    
+                    print(f"🔍 DEBUG: Updated template use_memory_enhancement to: {existing_template.use_memory_enhancement}")
                     
                     await session.commit()
                     await session.refresh(existing_template)
@@ -627,6 +643,7 @@ class TemplateService:
             status=TemplateStatus(db_template.status),
             template_data=db_template.template_data or {},
             metadata=getattr(db_template, 'template_metadata', {}) or {},
+            use_memory_enhancement=getattr(db_template, 'use_memory_enhancement', False),
             created_by=db_template.created_by,
             created_at=db_template.created_at,
             updated_at=db_template.updated_at

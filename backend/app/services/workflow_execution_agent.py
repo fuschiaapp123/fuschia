@@ -56,6 +56,7 @@ class SimpleTaskExecution(Signature):
     task_description: str = InputField(desc="Detailed description of the task")
     task_objective: str = InputField(desc="Main objective or goal of the task")
     completion_criteria: str = InputField(desc="Criteria that define task completion")
+    user_request: str = InputField(desc="Original user request that initiated this workflow")
     agent_name: str = InputField(desc="Name of the executing agent")
     agent_role: str = InputField(desc="Role of the executing agent")
     agent_capabilities: str = InputField(desc="List of agent capabilities")
@@ -77,6 +78,7 @@ class ChainOfThoughtPlanning(Signature):
     task_description: str = InputField(desc="Detailed description of the task")
     task_objective: str = InputField(desc="Main objective or goal of the task")
     completion_criteria: str = InputField(desc="Criteria that define task completion")
+    user_request: str = InputField(desc="Original user request that initiated this workflow")
     agent_capabilities: str = InputField(desc="List of agent capabilities")
     available_tools: str = InputField(desc="Available tools for task execution")
     execution_context: str = InputField(desc="JSON context for task execution")
@@ -120,9 +122,9 @@ class SimpleExecutionModule(dspy.Module):
     
     def __init__(self):
         super().__init__()
-        self.execute_task = dspy.ChainOfThought(SimpleTaskExecution)
+        self.execute_task = dspy.Predict(SimpleTaskExecution)
     
-    def forward(self, task_name, task_description, task_objective, completion_criteria,
+    def forward(self, task_name, task_description, task_objective, completion_criteria, user_request,
                 agent_name, agent_role, agent_capabilities, available_tools, execution_context):
         
         # Get available tools from registry
@@ -137,6 +139,7 @@ class SimpleExecutionModule(dspy.Module):
             task_description=task_description,
             task_objective=task_objective,
             completion_criteria=completion_criteria,
+            user_request=user_request,
             agent_name=agent_name,
             agent_role=agent_role,
             agent_capabilities=agent_capabilities,
@@ -154,7 +157,7 @@ class ChainOfThoughtModule(dspy.Module):
         super().__init__()
         self.plan_execution = dspy.ChainOfThought(ChainOfThoughtPlanning)
     
-    def forward(self, task_name, task_description, task_objective, completion_criteria,
+    def forward(self, task_name, task_description, task_objective, completion_criteria, user_request,
                 agent_capabilities, available_tools, execution_context):
         
         result = self.plan_execution(
@@ -162,6 +165,7 @@ class ChainOfThoughtModule(dspy.Module):
             task_description=task_description,
             task_objective=task_objective,
             completion_criteria=completion_criteria,
+            user_request=user_request,
             agent_capabilities=agent_capabilities,
             available_tools=available_tools,
             execution_context=execution_context
@@ -263,6 +267,12 @@ class WorkflowExecutionAgent:
                 # Generic tool wrapper
                 tools[tool.name] = lambda **kwargs: self._generic_tool_execution(tool.name, **kwargs)
         
+        # Log the tool mapping for debugging
+        logger.info("Tool mapping initialized for agent", agent_id=self.agent_node.id)
+        for tool_name, func in tools.items():
+            func_qualname = getattr(func, '__qualname__', getattr(func, '__name__', str(func)))
+            logger.debug(f"Tool '{tool_name}' -> {func_qualname}")
+        
         return tools
     
     async def execute_task(self, 
@@ -286,7 +296,7 @@ class WorkflowExecutionAgent:
         task.status = TaskStatus.IN_PROGRESS
         task.started_at = datetime.utcnow()
         task.assigned_agent_id = self.agent_node.id
-        print (f"===>Agent {self.agent_node.name}, strategy {self.agent_node.strategy} is executing task {task.name} with ID {task_id}")
+        
         try:
             # Choose execution strategy
             if self.agent_node.strategy == AgentStrategy.SIMPLE:
@@ -316,7 +326,7 @@ class WorkflowExecutionAgent:
             
             # Store results
             task.results = result
-            print(f"===> task: {task}")
+            
             
             self.logger.info(
                 "Task execution completed",
@@ -387,6 +397,9 @@ class WorkflowExecutionAgent:
             available_tools = json.dumps(list(self.available_tools.keys()))
             execution_context_str = json.dumps(execution_context, default=str)
             
+            # Extract user request from execution context
+            user_request = execution_context.get('original_message', execution_context.get('user_request', 'No specific user request provided'))
+            
             # Send agent thought to WebSocket
             await websocket_manager.send_agent_thought(
                 user_id=workflow_execution.initiated_by,
@@ -412,6 +425,7 @@ class WorkflowExecutionAgent:
                     task_description=task.description or "",
                     task_objective=task.objective or "Complete the task successfully",
                     completion_criteria=task.completion_criteria or "Task meets objective requirements",
+                    user_request=user_request,
                     agent_name=self.agent_node.name,
                     agent_role=self.agent_node.role.value,
                     agent_capabilities=agent_capabilities,
@@ -601,6 +615,9 @@ class WorkflowExecutionAgent:
             available_tools = json.dumps(list(self.available_tools.keys()))
             execution_context_str = json.dumps(execution_context, default=str)
             
+            # Extract user request from execution context
+            user_request = execution_context.get('original_message', execution_context.get('user_request', 'No specific user request provided'))
+            
             # Send agent thought to WebSocket
             await websocket_manager.send_agent_thought(
                 user_id=workflow_execution.initiated_by,
@@ -626,6 +643,7 @@ class WorkflowExecutionAgent:
                     task_description=task.description or "",
                     task_objective=task.objective or "Complete the task successfully",
                     completion_criteria=task.completion_criteria or "Task meets objective requirements",
+                    user_request=user_request,
                     agent_capabilities=agent_capabilities,
                     available_tools=available_tools,
                     execution_context=execution_context_str
@@ -812,7 +830,6 @@ class WorkflowExecutionAgent:
                 loop = asyncio.get_running_loop()
                 # If we're in an async context, we need to be careful
                 # Use asyncio.run_coroutine_threadsafe to avoid "RuntimeError: cannot be called from a running event loop"
-                import threading
                 import concurrent.futures
                 
                 def run_in_thread():
@@ -836,27 +853,79 @@ class WorkflowExecutionAgent:
 
         return dspy.Tool(ask_human)
 
-    def _create_dspy_tools(self, task: WorkflowTask, execution_context: Dict[str, Any], workflow_execution: WorkflowExecution) -> List[Callable]:
+    async def _create_dspy_tools(self, task: WorkflowTask, execution_context: Dict[str, Any], workflow_execution: WorkflowExecution) -> List[Callable]:
         """Create non-blocking tools for DSPy ReAct execution"""
         tools = []
         
         # Add available workflow tools
-        for tool_name, tool_func in self.available_tools.items():
-            def create_tool_wrapper(name, func):
-                def sync_tool_wrapper(*args, **kwargs):
-                    """Synchronous wrapper for workflow tools"""
-                    try:
-                        # For now, return a placeholder since these tools may be async
-                        return f"Tool {name} is available for execution. Call this tool when needed."
-                    except Exception as e:
-                        return f"Tool {name} failed: {str(e)}"
+        logger.info(f"Adding workflow tools to DSPy ReAct tools: {self.available_tools.items()}")
+        # for tool_name, tool_func in self.available_tools.items():
+        #     def create_tool_wrapper(name, func):
+        #         def sync_tool_wrapper(*args, **kwargs):
+        #             """Synchronous wrapper for workflow tools"""
+        #             import asyncio
+        #             try:
+        #                 # Check if we're already in an event loop
+        #                 try:
+        #                     asyncio.get_running_loop()
+        #                     # We're in an async context, but DSPy expects sync calls
+        #                     # Create a new thread to run the async function
+        #                     import concurrent.futures
+                            
+        #                     def run_in_thread():
+        #                         # Create new event loop in thread
+        #                         new_loop = asyncio.new_event_loop()
+        #                         asyncio.set_event_loop(new_loop)
+        #                         try:
+        #                             # Log detailed function information for debugging
+        #                             func_name = getattr(func, '__name__', str(func))
+        #                             func_module = getattr(func, '__module__', 'unknown')
+        #                             func_qualname = getattr(func, '__qualname__', func_name)
+        #                             logger.info(f"Executing tool '{name}' -> function '{func_name}' from module '{func_module}'", 
+        #                                        args=args, kwargs=kwargs, function_type='async' if asyncio.iscoroutinefunction(func) else 'sync')
+                                    
+        #                             if asyncio.iscoroutinefunction(func):
+        #                                 result = new_loop.run_until_complete(func(*args, **kwargs))
+        #                             else:
+        #                                 result = func(*args, **kwargs)
+        #                             logger.info(f"Tool '{name}' ({func_qualname}) execution completed successfully", result=str(result)[:200] + '...' if len(str(result)) > 200 else result)
+        #                             return result
+        #                         finally:
+        #                             new_loop.close()
+                            
+        #                     with concurrent.futures.ThreadPoolExecutor() as executor:
+        #                         logger.info(f"Submitting tool {name} to thread executor", args=args, kwargs=kwargs)
+        #                         future = executor.submit(run_in_thread)
+        #                         result = future.result(timeout=30)
+        #                         logger.info(f"Tool {name} executed successfully", result=result)
+        #                         return result
+                                
+        #                 except RuntimeError:
+        #                     # No event loop running, we can use asyncio.run
+        #                     func_name = getattr(func, '__name__', str(func))
+        #                     func_module = getattr(func, '__module__', 'unknown')
+        #                     func_qualname = getattr(func, '__qualname__', func_name)
+        #                     logger.info(f"Executing tool '{name}' -> function '{func_qualname}' from module '{func_module}' (no event loop)", 
+        #                                args=args, kwargs=kwargs, function_type='async' if asyncio.iscoroutinefunction(func) else 'sync')
+                            
+        #                     if asyncio.iscoroutinefunction(func):
+        #                         result = asyncio.run(func(*args, **kwargs))
+        #                     else:
+        #                         result = func(*args, **kwargs)
+        #                     logger.info(f"Tool '{name}' ({func_qualname}) execution completed successfully", result=str(result)[:200] + '...' if len(str(result)) > 200 else result)
+        #                     return result
+                            
+        #             except Exception as e:
+        #                 logger.error(f"Tool {name} execution failed", error=str(e), args=args, kwargs=kwargs)
+        #                 return f"Tool {name} failed: {str(e)}"
                 
-                sync_tool_wrapper.__name__ = name
-                sync_tool_wrapper.__doc__ = f"Execute the {name} tool"
-                return sync_tool_wrapper
+        #         sync_tool_wrapper.__name__ = name
+        #         sync_tool_wrapper.__doc__ = f"Execute the {name} tool"
+        #         return sync_tool_wrapper
             
-            tools.append(create_tool_wrapper(tool_name, tool_func))
-        
+        #     tools.append(create_tool_wrapper(tool_name, tool_func))
+        logger.info("Workflow tools added to DSPy ReAct tools", tool_count=len(tools))
+
         # Clean Human-in-the-Loop Tools Suite
         # Simple async tools that send WebSocket messages and wait for responses
         
@@ -992,8 +1061,9 @@ class WorkflowExecutionAgent:
             )
             
             # Wait for response with async polling
-            for _ in range(60):  # 5 minutes (600 * 0.5s)
+            for _ in range(600):  # 5 minutes (600 * 0.5s)
                 if request_id in websocket_manager.user_responses:
+                    logger.info(f"Received user response for request ID {request_id}")
                     response = websocket_manager.user_responses.pop(request_id)
                     websocket_manager.pending_responses.pop(request_id, None)
                     return f"User provided {info_type}: {response}"
@@ -1041,10 +1111,256 @@ class WorkflowExecutionAgent:
             dspy.Tool(complete_task, name="complete_task", 
                      desc="Mark the current task as completed with the given result")
         ]
-        
+        logger.info(f"Adding {len(human_tools)} human-in-the-loop tools for DSPy execution")
         tools.extend(human_tools)
         
+        # Add selected System Tools (RAG, MCP, Context Enhancement, etc.)
+        system_tools = await self._get_selected_system_tools(task, workflow_execution)
+        logger.info(f"Adding {len(system_tools)} selected system tools for DSPy execution")
+        tools.extend(system_tools)
+        
         return tools
+
+    async def _get_selected_system_tools(self, task: 'WorkflowTask', workflow_execution: 'WorkflowExecution') -> List:
+        """Get selected system tools (RAG, MCP, etc.) for DSPy ReAct execution based on agent configuration within workflow"""
+        try:
+            from app.services.system_tools_service import system_tools_service
+            
+            # Initialize system tools service if not already done
+            if not system_tools_service.initialized:
+                await system_tools_service.initialize()
+            
+            # Get agent's selected system tools from workflow template
+            selected_system_tools = []
+            agent_id = task.assigned_agent_id
+            
+            if agent_id and workflow_execution.workflow_template_id:
+                try:
+                    # Get system tools from workflow template's agent data
+                    system_tool_names = []
+                    
+                    try:
+                        from app.db.postgres import AsyncSessionLocal
+                        from sqlalchemy import text
+                        
+                        async with AsyncSessionLocal() as session:
+                            logger.info(f"Searching for agent {agent_id} in agent organizations")
+                            
+                            # Search through agent organizations to find the agent
+                            result = await session.execute(text('''
+                                SELECT id, name, agents_data 
+                                FROM agent_organizations 
+                                WHERE agents_data IS NOT NULL AND agents_data != '[]'
+                                ORDER BY created_at DESC
+                            '''))
+                            
+                            agent_orgs = result.fetchall()
+                            logger.info(f"Found {len(agent_orgs)} agent organizations to search")
+                            
+                            agent_found = False
+                            for org_id, org_name, agents_data_str in agent_orgs:
+                                try:
+                                    import json
+                                    agents_data = json.loads(agents_data_str)
+                                    
+                                    # Check if this organization contains our target agent
+                                    for agent_data in agents_data:
+                                        if str(agent_data.get('id')) == str(agent_id):
+                                            logger.info(f"Found agent {agent_id} in organization: {org_name} (ID: {org_id})")
+                                            agent_found = True
+                                            
+                                            # Get system tools from this agent's configuration
+                                            agent_tools = agent_data.get('agentTools', []) or agent_data.get('tools', [])
+                                            logger.info(f"Agent {agent_id} has {len(agent_tools)} tools: {agent_tools}")
+                                            
+                                            for tool in agent_tools:
+                                                # Handle both dict format (saved from form) and string format (legacy)
+                                                if isinstance(tool, dict):
+                                                    tool_name = tool.get('name', '')
+                                                else:
+                                                    tool_name = str(tool)
+                                                
+                                                logger.info(f"Processing tool: {tool_name}")
+                                                if isinstance(tool_name, str) and tool_name.startswith("system_"):
+                                                    # Extract system tool name (remove "system_" prefix)
+                                                    system_tool_name = tool_name[7:]
+                                                    system_tool_names.append(system_tool_name)
+                                                    logger.info(f"Found system tool: {system_tool_name}")
+                                            break
+                                    
+                                    if agent_found:
+                                        break
+                                        
+                                except json.JSONDecodeError as e:
+                                    logger.warning(f"Failed to parse agents_data for org {org_id}: {e}")
+                                    continue
+                            
+                            if not agent_found:
+                                logger.warning(f"Agent {agent_id} not found in any agent organization")
+                                        
+                    except Exception as db_error:
+                        self.logger.warning(f"Failed to fetch agent system tools from workflow template: {str(db_error)}")
+                    
+                    logger.info(f"Agent {agent_id} in workflow template {workflow_execution.workflow_template_id} selected system tools: {system_tool_names}")
+                    # Get DSPy-compatible system tools for selected tools only
+                    available_system_tools = system_tools_service.get_dspy_tools()
+                    logger.info(f"Available DSPy system tools: {[tool.__name__ for tool in available_system_tools]}")
+                    # Match selected tool names to available system tools
+                    for tool_func in available_system_tools:
+                        # Check if this system tool is selected by the agent
+                        if tool_func.__name__ in system_tool_names:
+                            selected_system_tools.append(tool_func)
+                    logger.info(f"Loaded {len(selected_system_tools)} selected system tools for agent {agent_id}")         
+                except Exception as e:
+                    self.logger.warning(f"Failed to load agent system tool selection for agent {agent_id}: {str(e)}")
+                    # Fallback to no system tools
+                    return []
+            else:
+                # No agent ID or workflow template ID - no system tools
+                logger.info(f"No system tools loaded - agent_id: {agent_id}, workflow_template_id: {workflow_execution.workflow_template_id}")
+                return []
+            
+            # Create DSPy Tool wrappers with proper sync interfaces for DSPy compatibility
+            dspy_system_tools = []
+            
+            for tool_func in selected_system_tools:
+                # Create sync wrapper that preserves function signature for DSPy
+                def create_sync_version(async_func):
+                    import asyncio
+                    import inspect
+                    
+                    # Get the original async function signature
+                    original_sig = inspect.signature(async_func)
+                    
+                    def sync_version(*args, **kwargs):
+                        """Synchronous wrapper for async system tools that preserves signature"""
+                        try:
+                            self.logger.info(f"System tool '{async_func.__name__}' sync wrapper called with args: {args}, kwargs: {kwargs}")
+                            
+                            # Check if we're in an async context
+                            try:
+                                loop = asyncio.get_running_loop()
+                                # We're in an async context - DEADLOCK RISK with run_coroutine_threadsafe
+                                # Instead, we need to run this in a separate thread with its own event loop
+                                self.logger.debug(f"Running {async_func.__name__} in separate thread to avoid deadlock")
+                                
+                                import concurrent.futures
+                                import threading
+                                
+                                def run_in_new_loop():
+                                    """Run the async function in a completely new event loop"""
+                                    # Create and set a new event loop for this thread
+                                    new_loop = asyncio.new_event_loop()
+                                    asyncio.set_event_loop(new_loop)
+                                    try:
+                                        return new_loop.run_until_complete(async_func(*args, **kwargs))
+                                    finally:
+                                        new_loop.close()
+                                
+                                # Run in thread pool to avoid blocking the main event loop
+                                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                                    future = executor.submit(run_in_new_loop)
+                                    result = future.result(timeout=90)  # 90 seconds timeout
+                                    self.logger.info(f"System tool '{async_func.__name__}' completed successfully")
+                                    return result
+                                    
+                            except RuntimeError:
+                                # No running event loop, safe to use asyncio.run
+                                self.logger.debug(f"No event loop found, using asyncio.run for {async_func.__name__}")
+                                result = asyncio.run(async_func(*args, **kwargs))
+                                self.logger.info(f"System tool '{async_func.__name__}' completed successfully")
+                                return result
+                                
+                        except Exception as e:
+                            error_msg = f"System tool '{async_func.__name__}' failed: {str(e)}"
+                            self.logger.error("System tool execution failed", 
+                                            tool=async_func.__name__, 
+                                            error=str(e),
+                                            error_type=type(e).__name__,
+                                            args=args, 
+                                            kwargs=kwargs,
+                                            exc_info=True)
+                            return error_msg
+                    
+                    # Preserve original function metadata and signature
+                    sync_version.__name__ = async_func.__name__
+                    sync_version.__doc__ = async_func.__doc__
+                    sync_version.__annotations__ = async_func.__annotations__
+                    sync_version.__signature__ = original_sig
+                    
+                    return sync_version
+                
+                # Create the sync version and add to tools
+                sync_tool_func = create_sync_version(tool_func)
+                dspy_tool = dspy.Tool(sync_tool_func, name=tool_func.__name__, desc=tool_func.__doc__)
+                dspy_system_tools.append(dspy_tool)
+            
+            self.logger.info(f"Loaded {len(dspy_system_tools)} selected system tools for DSPy execution")
+            return dspy_system_tools
+            
+        except Exception as e:
+            self.logger.error("Failed to load selected system tools for DSPy execution", error=str(e))
+            return []
+
+    async def _get_system_tools(self) -> List:
+        """Get system tools (RAG, MCP, etc.) for DSPy ReAct execution"""
+        try:
+            from app.services.system_tools_service import system_tools_service
+            
+            # Initialize system tools service if not already done
+            if not system_tools_service.initialized:
+                await system_tools_service.initialize()
+            
+            # Get DSPy-compatible system tools
+            system_tools = system_tools_service.get_dspy_tools()
+            
+            # Create DSPy Tool wrappers with proper sync interfaces for DSPy compatibility
+            dspy_system_tools = []
+            
+            for tool_func in system_tools:
+                # Create sync wrapper for async system tools
+                def create_system_tool_wrapper(async_func):
+                    def sync_wrapper(*args, **kwargs):
+                        """Synchronous wrapper for async system tools"""
+                        import asyncio
+                        try:
+                            # Check if we're in an async context
+                            try:
+                                loop = asyncio.get_running_loop()
+                                # We're in an async context, schedule the coroutine
+                                future = asyncio.run_coroutine_threadsafe(async_func(*args, **kwargs), loop)
+                                return future.result(timeout=60)  # 1 minute timeout
+                            except RuntimeError:
+                                # No running event loop, use asyncio.run
+                                return asyncio.run(async_func(*args, **kwargs))
+                                
+                        except Exception as e:
+                            error_msg = f"System tool '{async_func.__name__}' failed: {str(e)}"
+                            self.logger.error("System tool execution failed", 
+                                            tool=async_func.__name__, error=str(e))
+                            return error_msg
+                    
+                    sync_wrapper.__name__ = async_func.__name__
+                    sync_wrapper.__doc__ = async_func.__doc__ or f"System tool: {async_func.__name__}"
+                    return sync_wrapper
+                
+                # Create the wrapped tool
+                wrapped_tool = create_system_tool_wrapper(tool_func)
+                
+                # Create DSPy Tool object
+                dspy_tool = dspy.Tool(
+                    wrapped_tool, 
+                    name=tool_func.__name__,
+                    desc=tool_func.__doc__ or f"System tool: {tool_func.__name__}"
+                )
+                dspy_system_tools.append(dspy_tool)
+            
+            self.logger.info(f"Loaded {len(dspy_system_tools)} system tools for agent")
+            return dspy_system_tools
+            
+        except Exception as e:
+            self.logger.error("Failed to load system tools", error=str(e))
+            return []  # Return empty list if system tools fail to load
 
     async def _execute_with_dspy_react(self,
                                       task: WorkflowTask,
@@ -1060,37 +1376,37 @@ class WorkflowExecutionAgent:
         
         try:
             # Send initial agent thought to WebSocket
-            # await websocket_manager.send_agent_thought(
-            #     user_id=workflow_execution.initiated_by,
-            #     agent_id=self.agent_node.id,
-            #     agent_name=self.agent_node.name,
-            #     workflow_id=workflow_execution.id,
-            #     workflow_name=f"Workflow-{workflow_execution.workflow_template_id[:8]}...",
-            #     thought_type='thought',
-            #     message=f"Starting DSPy ReAct execution for task: {task.name}",
-            #     metadata={
-            #         'step': 'react_initialization',
-            #         'tool': 'dspy_react',
-            #         'confidence': 0.9,
-            #         'reasoning': "Initializing ReAct agent with available tools",
-            #         'context': {'task_objective': task.objective}
-            #     }
-            # )
+            await websocket_manager.send_agent_thought(
+                user_id=workflow_execution.initiated_by,
+                agent_id=self.agent_node.id,
+                agent_name=self.agent_node.name,
+                workflow_id=workflow_execution.id,
+                workflow_name=f"Workflow-{workflow_execution.workflow_template_id[:8]}...",
+                thought_type='thought',
+                message=f"Starting DSPy ReAct execution for task: {task.name}",
+                metadata={
+                    'step': 'react_initialization',
+                    'tool': 'dspy_react',
+                    'confidence': 0.9,
+                    'reasoning': "Initializing ReAct agent with available tools",
+                    'context': {'task_objective': task.objective}
+                }
+            )
             
             # Create non-blocking tools for ReAct
-            print("===> Creating non-blocking tools for DSPy ReAct")
-            tools = self._create_dspy_tools(task, execution_context, workflow_execution)
-            print("===> Created non-blocking tools for DSPy ReAct")
+            
+            tools = await self._create_dspy_tools(task, execution_context, workflow_execution)
+            logger.info(f"Created tools for DSPy ReAct execution: {tools}")
             # Initialize DSPy ReAct with tools and signature
             react_agent = dspy.ReAct(TaskExecutionSignature, tools=tools, max_iters=1)
-            print("===> Initialized DSPy ReAct agent with tools")  
+             
             # Prepare context information
             context_info = {
                 'available_tools': list(self.available_tools.keys()),
                 'execution_context': execution_context,
                 'agent_capabilities': self.agent_node.capabilities if hasattr(self.agent_node, 'capabilities') else []
             }
-            print("===> Prepared context information for DSPy ReAct execution")
+            
             # Execute with DSPy ReAct using async call
             with dspy.context(lm=self.llm):
                 result = await react_agent.acall(
@@ -1098,7 +1414,7 @@ class WorkflowExecutionAgent:
                     task_objective=task.objective or "Complete the task successfully", 
                     current_context=json.dumps(context_info, default=str)
                 )
-            print("===> DSPy ReAct execution completed")   
+              
             # Send completion thought to WebSocket
             await websocket_manager.send_agent_thought(
                 user_id=workflow_execution.initiated_by,

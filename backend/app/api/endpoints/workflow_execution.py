@@ -4,7 +4,6 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from app.services.workflow_orchestrator import WorkflowOrchestrator
-from app.models.agent_organization import WorkflowExecutionCreate, HumanInteractionRequest
 from app.auth.auth import get_current_user
 from app.models.user import User
 from openai import OpenAI
@@ -13,7 +12,7 @@ import os
 # Initialize OpenAI client
 try:
     llm_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-except Exception as e:
+except Exception:
     # Warning: OpenAI client initialization failed - continuing without LLM
     llm_client = None
 
@@ -28,6 +27,7 @@ class WorkflowExecutionRequest(BaseModel):
     organization_id: str = Field(default="default-org", description="Agent organization to use")
     execution_context: Dict[str, Any] = Field(default_factory=dict, description="Initial execution context")
     priority: int = Field(default=1, ge=1, le=10, description="Execution priority")
+    use_memory_enhancement: bool = Field(default=True, description="Use Graphiti memory enhancement for agents")
 
 
 class WorkflowExecutionResponse(BaseModel):
@@ -83,18 +83,28 @@ async def start_workflow_execution(
     Start execution of a workflow template with multi-agent coordination
     """
     try:
-        # Initiate workflow execution
+        # Enhanced context with memory settings
+        enhanced_context = {
+            **request.execution_context,
+            "user_id": current_user.id,
+            "user_role": current_user.role.value,
+            "priority": request.priority,
+            "use_memory_enhancement": request.use_memory_enhancement,
+            "memory_enabled": request.use_memory_enhancement
+        }
+        
+        # Start workflow execution with the orchestrator (which now includes Graphiti memory enhancement)
         execution = await orchestrator.initiate_workflow_execution(
             workflow_template_id=request.workflow_template_id,
             organization_id=request.organization_id,
             initiated_by=current_user.id,
-            initial_context={
-                **request.execution_context,
-                "user_id": current_user.id,
-                "user_role": current_user.role.value,
-                "priority": request.priority
-            }
+            initial_context=enhanced_context
         )
+        
+        if request.use_memory_enhancement:
+            message = f"Graphiti temporal memory-enhanced workflow execution started with {len(execution.tasks)} tasks"
+        else:
+            message = f"Standard workflow execution started with {len(execution.tasks)} tasks"
         
         return WorkflowExecutionResponse(
             execution_id=execution.id,
@@ -105,7 +115,7 @@ async def start_workflow_execution(
             estimated_completion=execution.estimated_completion,
             task_count=len(execution.tasks),
             agent_count=len(orchestrator.agent_instances),
-            message=f"Workflow execution started with {len(execution.tasks)} tasks"
+            message=message
         )
         
     except ValueError as e:
@@ -428,17 +438,22 @@ async def execute_workflow_from_intent(
     Execute workflow from intent detection result
     """
     try:
-        # Start workflow execution
+        # Enhanced context with memory settings (defaulting to enabled for intent-based execution)
+        enhanced_context = {
+            **execution_context,
+            "triggered_by": "intent_detection",
+            "user_id": current_user.id,
+            "user_role": current_user.role.value,
+            "use_memory_enhancement": True,
+            "memory_enabled": True
+        }
+        
+        # Start workflow execution (memory enhancement handled by orchestrator)
         execution = await orchestrator.initiate_workflow_execution(
             workflow_template_id=workflow_template_id,
             organization_id=organization_id,
             initiated_by=current_user.id,
-            initial_context={
-                **execution_context,
-                "triggered_by": "intent_detection",
-                "user_id": current_user.id,
-                "user_role": current_user.role.value
-            }
+            initial_context=enhanced_context
         )
         
         return {

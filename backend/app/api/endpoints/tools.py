@@ -290,3 +290,44 @@ async def get_tool_stats(current_user: User = Depends(get_current_active_user)):
     except Exception as e:
         logger.error("Failed to get tool stats", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to get tool stats: {str(e)}")
+
+
+@router.get("/system-tools/", response_model=List[dict])
+async def get_system_tools_for_selection(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get system tools formatted for tool selection interface"""
+    try:
+        from app.services.system_tools_service import system_tools_service
+        
+        # Initialize if not already done
+        if not system_tools_service.initialized:
+            await system_tools_service.initialize()
+        
+        system_tools = system_tools_service.get_all_tools()
+        
+        # Convert to format compatible with tool selector
+        formatted_tools = []
+        for tool_name, tool in system_tools.items():
+            formatted_tool = {
+                "id": f"system_{tool.metadata.name}",  # Prefix with "system_" to distinguish
+                "name": tool.metadata.name,
+                "description": tool.metadata.description,
+                "category": f"system_{tool.metadata.category.value}",  # Prefix category
+                "status": "active" if tool.initialized else "inactive",
+                "parameters": [],  # System tools have dynamic parameters
+                "tags": ["system", tool.metadata.category.value],
+                "tool_type": "system",  # Mark as system tool
+                "version": tool.metadata.version,
+                "requires_auth": tool.metadata.requires_auth
+            }
+            formatted_tools.append(formatted_tool)
+        
+        logger.info("Retrieved system tools for selection", 
+                   count=len(formatted_tools), 
+                   user_id=current_user.id)
+        return formatted_tools
+        
+    except Exception as e:
+        logger.error("Failed to get system tools for selection", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get system tools: {str(e)}")

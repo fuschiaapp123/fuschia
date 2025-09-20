@@ -29,6 +29,15 @@ export interface Message {
         error?: string;
       }>;
     };
+    human_loop_response?: boolean;
+    websocket_only?: boolean;
+    websocket_failed?: boolean;
+    request_id?: string;
+    original_request?: string;
+    matching_method?: string;
+    pending_requests_count?: number;
+    pending_request_ids?: string[];
+    blocked_intent_detection?: boolean;
   };
 }
 

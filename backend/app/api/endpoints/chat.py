@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 import asyncio
@@ -9,8 +9,68 @@ import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 from app.services.intent_agent import create_intent_agent
+from app.auth.auth import get_current_user
+from app.models.user import User
+from fastapi.security import HTTPBearer
+from jose import JWTError, jwt
+from app.core.config import settings
 
 load_dotenv()
+
+# Optional authentication dependency
+security = HTTPBearer(auto_error=False)
+
+async def get_current_user_optional(credentials = Depends(security)) -> Optional[User]:
+    """Get current user if authenticated, otherwise return None"""
+    if not credentials:
+        return None
+    
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM]
+        )
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+            
+        from app.services.postgres_user_service import postgres_user_service
+        user_in_db = await postgres_user_service.get_user_by_email(email=email)
+        if user_in_db is None:
+            return None
+            
+        # Convert UserInDB to User model
+        user = User(
+            id=user_in_db.id,
+            email=user_in_db.email,
+            full_name=user_in_db.full_name,
+            role=user_in_db.role,
+            is_active=user_in_db.is_active
+        )
+        return user
+    except JWTError:
+        return None
+    except Exception:
+        return None
+
+async def get_fallback_user_id() -> str:
+    """Get a fallback user ID when no authentication is provided"""
+    try:
+        from app.services.websocket_manager import websocket_manager
+        
+        # Check if there are any active WebSocket connections
+        if websocket_manager.active_connections:
+            # Use the first available connected user ID
+            connected_user_id = next(iter(websocket_manager.active_connections.keys()))
+            print(f"🔄 Using fallback user ID from active WebSocket connection: {connected_user_id}")
+            return connected_user_id
+        else:
+            print("⚠️ No active WebSocket connections found, using anonymous-user")
+            return "anonymous-user"
+    except Exception as e:
+        print(f"❌ Error getting fallback user ID: {e}")
+        return "anonymous-user"
 
 # Initialize OpenAI client with proper error handling
 try:
@@ -574,11 +634,16 @@ async def trigger_workflow_endpoint(request: WorkflowTriggerRequest):
         raise HTTPException(status_code=500, detail=f"Workflow trigger failed: {str(e)}")
 
 @router.post("/chat/enhanced")
-async def enhanced_chat_endpoint(request: ChatRequest):
+async def enhanced_chat_endpoint(request: ChatRequest, current_user: Optional[User] = Depends(get_current_user_optional)):
     """
     Enhanced chat endpoint with intent detection and automatic workflow triggering
     """
     try:
+        # Log authentication status
+        if current_user:
+            print(f"🔑 Authenticated user: {current_user.email} (ID: {current_user.id})")
+        else:
+            print("⚠️ Anonymous user - no authentication token provided")
         # Extract the user message
         user_message = ""
         for message in request.messages:
@@ -603,6 +668,7 @@ async def enhanced_chat_endpoint(request: ChatRequest):
         matched_request_id = None
         
         if found_request_ids and websocket_manager.pending_responses:
+            print(f"@@@===> Found request IDs in user message: {found_request_ids}")
             # Try to match found request ID patterns with actual pending requests
             for found_id in found_request_ids:
                 # Handle truncated request IDs (like "abc12345...")
@@ -621,6 +687,7 @@ async def enhanced_chat_endpoint(request: ChatRequest):
         # Method 2: If no specific request ID found, but there are pending requests,
         # assume this is a response to the most recent request (fallback behavior)
         if not matched_request_id and websocket_manager.pending_responses:
+            print("@@@===> No specific request ID found in user message, checking for most recent pending request...")  
             # Check if the message seems like a response (not a new question/command)
             response_indicators = [
                 'yes', 'no', 'approve', 'reject', 'confirm', 'deny', 'ok', 'sure',
@@ -638,6 +705,8 @@ async def enhanced_chat_endpoint(request: ChatRequest):
         
         # If we found a matching request, submit the response
         if matched_request_id:
+            print(f"@@@===> Matched user response to pending request ID: {matched_request_id}")
+            # human_loop_handled = True
             request_data = websocket_manager.pending_responses[matched_request_id]
             print(f"Processing user response for human-in-the-loop request: {matched_request_id}")
             
@@ -645,10 +714,9 @@ async def enhanced_chat_endpoint(request: ChatRequest):
             success = websocket_manager.submit_user_response(matched_request_id, user_message)
             
             if success:
-                human_loop_handled = True
                 print(f"Successfully submitted user response for request: {matched_request_id}")
                 
-                # Return a response indicating the input was processed
+                # Return immediately - do NOT proceed with intent detection
                 return {
                     "response": f"✅ Your response has been received and processed for the workflow task. The agent will continue with your input: \"{user_message[:100]}{'...' if len(user_message) > 100 else ''}\"",
                     "agent_id": "human-loop-handler",
@@ -662,19 +730,36 @@ async def enhanced_chat_endpoint(request: ChatRequest):
                     }
                 }
         
-        # If no human-in-the-loop request was handled, proceed with normal chat processing
-        if human_loop_handled:
-            return  # Already returned above
+        # Only proceed with intent detection if no human-in-the-loop request was handled
+        # and there are no pending responses that might be waiting for user input
+        if websocket_manager.pending_responses:
+            print(f"@@@===> No matching request found for user response: {user_message}.")
+            print(f"@@@===> Pending responses: {websocket_manager.pending_responses.keys()}")
+            # There are still pending human-in-the-loop requests, but this message
+            # didn't match any of them. This might be a new request while agents are waiting.
+            # In this case, inform the user about pending requests rather than triggering new intent detection.
+            pending_count = len(websocket_manager.pending_responses)
+            return {
+                "response": f"⏳ There are {pending_count} workflow task(s) waiting for your response. Please provide responses to the pending requests before starting new workflows.\n\nIf you'd like to see all pending requests, you can check the workflow status or use the '/chat/pending-requests' endpoint.",
+                "agent_id": "request-queue-manager", 
+                "agent_label": "Request Queue Manager",
+                "timestamp": datetime.now(),
+                "metadata": {
+                    "pending_requests_count": pending_count,
+                    "pending_request_ids": list(websocket_manager.pending_responses.keys()),
+                    "blocked_intent_detection": True
+                }
+            }
         
-        # Step 1: Detect intent with context
-        print(f"Detecting intent for message: {user_message}")
+        # Step 1: Detect intent with context (only when no pending human-in-the-loop requests)
+        print(f"@@@===> Detecting intent for message: {user_message}")
         intent_result = await detect_intent(
             user_message,
             user_role=request.user_role,
             current_module=request.current_module,
             current_tab=request.current_tab
         )
-        print(f"chat.py: Intent detected: {intent_result} with confidence {intent_result}")
+        print(f"@@@===> chat.py: Intent detected: {intent_result} with confidence {intent_result}")
         
         # Step 2: Determine if workflow execution should be triggered
         workflow_result = None
@@ -688,11 +773,10 @@ async def enhanced_chat_endpoint(request: ChatRequest):
             try:
                 # Import workflow orchestrator
                 from app.services.workflow_orchestrator import WorkflowOrchestrator
-                print(f"Initializing workflow orchestrator for intent: {intent_result.detected_intent}")
+                
                 # Initialize orchestrator
                 llm_client_for_orchestrator = llm_client if llm_client else None
                 orchestrator = WorkflowOrchestrator(llm_client=llm_client_for_orchestrator)
-                print("Workflow orchestrator initialized successfully")
                 
                 # Ensure WebSocket message processing is running before starting workflow
                 from app.services.websocket_manager import websocket_manager
@@ -723,7 +807,7 @@ async def enhanced_chat_endpoint(request: ChatRequest):
                 execution = await orchestrator.initiate_workflow_execution(
                     workflow_template_id=intent_result.workflow_execution['workflow_template_id'],
                     organization_id=intent_result.workflow_execution['agent_template_id'],
-                    initiated_by="21f137b4-ee89-4aa7-b317-2c14a9295c00",  # Use real user ID (test@example.com) for WebSocket routing
+                    initiated_by=current_user.id if current_user else await get_fallback_user_id(),  # Use authenticated user ID for WebSocket routing
                     initial_context=execution_context
                 )
                 # Debug: Workflow execution initiated successfully   
@@ -742,7 +826,7 @@ async def enhanced_chat_endpoint(request: ChatRequest):
                         'status': execution.status
                     }]
                 )
-                print(f"Workflow execution details, workflow_result: {workflow_result}")
+                
                 # Generate enhanced response
                 main_response = f"""🤖 **Intent Detected:** {intent_result.detected_intent.replace('_', ' ').title()}
 

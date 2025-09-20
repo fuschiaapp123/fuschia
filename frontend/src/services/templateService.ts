@@ -27,6 +27,7 @@ export interface BaseTemplate {
 export interface WorkflowTemplate extends BaseTemplate {
   template_type: 'workflow';
   steps: number;
+  use_memory_enhancement?: boolean;
 }
 
 // Agent-specific template interface

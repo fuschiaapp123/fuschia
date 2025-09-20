@@ -1,19 +1,26 @@
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any
 import asyncio
-from datetime import datetime, timedelta
-from enum import Enum
+from datetime import datetime
 import structlog
 import uuid
 
 from app.models.agent_organization import (
     AgentOrganization, WorkflowExecution, WorkflowTask, HumanInteractionRequest,
-    WorkflowExecutionCreate, ExecutionStatus, TaskStatus
+    ExecutionStatus, TaskStatus
 )
 from app.services.workflow_execution_agent import WorkflowExecutionAgent
 from app.services.template_service import template_service
 from app.services.workflow_execution_service import workflow_execution_service
 from app.services.websocket_manager import websocket_manager
 from openai import OpenAI
+
+# Import Graphiti enhanced memory functionality
+try:
+    from app.services.graphiti_enhanced_workflow_agent import graphiti_enhanced_orchestrator
+    GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE = True
+except ImportError:
+    graphiti_enhanced_orchestrator = None
+    GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE = False
 
 
 logger = structlog.get_logger()
@@ -80,7 +87,7 @@ class WorkflowOrchestrator:
             await self._initialize_agent_instances(organization, execution)
             self.logger.debug("Initialized agent instances", execution_id=execution.id)
             # Start execution
-            execution_task = asyncio.create_task(self._execute_workflow(execution))
+            asyncio.create_task(self._execute_workflow(execution))
             self.logger.debug("Started execution task", execution_id=execution.id)
             self.logger.info(
                 "Workflow execution initiated",
@@ -101,6 +108,40 @@ class WorkflowOrchestrator:
         execution.status = ExecutionStatus.RUNNING
         # Update status in database
         await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.RUNNING)
+        
+        # Check if memory enhancement is requested
+        use_memory_enhancement = execution.use_memory_enhancement
+        self.logger.info(
+            "Starting workflow execution",
+            execution_id=execution.id,
+            use_memory_enhancement=use_memory_enhancement,
+            graphiti_memory_enhancement_available=GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE
+        )
+        
+         # If memory enhancement is requested and available, use Graphiti
+        if use_memory_enhancement and GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE:
+            self.logger.info(
+                "Using Graphiti temporal knowledge graph memory-enhanced workflow execution",
+                execution_id=execution.id
+            )
+            
+            try:
+                await self._execute_workflow_with_graphiti_memory(execution)
+                return
+            except Exception as graphiti_error:
+                self.logger.warning(
+                    "Graphiti memory-enhanced execution failed, falling back to standard execution",
+                    execution_id=execution.id,
+                    error=str(graphiti_error)
+                )
+                # Continue with standard execution below
+        elif use_memory_enhancement and not GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE:
+            self.logger.warning(
+                "Memory enhancement requested but not available, using standard execution",
+                execution_id=execution.id
+            )
+        
+        # Standard workflow execution continues below...
         
         # Send real-time execution update
         await websocket_manager.send_execution_update(execution.id, {
@@ -177,6 +218,50 @@ class WorkflowOrchestrator:
                             task_id=ready_tasks[i].id,
                             result=result
                         )
+                        # Enhanced YAML canvas update detection and processing
+                        results = result.get('results') if isinstance(result, dict) else None
+                        response = results.get('response') if results else None
+                        
+                        if response and isinstance(response, str):
+                            # Check for YAML canvas update markers
+                            if ("YaMl_StArT" in response and "YaMl_EnD" in response):
+                                # Extract YAML content between markers
+                                yaml_content = response.replace("YaMl_StArT", "").replace("YaMl_EnD", "").strip()
+                                
+                                # Determine canvas type based on YAML content
+                                canvas_type = "workflow"  # default
+                                if any(keyword in yaml_content.lower() for keyword in ['agent', 'role:', 'skills:', 'department:']):
+                                    canvas_type = "agent"
+                                
+                                self.logger.info("YAML canvas update detected", 
+                                               task_id=ready_tasks[i].id, 
+                                               canvas_type=canvas_type,
+                                               yaml_preview=yaml_content[:200] + "..." if len(yaml_content) > 200 else yaml_content)
+                                
+                                # Send specialized canvas update message
+                                await websocket_manager.send_execution_update(execution.id, {
+                                    'type': 'canvas_update',
+                                    'canvas_type': canvas_type,
+                                    'yaml_content': yaml_content,
+                                    'message': f"Canvas update received for {canvas_type} designer",
+                                    'task_id': ready_tasks[i].id,
+                                    'agent_name': self._get_agent_name(ready_tasks[i].assigned_agent_id) if ready_tasks[i].assigned_agent_id else 'Unassigned'
+                                })
+                            
+                            # Check for other structured data patterns
+                            elif any(pattern in response.lower() for pattern in ['nodes:', 'edges:', 'workflow:', 'agents:']):
+                                # This might be YAML without explicit markers
+                                self.logger.info("Potential YAML content detected without markers", 
+                                               task_id=ready_tasks[i].id,
+                                               content_preview=response[:200] + "..." if len(response) > 200 else response)
+                                
+                                await websocket_manager.send_execution_update(execution.id, {
+                                    'type': 'potential_canvas_update',
+                                    'content': response,
+                                    'message': f"Potential canvas data detected - please review",
+                                    'task_id': ready_tasks[i].id
+                                })
+                        
                         if isinstance(result, Exception):
                             self.logger.error(
                                 "Task execution exception",
@@ -239,6 +324,134 @@ class WorkflowOrchestrator:
             # Update status in database
             await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.FAILED, str(e))
             self.logger.error("Workflow execution failed with exception", error=str(e))
+    
+    async def _execute_workflow_with_graphiti_memory(self, execution: WorkflowExecution) -> None:
+        """Execute workflow using Graphiti temporal knowledge graph memory"""
+        
+        try:
+            # Initialize Graphiti memory service if needed
+            from app.services.graphiti_enhanced_memory_service import graphiti_enhanced_memory_service
+            await graphiti_enhanced_memory_service.initialize()
+            
+            # Get organization for agents
+            organization = await self._get_agent_organization(execution.organization_id)
+            if not organization:
+                raise ValueError(f"Agent organization {execution.organization_id} not found")
+            
+            # Execute with Graphiti memory enhancement
+            memory_result = await graphiti_enhanced_orchestrator.execute_workflow_with_memory(
+                workflow_id=execution.workflow_template_id,
+                execution_id=execution.id,
+                agents=organization.agents,
+                tasks=execution.tasks,
+                context={
+                    **execution.execution_context,
+                    "initiated_by": execution.initiated_by,
+                    "workflow_name": f"Workflow-{execution.workflow_template_id[:8]}"
+                },
+                organization=organization
+            )
+            
+            # Update execution with memory results
+            execution.agent_actions.append({
+                "timestamp": datetime.utcnow().isoformat(),
+                "action": "graphiti_enhanced_execution_completed",
+                "details": {
+                    "successful_tasks": memory_result.get("successful_tasks", 0),
+                    "failed_tasks": memory_result.get("failed_tasks", 0),
+                    "total_tasks": memory_result.get("total_tasks", 0),
+                    "memory_enhanced": True,
+                    "enhancement_type": "graphiti_temporal_knowledge_graph"
+                }
+            })
+            
+            # Update task statuses based on Graphiti execution results
+            task_results = memory_result.get("task_results", [])
+            for task_result in task_results:
+                task_id = task_result.get("task_id")
+                success = task_result.get("success", False)
+                
+                if success:
+                    if task_id not in execution.completed_tasks:
+                        execution.completed_tasks.append(task_id)
+                    # Update task status in database
+                    await workflow_execution_service.update_task_status(
+                        task_id, TaskStatus.COMPLETED, 
+                        task_result.get("agent_id", "graphiti-enhanced-agent"),
+                        task_result.get("result", {})
+                    )
+                else:
+                    if task_id not in execution.failed_tasks:
+                        execution.failed_tasks.append(task_id)
+                    # Update task status in database
+                    await workflow_execution_service.update_task_status(
+                        task_id, TaskStatus.FAILED,
+                        task_result.get("agent_id", "graphiti-enhanced-agent"),
+                        task_result.get("result", {})
+                    )
+            
+            # Determine final execution status
+            if memory_result.get("successful_tasks", 0) == len(execution.tasks):
+                execution.status = ExecutionStatus.COMPLETED
+                execution.actual_completion = datetime.utcnow()
+                await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.COMPLETED)
+                
+                # Send completion update
+                await websocket_manager.send_execution_update(execution.id, {
+                    'status': 'completed',
+                    'message': '✅ Graphiti temporal memory-enhanced workflow execution completed successfully!',
+                    'completed_tasks': len(execution.completed_tasks),
+                    'total_tasks': len(execution.tasks),
+                    'memory_enhanced': True,
+                    'memory_type': 'graphiti_temporal_knowledge_graph',
+                    'duration': (execution.actual_completion - execution.started_at).total_seconds()
+                })
+                
+                self.logger.info(
+                    "Graphiti memory-enhanced workflow execution completed successfully",
+                    execution_id=execution.id,
+                    successful_tasks=memory_result.get("successful_tasks", 0),
+                    failed_tasks=memory_result.get("failed_tasks", 0),
+                    duration=(execution.actual_completion - execution.started_at).total_seconds()
+                )
+            else:
+                execution.status = ExecutionStatus.FAILED
+                await workflow_execution_service.update_execution_status(
+                    execution.id, ExecutionStatus.FAILED, 
+                    "Graphiti memory-enhanced execution incomplete"
+                )
+                
+                # Send failure update
+                await websocket_manager.send_execution_update(execution.id, {
+                    'status': 'failed',
+                    'message': '❌ Graphiti temporal memory-enhanced workflow execution failed',
+                    'completed_tasks': memory_result.get("successful_tasks", 0),
+                    'failed_tasks': memory_result.get("failed_tasks", 0),
+                    'total_tasks': len(execution.tasks),
+                    'memory_enhanced': True,
+                    'memory_type': 'graphiti_temporal_knowledge_graph'
+                })
+                
+                self.logger.error(
+                    "Graphiti memory-enhanced workflow execution failed",
+                    execution_id=execution.id,
+                    successful_tasks=memory_result.get("successful_tasks", 0),
+                    failed_tasks=memory_result.get("failed_tasks", 0)
+                )
+                
+        except Exception as e:
+            execution.status = ExecutionStatus.FAILED
+            execution.error_log.append({
+                'error': str(e),
+                'timestamp': datetime.utcnow().isoformat(),
+                'phase': 'graphiti_memory_enhanced_execution'
+            })
+            await workflow_execution_service.update_execution_status(
+                execution.id, ExecutionStatus.FAILED, f"Graphiti memory-enhanced execution failed: {str(e)}"
+            )
+            self.logger.error("Graphiti memory-enhanced workflow execution failed with exception", 
+                            execution_id=execution.id, error=str(e))
+            raise
     
     async def _execute_task_with_monitoring(self,
                                           agent: WorkflowExecutionAgent,
@@ -844,6 +1057,28 @@ class WorkflowOrchestrator:
             asyncio.create_task(self._execute_workflow(execution))
             return True
         return False
+    
+    def _get_agent_name(self, agent_id: str) -> str:
+        """Get agent name from agent ID, with fallback to ID if not found"""
+        if not agent_id:
+            return 'Unassigned'
+            
+        # Try to get from active agent instances first
+        agent_instance = self.agent_instances.get(agent_id)
+        if agent_instance and hasattr(agent_instance, 'agent_name'):
+            return agent_instance.agent_name
+            
+        # Try to get from current execution's organization
+        for execution in self.active_executions.values():
+            if hasattr(execution, '_organization'):
+                org = execution._organization
+                if org and org.agents:
+                    for agent in org.agents:
+                        if agent.id == agent_id:
+                            return agent.name
+                            
+        # Fallback to agent ID if we can't find the name
+        return f'Agent-{agent_id[:8]}'
     
     async def cancel_execution(self, execution_id: str) -> bool:
         """Cancel workflow execution"""

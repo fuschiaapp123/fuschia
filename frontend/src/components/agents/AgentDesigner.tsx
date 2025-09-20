@@ -17,7 +17,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Plus, Users, Save, Upload, Trash2, Settings } from 'lucide-react';
+import { Plus, Users, Save, Upload, Trash2, Settings, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAppStore } from '@/store/appStore';
 import { Drawer } from '@/components/ui/Drawer';
@@ -354,6 +354,13 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
   const [databaseConnectionError, setDatabaseConnectionError] = useState<string | null>(null);
   
+  // Canvas update notification state
+  const [canvasUpdateNotification, setCanvasUpdateNotification] = useState<{
+    show: boolean;
+    message: string;
+    timestamp: number;
+  } | null>(null);
+  
   // Agent metadata state
   const [agentMetadata, setAgentMetadata] = useState({
     name: 'Untitled Agent Network',
@@ -369,10 +376,27 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
   // Update nodes and edges when agentData changes
   useEffect(() => {
     if (agentData?.nodes && agentData?.edges) {
+      const previousNodeCount = nodes.length;
+      const newNodeCount = agentData.nodes.length;
+      
       setNodes(agentData.nodes);
       setEdges(agentData.edges);
+      
+      // Show canvas update notification if this seems to be an external update
+      if (previousNodeCount > 0 && newNodeCount !== previousNodeCount) {
+        setCanvasUpdateNotification({
+          show: true,
+          message: `Agent organization updated: ${newNodeCount} agents, ${agentData.edges.length} connections`,
+          timestamp: Date.now()
+        });
+        
+        // Auto-hide notification after 5 seconds
+        setTimeout(() => {
+          setCanvasUpdateNotification(null);
+        }, 5000);
+      }
     }
-  }, [agentData, setNodes, setEdges]);
+  }, [agentData, setNodes, setEdges, nodes.length]);
 
   // Load available templates and categories from database only
   useEffect(() => {
@@ -553,6 +577,14 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
           if (!currentTemplateId) {
             setCurrentTemplateId(savedTemplate.id);
           }
+          
+          // Update the app store with the current state to refresh task descriptions
+          const { setAgentData } = useAppStore.getState();
+          setAgentData({
+            nodes: nodes.map(node => ({ ...node, selected: false, dragging: false })),
+            edges: edges.map(edge => ({ ...edge, selected: false })),
+            metadata: agentMetadata
+          });
         } else {
           throw new Error('Database connection failed. Please ensure the backend server is running.');
         }
@@ -1477,12 +1509,31 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
         </Panel>
       </ReactFlow>
       
+      {/* Canvas Update Notification */}
+      {canvasUpdateNotification?.show && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-purple-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center space-x-3 animate-fade-in">
+            <CheckCircle2 className="w-5 h-5" />
+            <div>
+              <p className="font-medium">Agent Canvas Updated</p>
+              <p className="text-sm opacity-90">{canvasUpdateNotification.message}</p>
+            </div>
+            <button
+              onClick={() => setCanvasUpdateNotification(null)}
+              className="ml-4 text-white hover:bg-purple-600 rounded p-1"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Agent Property Drawer */}
       <Drawer
         isOpen={isDrawerOpen}
         onClose={handleDrawerClose}
         title={selectedAgent ? `Configure ${selectedAgent.data?.name || 'Agent'}` : 'Agent Properties'}
-        size="lg"
+        size="xl"
       >
         <AgentPropertyForm
           agent={selectedAgent}
@@ -1751,7 +1802,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
         isOpen={isPropertiesDialogOpen} 
         onClose={handlePropertiesCancel}
         title="Agent Organization Properties"
-        size="lg"
+        size="xl"
       >
         <div className="space-y-6">
           <div>
