@@ -473,3 +473,7 @@ profile.json
 # Local database dumps
 *.dump
 *.sql.gz
+
+# MLFlow
+backend/mlruns/
+mlruns/
