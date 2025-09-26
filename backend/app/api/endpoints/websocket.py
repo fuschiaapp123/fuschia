@@ -137,7 +137,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         }))
                 
             except Exception as e:
-                logger.error("Error processing WebSocket message", user_id=user_id, error=str(e))
+                # Check if this is a normal connection close
+                error_str = str(e)
+                if "1005" in error_str or "NO_STATUS_RCVD" in error_str:
+                    logger.debug("WebSocket connection closed without status", user_id=user_id, error=error_str)
+                else:
+                    logger.error("Error processing WebSocket message", user_id=user_id, error=error_str)
                 break
             
     except WebSocketDisconnect:

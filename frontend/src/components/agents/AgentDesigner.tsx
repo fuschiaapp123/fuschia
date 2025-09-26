@@ -52,6 +52,7 @@ export interface AgentData {
 
 // Custom agent node component
 const AgentNode: React.FC<{ data: AgentData; selected: boolean }> = ({ data, selected }) => {
+  console.log('AgentNode rendering:', data.name, 'selected:', selected);
   const getRoleColor = () => {
     switch (data.role) {
       case 'supervisor':
@@ -325,9 +326,9 @@ interface AgentDesignerProps {
   initialEdges?: Edge[];
 }
 
-export const AgentDesigner: React.FC<AgentDesignerProps> = ({ 
-  initialNodes: propInitialNodes, 
-  initialEdges: propInitialEdges 
+export const AgentDesigner: React.FC<AgentDesignerProps> = ({
+  initialNodes: propInitialNodes,
+  initialEdges: propInitialEdges
 }) => {
   const { agentData } = useAppStore();
   
@@ -337,6 +338,16 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
   
   const [nodes, setNodes, onNodesChange] = useNodesState(defaultNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(defaultEdges);
+
+  // Debug effect to track node changes
+  useEffect(() => {
+    console.log('Nodes state changed:', nodes.length, nodes.map(n => n.id));
+  }, [nodes]);
+
+  // Debug effect to track edge changes
+  useEffect(() => {
+    console.log('Edges state changed:', edges.length, edges.map(e => e.id));
+  }, [edges]);
   const [selectedAgent, setSelectedAgent] = useState<Node | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -378,25 +389,38 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
     if (agentData?.nodes && agentData?.edges) {
       const previousNodeCount = nodes.length;
       const newNodeCount = agentData.nodes.length;
-      
-      setNodes(agentData.nodes);
-      setEdges(agentData.edges);
-      
-      // Show canvas update notification if this seems to be an external update
-      if (previousNodeCount > 0 && newNodeCount !== previousNodeCount) {
-        setCanvasUpdateNotification({
-          show: true,
-          message: `Agent organization updated: ${newNodeCount} agents, ${agentData.edges.length} connections`,
-          timestamp: Date.now()
+
+      // Only update if the data is actually different to avoid overriding local changes
+      const nodesAreDifferent = JSON.stringify(nodes) !== JSON.stringify(agentData.nodes);
+      const edgesAreDifferent = JSON.stringify(edges) !== JSON.stringify(agentData.edges);
+
+      if (nodesAreDifferent || edgesAreDifferent) {
+        console.log('Updating nodes/edges from app store', {
+          previousNodeCount,
+          newNodeCount,
+          nodesAreDifferent,
+          edgesAreDifferent
         });
-        
-        // Auto-hide notification after 5 seconds
-        setTimeout(() => {
-          setCanvasUpdateNotification(null);
-        }, 5000);
+
+        setNodes(agentData.nodes);
+        setEdges(agentData.edges);
+
+        // Show canvas update notification if this seems to be an external update
+        if (previousNodeCount > 0 && newNodeCount !== previousNodeCount) {
+          setCanvasUpdateNotification({
+            show: true,
+            message: `Agent organization updated: ${newNodeCount} agents, ${agentData.edges.length} connections`,
+            timestamp: Date.now()
+          });
+
+          // Auto-hide notification after 5 seconds
+          setTimeout(() => {
+            setCanvasUpdateNotification(null);
+          }, 5000);
+        }
       }
     }
-  }, [agentData, setNodes, setEdges, nodes.length]);
+  }, [agentData?.nodes, agentData?.edges, setNodes, setEdges]);
 
   // Load available templates and categories from database only
   useEffect(() => {
@@ -470,8 +494,11 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
   }, []);
 
   const addNewAgent = useCallback(() => {
+    // Generate a unique ID based on timestamp to avoid conflicts
+    const newId = `agent-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
     const newAgent: Node = {
-      id: `${nodes.length + 1}`,
+      id: newId,
       type: 'agentNode',
       position: { x: Math.random() * 400 + 100, y: Math.random() * 400 + 100 },
       data: {
@@ -486,8 +513,26 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
         maxConcurrentTasks: 1,
       },
     };
-    setNodes((nds) => [...nds, newAgent]);
-  }, [nodes.length, setNodes]);
+
+    console.log('Adding new agent:', newAgent);
+    setNodes((nds) => {
+      const updatedNodes = [...nds, newAgent];
+      console.log('Updated nodes array:', updatedNodes);
+
+      // Also update the app store to prevent state conflicts
+      const { setAgentData } = useAppStore.getState();
+      setAgentData({
+        nodes: updatedNodes,
+        edges: edges,
+        metadata: agentMetadata
+      });
+
+      // Log success
+      console.log('Agent added successfully, total nodes:', updatedNodes.length);
+
+      return updatedNodes;
+    });
+  }, [setNodes, edges, agentMetadata]);
 
   const showSaveAgentDialog = useCallback(() => {
     // Initialize form with current agent metadata (like WorkflowDesigner)
@@ -1398,8 +1443,12 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
         onConnect={onConnect}
         onNodeClick={onNodeClick}
         nodeTypes={nodeTypes}
-        fitView
+        fitView={nodes.length > 0}
+        fitViewOptions={{ padding: 0.1, minZoom: 0.5, maxZoom: 2 }}
         className="bg-gray-50"
+        defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+        minZoom={0.1}
+        maxZoom={4}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <Controls className="bg-white border border-gray-200 rounded-lg" />
@@ -1414,8 +1463,14 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
           <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-2">
             <div className="flex items-center space-x-2">
               <button
-                onClick={addNewAgent}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Add Agent button clicked');
+                  addNewAgent();
+                }}
                 className="flex items-center space-x-1 px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors text-sm"
+                type="button"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Agent</span>

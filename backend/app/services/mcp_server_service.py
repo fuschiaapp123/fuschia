@@ -3,15 +3,12 @@ MCP (Model Context Protocol) Server Service for Fuschia Platform
 Provides MCP server functionality to expose Fuschia tools and resources to MCP clients
 """
 
-import asyncio
 import json
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 from datetime import datetime
-import uuid
 
 from app.services.system_tools_service import system_tools_service
-from app.services.tool_registry_service import tool_registry_service
 
 logger = logging.getLogger(__name__)
 
@@ -308,13 +305,34 @@ fuschia_mcp_server = FuschiaMCPServer()
 
 class MCPServerManager:
     """Manages multiple MCP server instances"""
-    
+
     def __init__(self):
-        self.servers: Dict[str, FuschiaMCPServer] = {}
+        self.servers: Dict[str, Any] = {}
         self.default_server = fuschia_mcp_server
         self.servers["fuschia-platform"] = self.default_server
+
+        # Register ServiceNow server when it's imported
+        try:
+            from app.services.servicenow_mcp_server import servicenow_mcp_server
+            self.servers["servicenow-api"] = servicenow_mcp_server
+        except ImportError:
+            logger.warning("ServiceNow MCP server not available - missing dependencies")
+
+        # Register Gmail server when it's imported
+        try:
+            from app.services.gmail_mcp_server import gmail_mcp_server
+            self.servers["gmail-api"] = gmail_mcp_server
+        except ImportError:
+            logger.warning("Gmail MCP server not available - missing dependencies")
+
+        # Register HCM Pro server when it's imported
+        try:
+            from app.services.hcmpro_mcp_server import hcmpro_mcp_server
+            self.servers["hcmpro-api"] = hcmpro_mcp_server
+        except ImportError:
+            logger.warning("HCM Pro MCP server not available - missing dependencies")
     
-    async def get_server(self, server_id: str) -> FuschiaMCPServer:
+    async def get_server(self, server_id: str) -> Any:
         """Get or create MCP server instance"""
         if server_id not in self.servers:
             server = FuschiaMCPServer(server_id)

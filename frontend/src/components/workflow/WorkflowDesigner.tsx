@@ -16,7 +16,7 @@ import {
   Position,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Plus, Play, Save, Upload, FolderOpen, Trash2, Settings } from 'lucide-react';
+import { Plus, Play, Save, Upload, FolderOpen, Trash2, Settings, Brain } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAppStore } from '@/store/appStore';
 import { Drawer } from '@/components/ui/Drawer';
@@ -24,6 +24,14 @@ import { NodePropertyForm } from './NodePropertyForm';
 import { templateService, WorkflowTemplate } from '@/services/templateService';
 import { workflowService } from '@/services/workflowService';
 import { workflowExecutionService } from '@/services/workflowExecutionService';
+
+// Extended interface for database templates that includes template_data
+interface DatabaseWorkflowTemplate extends WorkflowTemplate {
+  template_data?: {
+    nodes?: Node[];
+    edges?: Edge[];
+  };
+}
 
 // Define workflow step types
 export interface WorkflowStepData {
@@ -224,7 +232,10 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     description: 'Describe what this workflow does...',
     category: 'Custom',
   });
-  
+
+  // Memory enhancement state
+  const [isMemoryEnhanced, setIsMemoryEnhanced] = useState(false);
+
   // State for properties dialog
   const [isPropertiesDialogOpen, setIsPropertiesDialogOpen] = useState(false);
   
@@ -241,6 +252,11 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           description: workflowData.metadata.description || 'Describe what this workflow does...',
           category: workflowData.metadata.category || 'Custom',
         });
+
+        // Restore memory enhancement setting from metadata
+        if ('use_memory_enhancement' in workflowData.metadata) {
+          setIsMemoryEnhanced(workflowData.metadata.use_memory_enhancement || false);
+        }
       }
     }
   }, [workflowData, setNodes, setEdges]);
@@ -355,6 +371,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           complexity: 'medium' as const,
           estimatedTime: '30-60 minutes',
           tags: ['execution', 'temporary'],
+          use_memory_enhancement: isMemoryEnhanced,
           nodes: nodes.map(node => ({ ...node, selected: false, dragging: false })),
           edges: edges.map(edge => ({ ...edge, selected: false })),
         };
@@ -372,7 +389,8 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           edge_count: edges.length,
           initiated_at: new Date().toISOString()
         },
-        priority: 1
+        priority: 1,
+        use_memory_enhancement: isMemoryEnhanced
       });
 
       console.log('Workflow execution started:', execution);
@@ -392,7 +410,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     } finally {
       setIsRunning(false);
     }
-  }, [nodes, edges, workflowMetadata]);
+  }, [nodes, edges, workflowMetadata, isMemoryEnhanced]);
 
   const showSaveWorkflowDialog = useCallback(() => {
     // Initialize form with current workflow metadata
@@ -419,7 +437,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
       }
 
       // Determine complexity based on node count and edge complexity
-      let complexity = 'simple';
+      let complexity: 'simple' | 'medium' | 'advanced' = 'simple';
       if (nodes.length > 5 || edges.length > 7) {
         complexity = 'medium';
       }
@@ -446,6 +464,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
         complexity,
         estimatedTime,
         tags: [saveFormData.category, 'Custom', workflowMetadata.name !== 'Untitled Workflow' ? 'Named' : 'Untitled'],
+        use_memory_enhancement: isMemoryEnhanced,
         nodes: nodes.map(node => ({
           ...node,
           selected: false,
@@ -558,9 +577,9 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
         }
       }
     }
-  }, [saveFormData, nodes, edges, workflowMetadata]);
+  }, [saveFormData, nodes, edges, workflowMetadata, isMemoryEnhanced]);
 
-  const loadTemplate = useCallback((template: WorkflowTemplate) => {
+  const loadTemplate = useCallback((template: WorkflowTemplate | DatabaseWorkflowTemplate) => {
     console.log('Loading template:', template.name, `(${template.nodes?.length || 0} nodes, ${template.edges?.length || 0} edges)`);
     
     // Clear existing canvas first
@@ -573,9 +592,37 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
       description: template.description,
       category: template.category || 'Custom',
     });
-    
+
+    // Restore memory enhancement setting
+    if ('use_memory_enhancement' in template) {
+      setIsMemoryEnhanced(template.use_memory_enhancement || false);
+    }
+
+    // Extract nodes and edges from template - handle both direct and template_data formats
+    let templateNodes = template.nodes || [];
+    let templateEdges = template.edges || [];
+
+    // If nodes/edges are empty but template_data exists, use template_data
+    const dbTemplate = template as DatabaseWorkflowTemplate;
+    if (templateNodes.length === 0 && dbTemplate.template_data?.nodes) {
+      templateNodes = dbTemplate.template_data.nodes;
+    }
+    if (templateEdges.length === 0 && dbTemplate.template_data?.edges) {
+      templateEdges = dbTemplate.template_data.edges;
+    }
+
+    console.log('Template loading debug:', {
+      templateName: template.name,
+      directNodes: template.nodes?.length || 0,
+      directEdges: template.edges?.length || 0,
+      templateDataNodes: dbTemplate.template_data?.nodes?.length || 0,
+      templateDataEdges: dbTemplate.template_data?.edges?.length || 0,
+      usingNodes: templateNodes.length,
+      usingEdges: templateEdges.length
+    });
+
     // Validate and process nodes and edges
-    const processedNodes = (template.nodes || []).map((node, index) => {
+    const processedNodes = (templateNodes || []).map((node, index) => {
       // Ensure each node has required ReactFlow properties
       return {
         id: node.id || `node-${index}`,
@@ -593,7 +640,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
       };
     });
     
-    const processedEdges = (template.edges || []).map((edge, index) => {
+    const processedEdges = (templateEdges || []).map((edge, index) => {
       // Ensure each edge has required ReactFlow properties
       return {
         id: edge.id || `edge-${index}`,
@@ -755,6 +802,19 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Clear</span>
+              </button>
+
+              <button
+                onClick={() => setIsMemoryEnhanced(!isMemoryEnhanced)}
+                className={`flex items-center space-x-1 px-3 py-2 rounded-md transition-colors text-sm ${
+                  isMemoryEnhanced
+                    ? 'bg-purple-500 text-white hover:bg-purple-600'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+                title={isMemoryEnhanced ? 'Memory Enhancement: ON' : 'Memory Enhancement: OFF'}
+              >
+                <Brain className="w-4 h-4" />
+                <span>Memory Enhanced</span>
               </button>
             </div>
           </div>
@@ -1097,6 +1157,26 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
               rows={4}
               placeholder="Describe what this workflow does"
             />
+          </div>
+
+          <div>
+            <label className="flex items-center space-x-3">
+              <input
+                type="checkbox"
+                checked={isMemoryEnhanced}
+                onChange={(e) => setIsMemoryEnhanced(e.target.checked)}
+                className="rounded border-gray-300 text-fuschia-600 focus:ring-fuschia-500"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-700 flex items-center">
+                  <Brain className="w-4 h-4 mr-2" />
+                  Memory Enhanced Execution
+                </span>
+                <p className="text-xs text-gray-500 mt-1">
+                  Enable advanced memory capabilities for better context retention across workflow steps
+                </p>
+              </div>
+            </label>
           </div>
           
           <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">

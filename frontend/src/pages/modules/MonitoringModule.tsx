@@ -5,6 +5,7 @@ import { hasPermission } from '@/utils/roles';
 import { WorkflowExecutionVisualization } from '@/components/monitoring/WorkflowExecutionVisualization';
 import { AgentOrganizationVisualization } from '@/components/monitoring/AgentOrganizationVisualization';
 import { ThoughtsActionsVisualization, AgentThought } from '@/components/monitoring/ThoughtsActionsVisualization';
+import { GmailMonitor } from '@/components/monitoring/GmailMonitor';
 import { monitoringService, WorkflowExecution, AgentOrganization } from '@/services/monitoringService';
 import { websocketService, AgentThought as WSAgentThought } from '@/services/websocketService';
 import { 
@@ -284,7 +285,7 @@ export const MonitoringModule: React.FC = () => {
       {/* Content */}
       <div className="flex-1 flex">
         {/* List Panel */}
-        <div className={`${currentTab === 'thoughts' ? 'w-full' : 'w-1/2'} bg-white ${currentTab !== 'thoughts' ? 'border-r border-gray-200' : ''}`}>
+        <div className={`${currentTab === 'thoughts' || currentTab === 'gmail' ? 'w-full' : 'w-1/2'} bg-white ${currentTab !== 'thoughts' && currentTab !== 'gmail' ? 'border-r border-gray-200' : ''}`}>
           {currentTab === 'workflows' ? (
             <div className="p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -391,17 +392,21 @@ export const MonitoringModule: React.FC = () => {
             </div>
           ) : currentTab === 'thoughts' ? (
             <div className="h-full">
-              <ThoughtsActionsVisualization 
+              <ThoughtsActionsVisualization
                 thoughts={agentThoughts}
                 onClear={handleClearThoughts}
                 onRefresh={handleRefreshThoughts}
               />
             </div>
+          ) : currentTab === 'gmail' ? (
+            <div className="h-full">
+              <GmailMonitor />
+            </div>
           ) : null}
         </div>
 
-        {/* Detail Panel - Hidden for thoughts tab */}
-        {currentTab !== 'thoughts' && (
+        {/* Detail Panel - Hidden for thoughts and gmail tabs */}
+        {currentTab !== 'thoughts' && currentTab !== 'gmail' && (
           <div className="w-1/2 bg-gray-50">
             {currentTab === 'workflows' && selectedExecution ? (
               <WorkflowExecutionDetail execution={selectedExecution} />

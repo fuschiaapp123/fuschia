@@ -220,19 +220,54 @@ export const WorkflowTemplates: React.FC = () => {
   }, []);
 
   const handleUseTemplate = (template: WorkflowTemplate) => {
-    // Find the full template data from the service
-    const fullTemplate = templateService.getAllTemplates().find(t => t.name === template.name);
-    if (fullTemplate) {
+    // First try to find the full template data from the API templates (database)
+    const apiTemplate = apiTemplates.find(api => api.id === template.id);
+
+    if (apiTemplate) {
+      console.log('Using API template:', apiTemplate.name, 'with template_data:', apiTemplate.template_data);
+
+      // Extract nodes and edges from template_data
+      const nodes = apiTemplate.template_data?.nodes || [];
+      const edges = apiTemplate.template_data?.edges || [];
+
       // Set the workflow data in the app store
       setWorkflowData({
-        nodes: fullTemplate.nodes,
-        edges: fullTemplate.edges,
+        nodes: nodes,
+        edges: edges,
+        metadata: {
+          name: apiTemplate.name,
+          description: apiTemplate.description,
+          category: apiTemplate.category,
+          use_memory_enhancement: apiTemplate.use_memory_enhancement || false,
+          savedId: apiTemplate.id,
+          loadedFrom: 'database'
+        }
       });
-      
+
       // Switch to the designer tab
       setActiveTab('designer');
     } else {
-      alert('Template data not found. Please try again.');
+      // Fallback to local template service
+      const fullTemplate = templateService.getAllTemplates().find(t => t.name === template.name);
+      if (fullTemplate) {
+        // Set the workflow data in the app store
+        setWorkflowData({
+          nodes: fullTemplate.nodes,
+          edges: fullTemplate.edges,
+          metadata: {
+            name: fullTemplate.name,
+            description: fullTemplate.description,
+            category: fullTemplate.category,
+            use_memory_enhancement: fullTemplate.use_memory_enhancement || false,
+            loadedFrom: 'local'
+          }
+        });
+
+        // Switch to the designer tab
+        setActiveTab('designer');
+      } else {
+        alert('Template data not found. Please try again.');
+      }
     }
   };
 

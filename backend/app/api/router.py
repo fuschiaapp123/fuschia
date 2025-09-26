@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import auth, users, knowledge, chat, servicenow, workflows, workflow_execution, workflow_executions, agents, database, websocket, monitoring, mlflow_analytics, tools, test_human_loop, websocket_debug, system_tools, dspy_evaluation, graphiti_memory, mcp
+from app.api.endpoints import auth, users, knowledge, chat, servicenow, workflows, workflow_execution, workflow_executions, agents, database, websocket, monitoring, mlflow_analytics, tools, test_human_loop, websocket_debug, system_tools, dspy_evaluation, graphiti_memory, mcp, gmail_monitor
 
 api_router = APIRouter()
 
@@ -23,3 +23,4 @@ api_router.include_router(system_tools.router, tags=["system-tools"])
 api_router.include_router(dspy_evaluation.router, tags=["dspy-evaluation"])
 api_router.include_router(graphiti_memory.router, tags=["graphiti-memory"])
 api_router.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
+api_router.include_router(gmail_monitor.router, prefix="/gmail-monitor", tags=["gmail-monitor"])

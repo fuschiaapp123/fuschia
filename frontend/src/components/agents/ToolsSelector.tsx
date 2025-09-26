@@ -68,14 +68,15 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
 
   const fetchAvailableTools = async () => {
     try {
-      // Fetch both registry tools and system tools
-      const [registryResponse, systemResponse] = await Promise.all([
+      // Fetch registry tools, system tools, and MCP tools
+      const [registryResponse, systemResponse, mcpResponse] = await Promise.all([
         api.get('/tools/?status=active'),
-        api.get('/tools/system-tools/')
+        api.get('/tools/system-tools/'),
+        api.get('/mcp/tools/all').catch(() => ({ data: [] })) // Fallback if MCP tools fail
       ]);
-      
-      // Combine both types of tools
-      const allTools = [...registryResponse.data, ...systemResponse.data];
+
+      // Combine all types of tools
+      const allTools = [...registryResponse.data, ...systemResponse.data, ...mcpResponse.data];
       setAvailableTools(allTools);
     } catch (error) {
       console.error('Failed to fetch tools:', error);
@@ -140,12 +141,21 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
     if (!agentId) return;
 
     try {
-      // Check if this is a system tool
+      // Check tool type and use appropriate endpoint
       if (toolId.startsWith('system_')) {
         // Use the system tools endpoint
         await api.post(`/agents/${agentId}/tools/${toolId}/associate`, {
           enabled
         });
+      } else if (toolId.startsWith('mcp_')) {
+        // Use the MCP tools endpoint for MCP tools
+        await api.post(`/mcp/tools/execute`, {
+          tool_name: toolId,
+          arguments: {},
+          agent_id: agentId
+        });
+        // Note: For now, we're just executing the tool to test the connection
+        // In the future, this might need a specific association endpoint
       } else {
         // Use the regular tools registry endpoint
         await api.post(`/tools/agents/${agentId}/associate/${toolId}`, {
@@ -193,14 +203,14 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
           {/* Registry Tools */}
           <optgroup label="Registry Tools">
             {filteredTools
-              .filter(tool => !isToolSelected(tool, selectedTools) && (!tool.tool_type || tool.tool_type !== 'system'))
+              .filter(tool => !isToolSelected(tool, selectedTools) && (!tool.tool_type || (tool.tool_type !== 'system' && tool.tool_type !== 'mcp')))
               .map(tool => (
                 <option key={tool.id} value={tool.id}>
                   {tool.name} - {tool.description}
                 </option>
               ))}
           </optgroup>
-          
+
           {/* System Tools */}
           <optgroup label="System Tools">
             {filteredTools
@@ -208,6 +218,17 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
               .map(tool => (
                 <option key={tool.id} value={tool.id}>
                   🔧 {tool.name} - {tool.description}
+                </option>
+              ))}
+          </optgroup>
+
+          {/* MCP Tools */}
+          <optgroup label="MCP Tools">
+            {filteredTools
+              .filter(tool => !isToolSelected(tool, selectedTools) && tool.tool_type === 'mcp')
+              .map(tool => (
+                <option key={tool.id} value={tool.id}>
+                  🔌 {tool.name} - {tool.description}
                 </option>
               ))}
           </optgroup>
@@ -230,21 +251,26 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
                 toolId === `system_${t.name}`
               );
               const isSystemTool = tool?.tool_type === 'system';
+              const isMCPTool = tool?.tool_type === 'mcp';
               return tool ? (
                 <span
                   key={toolId}
                   className={`inline-flex items-center px-2 py-1 text-xs rounded ${
-                    isSystemTool 
-                      ? 'bg-blue-100 text-blue-700' 
+                    isSystemTool
+                      ? 'bg-blue-100 text-blue-700'
+                      : isMCPTool
+                      ? 'bg-green-100 text-green-700'
                       : 'bg-fuschia-100 text-fuschia-700'
                   }`}
                 >
-                  {isSystemTool ? '🔧 ' : ''}{tool.name}
+                  {isSystemTool ? '🔧 ' : isMCPTool ? '🔌 ' : ''}{tool.name}
                   <button
                     onClick={() => handleToolToggle(toolId)}
                     className={`ml-1 hover:opacity-75 ${
-                      isSystemTool 
-                        ? 'text-blue-500' 
+                      isSystemTool
+                        ? 'text-blue-500'
+                        : isMCPTool
+                        ? 'text-green-500'
                         : 'text-fuschia-500'
                     }`}
                   >

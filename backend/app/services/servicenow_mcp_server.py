@@ -596,6 +596,23 @@ class ServiceNowMCPServer:
         else:
             raise ValueError(f"Unknown resource URI format: {uri}")
 
+    def get_server_info(self) -> Dict[str, Any]:
+        """Get ServiceNow MCP server information"""
+        return {
+            "name": self.name,
+            "version": self.version,
+            "server_id": self.server_id,
+            "capabilities": {
+                "tools": True,
+                "resources": True,
+                "prompts": False
+            },
+            "is_running": self.is_running,
+            "tools_count": len(self.tools),
+            "resources_count": len(self.resources),
+            "instance_url": self.instance_url if self.instance_url else "Not configured"
+        }
+
 
 # Singleton instance
 servicenow_mcp_server = ServiceNowMCPServer()

@@ -8,10 +8,13 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import uuid
+import logging
 
 from app.services.mcp_server_service import mcp_server_manager
 from app.services.mcp_tool_bridge import mcp_tool_bridge
 from app.services.servicenow_mcp_server import servicenow_mcp_server
+from app.services.gmail_mcp_server import gmail_mcp_server
+from app.services.hcmpro_mcp_server import hcmpro_mcp_server
 from app.auth.auth import get_current_user
 from app.models.user import User
 from app.db.postgres import (
@@ -21,6 +24,7 @@ from app.db.postgres import (
 from sqlalchemy import select, and_, desc
 from sqlalchemy.orm.attributes import flag_modified
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -704,19 +708,241 @@ async def register_predefined_servers(
                 
                 await session.commit()
                 registered_servers.append(servicenow_server_config)
-        
-        # Initialize the tool bridge to include ServiceNow tools
+
+            # Register Gmail MCP server
+            gmail_server_config = {
+                "id": "gmail-api",
+                "name": "Gmail API Server",
+                "description": "Gmail API access through MCP protocol",
+                "command": "internal",
+                "args": [],
+                "capabilities": {
+                    "tools": True,
+                    "resources": True,
+                    "prompts": False
+                },
+                "auto_start": True,
+                "status": "active"
+            }
+
+            # Check if Gmail server already exists
+            existing_gmail = await session.execute(
+                select(MCPServerTable).where(MCPServerTable.id == "gmail-api")
+            )
+            if not existing_gmail.scalar_one_or_none():
+                # Create Gmail server entry
+                gmail_db_server = MCPServerTable(
+                    id="gmail-api",
+                    name="Gmail API Server",
+                    description="Gmail API access through MCP protocol",
+                    command="internal",
+                    args=[],
+                    capabilities={
+                        "tools": True,
+                        "resources": True,
+                        "prompts": False
+                    },
+                    status="active",
+                    auto_start=True,
+                    created_by=current_user.id,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                session.add(gmail_db_server)
+
+                # Initialize Gmail server
+                await gmail_mcp_server.initialize()
+
+                # Add Gmail tools to database
+                gmail_tools = await gmail_mcp_server.list_tools()
+                for tool in gmail_tools:
+                    tool_db_entry = MCPToolTable(
+                        id=str(uuid.uuid4()),
+                        server_id="gmail-api",
+                        tool_name=tool.get("name"),
+                        description=tool.get("description"),
+                        input_schema=tool.get("inputSchema", {}),
+                        is_active=True,
+                        categories=["gmail", "email", "api"],
+                        version="1.0.0",
+                        created_at=datetime.utcnow()
+                    )
+                    session.add(tool_db_entry)
+
+                # Add Gmail resources to database
+                gmail_resources = await gmail_mcp_server.list_resources()
+                for resource in gmail_resources:
+                    resource_db_entry = MCPResourceTable(
+                        id=str(uuid.uuid4()),
+                        server_id="gmail-api",
+                        uri=resource.get("uri"),
+                        name=resource.get("name"),
+                        description=resource.get("description"),
+                        mime_type=resource.get("mimeType", "application/json"),
+                        is_active=True,
+                        created_at=datetime.utcnow()
+                    )
+                    session.add(resource_db_entry)
+
+                await session.commit()
+                registered_servers.append(gmail_server_config)
+
+            # Register HCM Pro MCP server
+            hcmpro_server_config = {
+                "id": "hcmpro-api",
+                "name": "HCM Pro Job Offer API Server",
+                "description": "HCM Pro Job Offer API access through MCP protocol",
+                "command": "internal",
+                "args": [],
+                "capabilities": {
+                    "tools": True,
+                    "resources": True,
+                    "prompts": False
+                },
+                "auto_start": True,
+                "status": "active"
+            }
+
+            # Check if HCM Pro server already exists
+            existing_hcmpro = await session.execute(
+                select(MCPServerTable).where(MCPServerTable.id == "hcmpro-api")
+            )
+            if not existing_hcmpro.scalar_one_or_none():
+                # Create HCM Pro server entry
+                hcmpro_db_server = MCPServerTable(
+                    id="hcmpro-api",
+                    name="HCM Pro Job Offer API Server",
+                    description="HCM Pro Job Offer API access through MCP protocol",
+                    command="internal",
+                    args=[],
+                    capabilities={
+                        "tools": True,
+                        "resources": True,
+                        "prompts": False
+                    },
+                    status="active",
+                    auto_start=True,
+                    created_by=current_user.id,
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                session.add(hcmpro_db_server)
+
+                # Initialize HCM Pro server
+                await hcmpro_mcp_server.initialize()
+
+                # Add HCM Pro tools to database
+                hcmpro_tools = await hcmpro_mcp_server.list_tools()
+                for tool in hcmpro_tools:
+                    tool_db_entry = MCPToolTable(
+                        id=str(uuid.uuid4()),
+                        server_id="hcmpro-api",
+                        tool_name=tool.get("name"),
+                        description=tool.get("description"),
+                        input_schema=tool.get("inputSchema", {}),
+                        is_active=True,
+                        categories=["hcmpro", "hr", "job-offers", "api"],
+                        version="1.0.0",
+                        created_at=datetime.utcnow()
+                    )
+                    session.add(tool_db_entry)
+
+                # Add HCM Pro resources to database
+                hcmpro_resources = await hcmpro_mcp_server.list_resources()
+                for resource in hcmpro_resources:
+                    resource_db_entry = MCPResourceTable(
+                        id=str(uuid.uuid4()),
+                        server_id="hcmpro-api",
+                        uri=resource.get("uri"),
+                        name=resource.get("name"),
+                        description=resource.get("description"),
+                        mime_type=resource.get("mimeType", "application/json"),
+                        is_active=True,
+                        created_at=datetime.utcnow()
+                    )
+                    session.add(resource_db_entry)
+
+                await session.commit()
+                registered_servers.append(hcmpro_server_config)
+
+        # Initialize the tool bridge to include all tools
         await mcp_tool_bridge.initialize()
-        
+
         return {
             "message": f"Successfully registered {len(registered_servers)} predefined MCP servers",
             "servers": registered_servers,
-            "servicenow_tools_count": len(servicenow_tools),
-            "servicenow_resources_count": len(servicenow_resources)
+            "servicenow_tools_count": len(servicenow_tools) if 'servicenow_tools' in locals() else 0,
+            "servicenow_resources_count": len(servicenow_resources) if 'servicenow_resources' in locals() else 0,
+            "gmail_tools_count": len(gmail_tools) if 'gmail_tools' in locals() else 0,
+            "gmail_resources_count": len(gmail_resources) if 'gmail_resources' in locals() else 0,
+            "hcmpro_tools_count": len(hcmpro_tools) if 'hcmpro_tools' in locals() else 0,
+            "hcmpro_resources_count": len(hcmpro_resources) if 'hcmpro_resources' in locals() else 0
         }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to register predefined servers: {str(e)}")
+
+
+@router.get("/tools/all", response_model=List[dict])
+async def get_all_mcp_tools_for_selection(
+    current_user: User = Depends(get_current_user)
+):
+    """Get all MCP tools from all servers formatted for tool selection interface"""
+    try:
+        all_mcp_tools = []
+
+        # Directly test known working servers to avoid manager issues
+        known_servers = [
+            ("gmail-api", gmail_mcp_server, "gmail", ["mcp", "gmail", "email"]),
+            ("hcmpro-api", hcmpro_mcp_server, "hcmpro", ["mcp", "hcmpro", "hr", "job-offers"]),
+            ("servicenow-api", servicenow_mcp_server, "servicenow", ["mcp", "servicenow", "itsm"])
+        ]
+
+        for server_id, server, category_suffix, tags in known_servers:
+            try:
+                # Initialize server if not running
+                if not server.is_running:
+                    await server.initialize()
+
+                # Skip if still not running after initialization
+                if not server.is_running:
+                    continue
+
+                tools = await server.list_tools()
+                logger.info(f"Got {len(tools)} tools from {server_id}")
+
+                # Convert to format compatible with tool selector
+                for tool in tools:
+                    category = f"mcp_{category_suffix}"
+
+                    formatted_tool = {
+                        "id": f"mcp_{server_id}_{tool['name']}",
+                        "name": tool['name'],
+                        "description": tool.get('description', ''),
+                        "category": category,
+                        "status": "active",
+                        "parameters": [],  # MCP tools have dynamic parameters via inputSchema
+                        "tags": tags,
+                        "tool_type": "mcp",
+                        "version": "1.0.0",
+                        "requires_auth": True,
+                        "server_id": server_id,
+                        "input_schema": tool.get('inputSchema', {})
+                    }
+                    all_mcp_tools.append(formatted_tool)
+
+            except Exception as e:
+                logger.warning(f"Failed to get tools from MCP server '{server_id}': {e}")
+                continue
+
+        logger.info("Retrieved MCP tools for selection",
+                   count=len(all_mcp_tools),
+                   user_id=current_user.id)
+        return all_mcp_tools
+
+    except Exception as e:
+        logger.error("Failed to get MCP tools for selection", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get MCP tools: {str(e)}")
 
 
 @router.get("/health")
@@ -731,14 +957,22 @@ async def health_check():
         
         # Test ServiceNow server
         servicenow_status = "active" if servicenow_mcp_server.is_running else "inactive"
-        
+
+        # Test Gmail server
+        gmail_status = "active" if gmail_mcp_server.is_running else "inactive"
+
+        # Test HCM Pro server
+        hcmpro_status = "active" if hcmpro_mcp_server.is_running else "inactive"
+
         return {
             "status": "healthy",
             "components": {
                 "mcp_server_manager": "healthy",
                 "mcp_tool_bridge": "healthy",
                 "default_server": "healthy" if server_info.get('is_running') else "inactive",
-                "servicenow_server": servicenow_status
+                "servicenow_server": servicenow_status,
+                "gmail_server": gmail_status,
+                "hcmpro_server": hcmpro_status
             },
             "timestamp": datetime.utcnow().isoformat()
         }

@@ -85,16 +85,36 @@ class MCPToolBridge:
             # Initialize ServiceNow MCP server
             await servicenow_mcp_server.initialize()
             self.external_servers["servicenow"] = servicenow_mcp_server
-            
+
             # Add ServiceNow tools to mappings
             servicenow_tools = await servicenow_mcp_server.list_tools()
             for tool in servicenow_tools:
                 tool_name = tool.get("name")
                 if tool_name:
                     self.tool_mappings[tool_name] = f"servicenow:{tool_name}"
-            
+
             logger.info(f"Initialized ServiceNow MCP server with {len(servicenow_tools)} tools")
-            
+
+            # Initialize Gmail MCP server
+            try:
+                from app.services.gmail_mcp_server import gmail_mcp_server
+                await gmail_mcp_server.initialize()
+                self.external_servers["gmail"] = gmail_mcp_server
+
+                # Add Gmail tools to mappings
+                gmail_tools = await gmail_mcp_server.list_tools()
+                for tool in gmail_tools:
+                    tool_name = tool.get("name")
+                    if tool_name:
+                        self.tool_mappings[tool_name] = f"gmail:{tool_name}"
+
+                logger.info(f"Initialized Gmail MCP server with {len(gmail_tools)} tools")
+
+            except ImportError:
+                logger.warning("Gmail MCP server not available - missing dependencies")
+            except Exception as gmail_error:
+                logger.error(f"Error initializing Gmail MCP server: {gmail_error}")
+
         except Exception as e:
             logger.error(f"Error initializing external servers: {e}")
     
@@ -180,6 +200,8 @@ class MCPToolBridge:
             
             if fuschia_tool_id.startswith('servicenow:'):
                 result = await self._execute_servicenow_tool(tool_name, arguments)
+            elif fuschia_tool_id.startswith('gmail:'):
+                result = await self._execute_gmail_tool(tool_name, arguments)
             elif fuschia_tool_id.startswith('system_'):
                 result = await self._execute_system_tool(fuschia_tool_id, arguments)
             elif fuschia_tool_id.startswith('agent_'):
@@ -207,20 +229,45 @@ class MCPToolBridge:
             servicenow_server = self.external_servers.get("servicenow")
             if not servicenow_server:
                 raise ValueError("ServiceNow MCP server not available")
-            
+
             result = await servicenow_server.call_tool(tool_name, arguments)
-            
+
             return {
                 "type": "servicenow_tool_result",
                 "tool_name": tool_name,
                 "result": result,
                 "status": "success"
             }
-            
+
         except Exception as e:
             logger.error(f"Error executing ServiceNow tool '{tool_name}': {e}")
             return {
                 "type": "servicenow_tool_result",
+                "tool_name": tool_name,
+                "error": str(e),
+                "status": "error"
+            }
+
+    async def _execute_gmail_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a Gmail MCP tool"""
+        try:
+            gmail_server = self.external_servers.get("gmail")
+            if not gmail_server:
+                raise ValueError("Gmail MCP server not available")
+
+            result = await gmail_server.call_tool(tool_name, arguments)
+
+            return {
+                "type": "gmail_tool_result",
+                "tool_name": tool_name,
+                "result": result,
+                "status": "success"
+            }
+
+        except Exception as e:
+            logger.error(f"Error executing Gmail tool '{tool_name}': {e}")
+            return {
+                "type": "gmail_tool_result",
                 "tool_name": tool_name,
                 "error": str(e),
                 "status": "error"
