@@ -14,7 +14,8 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.db.neo4j import neo4j_driver
-from app.services.user_service import UserService
+from app.db.postgres import init_db as init_postgres_db
+from app.services.postgres_user_service import PostgresUserService
 from app.services.knowledge_service import KnowledgeService
 from app.models.user import UserCreate, UserRole
 from app.models.knowledge import KnowledgeNodeCreate, KnowledgeRelationshipCreate, NodeType, RelationshipType
@@ -22,32 +23,36 @@ from app.models.knowledge import KnowledgeNodeCreate, KnowledgeRelationshipCreat
 
 async def create_sample_users():
     """Create sample users for testing"""
-    user_service = UserService()
+    user_service = PostgresUserService()
     
     sample_users = [
         {
-            "email": "admin@fuschia.io",
-            "full_name": "System Administrator",
+            "username": "admin",
+            "email": "admin@fuschia.com",
             "password": "admin123",
-            "role": UserRole.ADMIN
+            "role": UserRole.ADMIN,
+            "full_name": "System Administrator"
         },
         {
+            "username": "manager",
             "email": "manager@fuschia.io",
-            "full_name": "Process Manager",
             "password": "manager123",
-            "role": UserRole.MANAGER
+            "role": UserRole.MANAGER,
+            "full_name": "Process Manager"
         },
         {
+            "username": "analyst",
             "email": "analyst@fuschia.io",
-            "full_name": "Business Analyst",
             "password": "analyst123",
-            "role": UserRole.ANALYST
+            "role": UserRole.ANALYST,
+            "full_name": "Business Analyst"
         },
         {
+            "username": "user",
             "email": "user@fuschia.io",
-            "full_name": "End User",
-            "password": "user123",
-            "role": UserRole.USER
+            "password": "userpassword123",
+            "role": UserRole.USER,
+            "full_name": "End User"
         }
     ]
     
@@ -97,41 +102,38 @@ async def create_sample_knowledge_graph():
     
     created_nodes = []
     
-    # Create department nodes
+    # Create department nodes (using ENTITY type)
     for dept in departments:
         node = await knowledge_service.create_node(
             KnowledgeNodeCreate(
                 name=dept["name"],
-                type=NodeType.DEPARTMENT,
-                description=dept["description"],
+                type=NodeType.ENTITY,
                 properties={"category": "organizational"}
             ),
             admin_user_id
         )
         created_nodes.append(node)
         print(f"Created department node: {node.name}")
-    
-    # Create system nodes
+
+    # Create system nodes (using ENTITY type)
     for system in systems:
         node = await knowledge_service.create_node(
             KnowledgeNodeCreate(
                 name=system["name"],
-                type=NodeType.SYSTEM,
-                description=system["description"],
+                type=NodeType.ENTITY,
                 properties={"category": "technology", "status": "active"}
             ),
             admin_user_id
         )
         created_nodes.append(node)
         print(f"Created system node: {node.name}")
-    
+
     # Create process nodes
     for process in processes:
         node = await knowledge_service.create_node(
             KnowledgeNodeCreate(
                 name=process["name"],
                 type=NodeType.PROCESS,
-                description=process["description"],
                 properties={"category": "business_process", "automation_level": "manual"}
             ),
             admin_user_id
@@ -141,26 +143,26 @@ async def create_sample_knowledge_graph():
     
     # Create sample relationships
     relationships = [
-        # HR manages Employee Onboarding
-        (0, 5, RelationshipType.MANAGES),
-        # IT Operations manages Incident Management
-        (1, 6, RelationshipType.MANAGES),
-        # ServiceNow supports Incident Management
-        (5, 6, RelationshipType.REQUIRES),
-        # Salesforce supports Lead Qualification
-        (6, 8, RelationshipType.REQUIRES),
-        # Finance manages Invoice Processing
-        (2, 7, RelationshipType.MANAGES),
+        # HR relates to Employee Onboarding
+        (0, 5, RelationshipType.RELATED_TO),
+        # IT Operations relates to Incident Management
+        (1, 6, RelationshipType.RELATED_TO),
+        # ServiceNow depends on Incident Management
+        (5, 6, RelationshipType.DEPENDS_ON),
+        # Salesforce depends on Lead Qualification
+        (6, 8, RelationshipType.DEPENDS_ON),
+        # Finance relates to Invoice Processing
+        (2, 7, RelationshipType.RELATED_TO),
     ]
-    
+
     for from_idx, to_idx, rel_type in relationships:
         if from_idx < len(created_nodes) and to_idx < len(created_nodes):
             try:
                 rel = await knowledge_service.create_relationship(
                     KnowledgeRelationshipCreate(
-                        from_node_id=created_nodes[from_idx].id,
-                        to_node_id=created_nodes[to_idx].id,
-                        type=rel_type,
+                        source_id=created_nodes[from_idx].id,
+                        target_id=created_nodes[to_idx].id,
+                        relationship_type=rel_type,
                         properties={"created_by_script": True}
                     ),
                     admin_user_id
@@ -211,38 +213,43 @@ async def create_constraints():
 async def main():
     """Main initialization function"""
     print("Starting Fuschia database initialization...")
-    
+
     try:
-        # Connect to database
+        # Initialize PostgreSQL database
+        print("Initializing PostgreSQL database...")
+        await init_postgres_db()
+        print("✅ PostgreSQL database initialized")
+
+        # Connect to Neo4j database
         await neo4j_driver.connect()
         print("Connected to Neo4j database")
-        
+
         # Clear existing data (optional, comment out for production)
         await clear_database()
-        
+
         # Create constraints
         await create_constraints()
-        
+
         # Create sample data
         print("\nCreating sample users...")
         users = await create_sample_users()
-        
+
         print(f"\nCreating sample knowledge graph...")
         nodes = await create_sample_knowledge_graph()
-        
+
         print(f"\n✅ Database initialization completed successfully!")
         print(f"Created {len(users)} users and {len(nodes)} knowledge nodes")
-        
+
         print("\nSample user credentials:")
-        print("Admin: admin@fuschia.io / admin123")
+        print("Admin: admin@fuschia.com / admin123")
         print("Manager: manager@fuschia.io / manager123")
         print("Analyst: analyst@fuschia.io / analyst123")
         print("User: user@fuschia.io / user123")
-        
+
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")
         raise
-    
+
     finally:
         await neo4j_driver.close()
         print("Database connection closed")

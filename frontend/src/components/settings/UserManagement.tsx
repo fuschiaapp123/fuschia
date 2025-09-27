@@ -27,6 +27,12 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [roleCounts, setRoleCounts] = useState<Record<string, number>>({});
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
+  const [passwordResetData, setPasswordResetData] = useState({
+    new_password: '',
+    confirm_password: '',
+  });
 
   const { user: currentUser } = useAuthStore();
 
@@ -137,6 +143,44 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to deactivate user');
     }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordUser) return;
+
+    if (passwordResetData.new_password !== passwordResetData.confirm_password) {
+      setError('New password and confirm password do not match');
+      return;
+    }
+
+    if (passwordResetData.new_password.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
+    try {
+      const result = await userService.adminResetPassword(resetPasswordUser.id, passwordResetData);
+      setShowPasswordReset(false);
+      setResetPasswordUser(null);
+      setPasswordResetData({ new_password: '', confirm_password: '' });
+      setError(null);
+      alert(`Password reset successfully for ${result.user_email}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset password');
+    }
+  };
+
+  const startPasswordReset = (user: User) => {
+    setResetPasswordUser(user);
+    setPasswordResetData({ new_password: '', confirm_password: '' });
+    setShowPasswordReset(true);
+  };
+
+  const cancelPasswordReset = () => {
+    setShowPasswordReset(false);
+    setResetPasswordUser(null);
+    setPasswordResetData({ new_password: '', confirm_password: '' });
   };
 
   const startEdit = (user: User) => {
@@ -308,6 +352,84 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
         </div>
       )}
 
+      {/* Password Reset Modal */}
+      {showPasswordReset && resetPasswordUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">
+                Reset Password for {resetPasswordUser.full_name}
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                {resetPasswordUser.email}
+              </p>
+            </div>
+
+            <form onSubmit={handlePasswordReset} className="px-6 py-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={passwordResetData.new_password}
+                    onChange={(e) => setPasswordResetData({
+                      ...passwordResetData,
+                      new_password: e.target.value
+                    })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    placeholder="Enter new password (min 8 characters)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={passwordResetData.confirm_password}
+                    onChange={(e) => setPasswordResetData({
+                      ...passwordResetData,
+                      confirm_password: e.target.value
+                    })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    placeholder="Confirm new password"
+                  />
+                </div>
+
+                {passwordResetData.new_password && passwordResetData.confirm_password &&
+                 passwordResetData.new_password !== passwordResetData.confirm_password && (
+                  <p className="text-sm text-red-600">Passwords do not match</p>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={cancelPasswordReset}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordResetData.new_password !== passwordResetData.confirm_password}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  Reset Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Users Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="overflow-x-auto">
@@ -355,6 +477,14 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                           >
                             Edit
                           </button>
+                          {user.id !== currentUser?.id && (
+                            <button
+                              onClick={() => startPasswordReset(user)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              Reset Password
+                            </button>
+                          )}
                           {user.is_active && user.id !== currentUser?.id && (
                             <button
                               onClick={() => handleDeactivateUser(user.id)}

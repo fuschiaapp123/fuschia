@@ -458,7 +458,7 @@ pnpm-lock.yaml
 *.model
 *.pkl
 *.joblib
-models/
+# models/
 
 # Large data files
 *.csv

@@ -1,6 +1,6 @@
 import { User, UserCreate, UserUpdate } from '@/types';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = 'http://localhost:8001/api/v1';
 
 class UserService {
   private getAuthHeaders(): Record<string, string> {
@@ -170,6 +170,24 @@ class UserService {
     if (!response.ok) {
       const error = await response.text();
       throw new Error(`Failed to change password: ${error}`);
+    }
+
+    return response.json();
+  }
+
+  async adminResetPassword(userId: string, passwordData: {
+    new_password: string;
+    confirm_password: string;
+  }): Promise<{ message: string; user_email: string }> {
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/reset-password`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(passwordData),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to reset password: ${error}`);
     }
 
     return response.json();

@@ -40,12 +40,11 @@ class PostgresUserService:
                 
                 return User(
                     id=db_user.id,
+                    username=db_user.email.split('@')[0],  # Use email prefix as username
                     email=db_user.email,
-                    full_name=db_user.full_name,
                     role=UserRole(db_user.role) if isinstance(db_user.role, str) else db_user.role,
                     is_active=db_user.is_active,
-                    created_at=db_user.created_at,
-                    updated_at=db_user.updated_at
+                    created_at=db_user.created_at
                 )
                 
             except IntegrityError as e:
@@ -74,8 +73,7 @@ class PostgresUserService:
                         role=UserRole(db_user.role) if isinstance(db_user.role, str) else db_user.role,
                         is_active=db_user.is_active,
                         hashed_password=db_user.hashed_password,
-                        created_at=db_user.created_at,
-                        updated_at=db_user.updated_at
+                        created_at=db_user.created_at
                     )
                 return None
                 
@@ -95,6 +93,7 @@ class PostgresUserService:
                 if db_user:
                     return User(
                         id=db_user.id,
+                        username=db_user.email.split('@')[0],
                         email=db_user.email,
                         full_name=db_user.full_name,
                         role=UserRole(db_user.role) if isinstance(db_user.role, str) else db_user.role,
@@ -161,6 +160,7 @@ class PostgresUserService:
                     
                     return User(
                         id=db_user.id,
+                        username=db_user.email.split('@')[0],
                         email=db_user.email,
                         full_name=db_user.full_name,
                         role=UserRole(db_user.role) if isinstance(db_user.role, str) else db_user.role,
@@ -219,6 +219,7 @@ class PostgresUserService:
                 return [
                     User(
                         id=db_user.id,
+                        username=db_user.email.split('@')[0],
                         email=db_user.email,
                         full_name=db_user.full_name,
                         role=UserRole(db_user.role) if isinstance(db_user.role, str) else db_user.role,
@@ -249,6 +250,7 @@ class PostgresUserService:
                 return [
                     User(
                         id=db_user.id,
+                        username=db_user.email.split('@')[0],
                         email=db_user.email,
                         full_name=db_user.full_name,
                         role=UserRole(db_user.role) if isinstance(db_user.role, str) else db_user.role,
@@ -284,7 +286,8 @@ class PostgresUserService:
                 
                 role_counts = {}
                 for role, count in result.all():
-                    role_counts[role.value] = count
+                    # role is already a string from the database
+                    role_counts[role] = count
                 
                 return role_counts
                 
@@ -335,6 +338,36 @@ class PostgresUserService:
             except Exception as e:
                 await session.rollback()
                 logger.error("Password change failed", user_id=user_id, error=str(e))
+                return False
+
+    async def admin_reset_password(self, user_id: str, new_password: str) -> bool:
+        """Admin-only password reset without requiring current password"""
+        async with AsyncSessionLocal() as session:
+            try:
+                # Hash new password
+                new_hashed_password = get_password_hash(new_password)
+
+                # Update password
+                result = await session.execute(
+                    update(UserTable)
+                    .where(UserTable.id == user_id)
+                    .values(
+                        hashed_password=new_hashed_password,
+                        updated_at=datetime.utcnow()
+                    )
+                )
+
+                if result.rowcount > 0:
+                    await session.commit()
+                    logger.info("Admin password reset successful", user_id=user_id)
+                    return True
+                else:
+                    logger.warning("Admin password reset failed - user not found", user_id=user_id)
+                    return False
+
+            except Exception as e:
+                await session.rollback()
+                logger.error("Admin password reset failed", user_id=user_id, error=str(e))
                 return False
 
 

@@ -8,7 +8,7 @@ from app.db.neo4j import neo4j_driver
 from app.models.knowledge import (
     KnowledgeNode, KnowledgeNodeCreate, KnowledgeNodeUpdate,
     KnowledgeRelationship, KnowledgeRelationshipCreate,
-    KnowledgeGraph, CypherQueryResponse
+    KnowledgeGraph, CypherQueryResponse, NodeType, RelationshipType
 )
 
 logger = structlog.get_logger()
@@ -64,26 +64,35 @@ class KnowledgeService:
         RETURN n
         """
         
+        # Convert properties to JSON string for Neo4j storage
+        properties_json = str(node_create.properties) if node_create.properties else "{}"
+
         parameters = {
             "id": node_id,
             "name": node_create.name,
-            "type": node_create.type,
-            "description": node_create.description,
-            "properties": node_create.properties,
+            "type": node_create.type.value,
+            "description": getattr(node_create, 'description', ''),
+            "properties": properties_json,
             "created_by": created_by
         }
         
         result = await neo4j_driver.execute_query(query, parameters)
         if result:
             node_data = result[0]["n"]
+
+            # Convert properties from string back to dict
+            try:
+                import ast
+                properties = ast.literal_eval(node_data["properties"]) if node_data["properties"] != "{}" else {}
+            except:
+                properties = {}
+
             return KnowledgeNode(
                 id=node_data["id"],
                 name=node_data["name"],
-                type=node_data["type"],
-                description=node_data["description"],
-                properties=node_data["properties"],
-                created_at=node_data["created_at"],
-                created_by=node_data["created_by"]
+                node_type=NodeType(node_data["type"]),
+                properties=properties,
+                created_at=convert_neo4j_value(node_data["created_at"])
             )
         raise Exception("Failed to create knowledge node")
     
@@ -96,15 +105,20 @@ class KnowledgeService:
         result = await neo4j_driver.execute_query(query, {"node_id": node_id})
         if result:
             node_data = result[0]["n"]
+
+            # Convert properties from string back to dict
+            try:
+                import ast
+                properties = ast.literal_eval(node_data["properties"]) if node_data["properties"] != "{}" else {}
+            except:
+                properties = {}
+
             return KnowledgeNode(
                 id=node_data["id"],
                 name=node_data["name"],
-                type=node_data["type"],
-                description=node_data["description"],
-                properties=node_data["properties"],
-                created_at=node_data["created_at"],
-                created_by=node_data["created_by"],
-                updated_at=node_data.get("updated_at")
+                node_type=NodeType(node_data["type"]),
+                properties=properties,
+                created_at=convert_neo4j_value(node_data["created_at"])
             )
         return None
     
@@ -116,9 +130,9 @@ class KnowledgeService:
             update_fields.append("n.name = $name")
             parameters["name"] = node_update.name
         
-        if node_update.type is not None:
+        if node_update.node_type is not None:
             update_fields.append("n.type = $type")
-            parameters["type"] = node_update.type
+            parameters["type"] = node_update.node_type.value
         
         if node_update.description is not None:
             update_fields.append("n.description = $description")
@@ -179,28 +193,36 @@ class KnowledgeService:
         RETURN r
         """
         
+        # Convert properties to JSON string for Neo4j storage
+        properties_json = str(rel_create.properties) if rel_create.properties else "{}"
+
         parameters = {
             "id": rel_id,
-            "from_node_id": rel_create.from_node_id,
-            "to_node_id": rel_create.to_node_id,
-            "type": rel_create.type,
-            "properties": rel_create.properties,
-            "weight": rel_create.weight,
+            "from_node_id": rel_create.source_id,
+            "to_node_id": rel_create.target_id,
+            "type": rel_create.relationship_type.value,
+            "properties": properties_json,
+            "weight": getattr(rel_create, 'weight', 1.0),
             "created_by": created_by
         }
         
         result = await neo4j_driver.execute_query(query, parameters)
         if result:
             rel_data = result[0]["r"]
+            # Convert properties from string back to dict
+            try:
+                import ast
+                properties = ast.literal_eval(rel_data["properties"]) if rel_data["properties"] != "{}" else {}
+            except:
+                properties = {}
+
             return KnowledgeRelationship(
                 id=rel_data["id"],
-                from_node_id=rel_create.from_node_id,
-                to_node_id=rel_create.to_node_id,
-                type=rel_data["type"],
-                properties=rel_data["properties"],
-                weight=rel_data["weight"],
-                created_at=rel_data["created_at"],
-                created_by=rel_data["created_by"]
+                source_id=rel_create.source_id,
+                target_id=rel_create.target_id,
+                relationship_type=RelationshipType(rel_data["type"]),
+                properties=properties,
+                created_at=convert_neo4j_value(rel_data["created_at"])
             )
         raise Exception("Failed to create relationship")
     
@@ -237,15 +259,20 @@ class KnowledgeService:
         relationships = []
         for record in relationships_result:
             rel_data = record["r"]
+            # Convert properties from string back to dict
+            try:
+                import ast
+                properties = ast.literal_eval(rel_data["properties"]) if rel_data["properties"] != "{}" else {}
+            except:
+                properties = {}
+
             relationships.append(KnowledgeRelationship(
                 id=rel_data["id"],
-                from_node_id=record["from_node_id"],
-                to_node_id=record["to_node_id"],
-                type=rel_data["type"],
-                properties=rel_data["properties"],
-                weight=rel_data["weight"],
-                created_at=rel_data["created_at"],
-                created_by=rel_data["created_by"]
+                source_id=record["from_node_id"],
+                target_id=record["to_node_id"],
+                relationship_type=RelationshipType(rel_data["type"]),
+                properties=properties,
+                created_at=convert_neo4j_value(rel_data["created_at"])
             ))
         
         return KnowledgeGraph(nodes=nodes, relationships=relationships)

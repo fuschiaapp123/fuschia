@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List
 
-from app.models.user import User, UserCreate, UserUpdate, UserRole, PasswordChange
+from app.models.user import User, UserCreate, UserUpdate, UserRole, PasswordChange, AdminPasswordReset
 from app.services.postgres_user_service import postgres_user_service
 from app.auth.auth import get_current_active_user
 
@@ -283,11 +283,69 @@ async def change_password(
             )
         
         return {"message": "Password changed successfully"}
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while changing password"
+        )
+
+
+@router.post("/{user_id}/reset-password")
+async def admin_reset_password(
+    user_id: str,
+    password_data: AdminPasswordReset,
+    current_user: User = Depends(require_admin_or_manager)
+):
+    """Admin/Manager reset password for any user"""
+    # Only admins can reset other admin passwords
+    if current_user.role != UserRole.ADMIN:
+        target_user = await postgres_user_service.get_user_by_id(user_id)
+        if target_user and target_user.role == UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admins can reset admin passwords"
+            )
+
+    # Validate that new password and confirm password match
+    if password_data.new_password != password_data.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password and confirm password do not match"
+        )
+
+    try:
+        # Check if target user exists
+        target_user = await postgres_user_service.get_user_by_id(user_id)
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        # Reset the password
+        success = await postgres_user_service.admin_reset_password(
+            user_id,
+            password_data.new_password
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to reset password"
+            )
+
+        return {
+            "message": f"Password reset successfully for user {target_user.email}",
+            "user_email": target_user.email
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while resetting password"
         )
 
 
