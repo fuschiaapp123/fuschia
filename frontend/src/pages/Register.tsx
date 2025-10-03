@@ -108,8 +108,15 @@ export const Register: React.FC = () => {
 
       const { access_token } = loginResponse.data;
 
-      // Update auth store
-      login(registerResponse.data, access_token);
+      // Get user info after login
+      const userResponse = await api.get('/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${access_token}`
+        }
+      });
+
+      // Update auth store with correct user data
+      login(userResponse.data, access_token);
       
       setTimeout(() => {
         navigate('/dashboard');

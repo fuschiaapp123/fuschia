@@ -43,7 +43,7 @@ export const Login: React.FC = () => {
       const { access_token } = response.data;
 
       // Get user info
-      const userResponse = await api.get('/users/me', {
+      const userResponse = await api.get('/auth/me', {
         headers: {
           'Authorization': `Bearer ${access_token}`
         }
