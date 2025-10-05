@@ -777,7 +777,12 @@ class ToolRegistryService:
             tools = self.get_agent_tools(agent_id)
         else:
             tools = self.get_tools(status=ToolStatus.ACTIVE)
-        
+
+        # Debug: Log all tool names being returned
+        self.logger.debug(f"🔧 DSPy Tools - Retrieved {len(tools)} tools:")
+        for tool in tools:
+            self.logger.debug(f"🔧   Tool: '{tool.name}' (ID: {tool.id}, Type: {getattr(tool, 'tool_type', 'unknown')})")
+
         dspy_tools = []
         for tool in tools:
             tool_spec = {

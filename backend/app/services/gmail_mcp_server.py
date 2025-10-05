@@ -483,6 +483,10 @@ class GmailMCPServer:
 
             result = self.service.users().messages().list(userId='me', **query_params).execute()
 
+            # Debug logging
+            logger.debug(f"Gmail API list_messages raw result: {result}")
+            logger.debug(f"Query params used: {query_params}")
+
             messages = result.get('messages', [])
 
             # Get basic info for each message
@@ -536,9 +540,10 @@ class GmailMCPServer:
                 "success": True,
                 "data": {
                     "id": message["id"],
-                    "thread_id": message.get("threadId"),
-                    "label_ids": message.get("labelIds", []),
-                    "snippet": message.get("snippet")
+                    "threadId": message.get("threadId"),
+                    "labelIds": message.get("labelIds", []),
+                    "snippet": message.get("snippet"),
+                    "internalDate": message.get("internalDate")
                 }
             }
 
@@ -547,6 +552,7 @@ class GmailMCPServer:
                 headers = {h["name"]: h["value"] for h in payload.get("headers", [])}
 
                 result["data"].update({
+                    "payload": payload,
                     "headers": headers,
                     "from": headers.get("From"),
                     "to": headers.get("To"),

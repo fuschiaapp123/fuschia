@@ -915,9 +915,12 @@ async def get_all_mcp_tools_for_selection(
                 for tool in tools:
                     category = f"mcp_{category_suffix}"
 
+                    # Use the original tool name from MCP server, not the constructed ID
+                    original_tool_name = tool['name']
+
                     formatted_tool = {
-                        "id": f"mcp_{server_id}_{tool['name']}",
-                        "name": tool['name'],
+                        "id": f"mcp_{server_id}_{original_tool_name}",
+                        "name": original_tool_name,  # ✅ FIX: Use original tool name
                         "description": tool.get('description', ''),
                         "category": category,
                         "status": "active",

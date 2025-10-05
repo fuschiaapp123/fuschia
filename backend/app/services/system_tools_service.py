@@ -399,29 +399,45 @@ class MCPIntegrationTool(BaseSystemTool):
             dependencies=["httpx"]
         ))
         
-        self.mcp_endpoints = {
-            "knowledge": os.getenv('MCP_KNOWLEDGE_ENDPOINT', 'http://localhost:8001/mcp'),
-            "tools": os.getenv('MCP_TOOLS_ENDPOINT', 'http://localhost:8002/mcp'),
-            "context": os.getenv('MCP_CONTEXT_ENDPOINT', 'http://localhost:8003/mcp')
-        }
+        # Instead of HTTP endpoints, directly use the MCP servers within the application
+        self.mcp_servers = {}
     
     async def initialize(self) -> bool:
-        """Initialize MCP connections"""
+        """Initialize MCP connections by directly importing available MCP servers"""
         try:
-            # Test connectivity to MCP services
-            import httpx
-            async with httpx.AsyncClient() as client:
-                for service, endpoint in self.mcp_endpoints.items():
-                    try:
-                        response = await client.get(f"{endpoint}/health", timeout=5.0)
-                        if response.status_code == 200:
-                            self.logger.info(f"MCP {service} service connected", endpoint=endpoint)
-                    except Exception as e:
-                        self.logger.warning(f"MCP {service} service not available", endpoint=endpoint, error=str(e))
-            
+            self.available_services = {}
+
+            # Import and register available MCP servers
+            try:
+                from app.services.gmail_mcp_server import gmail_mcp_server
+                if gmail_mcp_server.is_running:
+                    self.mcp_servers["gmail"] = gmail_mcp_server
+                    self.available_services["gmail"] = "direct"
+                    self.logger.info("MCP Gmail service connected (direct)")
+                else:
+                    self.logger.debug("Gmail MCP server not running")
+            except ImportError:
+                self.logger.debug("Gmail MCP server not available")
+
+            try:
+                from app.services.hcmpro_mcp_server import hcmpro_mcp_server
+                if hcmpro_mcp_server.is_running:
+                    self.mcp_servers["hcmpro"] = hcmpro_mcp_server
+                    self.available_services["hcmpro"] = "direct"
+                    self.logger.info("MCP HCMPro service connected (direct)")
+                else:
+                    self.logger.debug("HCMPro MCP server not running")
+            except ImportError:
+                self.logger.debug("HCMPro MCP server not available")
+
+            # Initialize even if no services are available (graceful degradation)
             self.initialized = True
+            if self.available_services:
+                self.logger.info(f"MCP Integration Tool initialized with {len(self.available_services)} direct services", services=list(self.available_services.keys()))
+            else:
+                self.logger.info("MCP Integration Tool initialized with no direct services (will use fallback)")
             return True
-            
+
         except Exception as e:
             self.logger.error("Failed to initialize MCP Integration Tool", error=str(e))
             return False
@@ -429,43 +445,86 @@ class MCPIntegrationTool(BaseSystemTool):
     async def execute(self, service: str, method: str, parameters: Dict[str, Any] = None) -> str:
         """Call an MCP service with given method and parameters"""
         try:
-            if service not in self.mcp_endpoints:
-                return f"Unknown MCP service: {service}. Available: {list(self.mcp_endpoints.keys())}"
+            if not hasattr(self, 'mcp_servers'):
+                return "MCP Integration Tool not properly initialized"
+            service = service.split('_')[0]  # Extract base service name
+            service = service.lower()
             
-            endpoint = self.mcp_endpoints[service]
+
+            # Check if the service is actually available
+            if not hasattr(self, 'available_services') or service not in self.available_services:
+                # Provide fallback for knowledge service
+                if service == "knowledge" and method == "search":
+                    return await self._fallback_knowledge_search(parameters or {})
+                else:
+                    available_services = list(getattr(self, 'available_services', {}).keys())
+                    return f"MCP {service} service is not available. Available services: {available_services}"
+
+            # Get the direct MCP server instance
+            mcp_server = self.mcp_servers.get(service)
+            if not mcp_server:
+                return f"MCP {service} server instance not found"
+
             if parameters is None:
                 parameters = {}
-            
-            import httpx
-            async with httpx.AsyncClient() as client:
-                payload = {
-                    "method": method,
-                    "parameters": parameters,
-                    "id": str(uuid.uuid4()),
-                    "jsonrpc": "2.0"
-                }
-                
-                response = await client.post(
-                    f"{endpoint}/call", 
-                    json=payload,
-                    timeout=30.0
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    if "result" in result:
-                        return json.dumps(result["result"], indent=2)
-                    elif "error" in result:
-                        return f"MCP Error: {result['error']}"
-                    else:
-                        return "MCP call completed but no result returned"
+            self.logger.debug("MCP service call", service=service, method=method, parameters=parameters)    
+
+            # Call the MCP server directly based on the method
+            if method == "search" and service == "gmail":
+                # Gmail search functionality
+                result = await mcp_server.call_tool("gmail_list_messages", parameters)
+                return json.dumps(result, indent=2)
+            elif method == "send_message" and service == "gmail":
+                # Gmail send functionality
+                result = await mcp_server.call_tool("gmail_send_message", parameters)
+                return json.dumps(result, indent=2)
+            elif method == "list_job_offers" and service == "hcmpro":
+                # HCMPro list job offers functionality
+                self.logger.debug("Calling HCMPro list_job_offers", parameters=parameters)
+                result = await mcp_server.call_tool("hcmpro_list_job_offers", parameters)
+                return json.dumps(result, indent=2)
+            elif method == "get_job_offer_record" and service == "hcmpro":
+                # HCMPro search job offer by candidate name/email
+                self.logger.debug("Calling HCMPro search_job_offers_by_candidate", parameters=parameters)
+                # Map employee_name to candidate_name for backward compatibility
+                if "employee_name" in parameters:
+                    parameters["candidate_name"] = parameters.pop("employee_name")
+                result = await mcp_server.call_tool("hcmpro_search_job_offers_by_candidate", parameters)
+                return json.dumps(result, indent=2)
+            else:
+                # Generic tool call - try to map method to tool name
+                tool_name = f"{service}_{method}"
+                if hasattr(mcp_server, 'call_tool'):
+                    result = await mcp_server.call_tool(tool_name, parameters)
+                    return json.dumps(result, indent=2)
                 else:
-                    return f"MCP service call failed with status {response.status_code}"
-                    
+                    return f"Method '{method}' not supported for service '{service}'"
+
         except Exception as e:
             error_msg = f"MCP service call failed: {str(e)}"
             self.logger.error("MCP execution failed", service=service, method=method, error=str(e))
             return error_msg
+
+    async def _fallback_knowledge_search(self, parameters: Dict[str, Any]) -> str:
+        """Fallback knowledge search using the existing RAG system"""
+        try:
+            query = parameters.get("query", "")
+            if not query:
+                return "Error: No query provided for knowledge search"
+
+            # Use the existing RAG knowledge search tool
+            from app.services.system_tools_service import system_tools_service
+            rag_tool = system_tools_service.get_tool("system_rag_knowledge_search")
+
+            if rag_tool:
+                result = await rag_tool.execute(query)
+                return f"Knowledge search result (via RAG fallback): {result}"
+            else:
+                return "Error: Neither MCP knowledge service nor RAG knowledge search is available"
+
+        except Exception as e:
+            self.logger.error("Fallback knowledge search failed", error=str(e))
+            return f"Fallback knowledge search failed: {str(e)}"
     
     def get_dspy_function(self) -> Callable:
         """Get a DSPy-compatible function with proper parameter definitions"""

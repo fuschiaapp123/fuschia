@@ -857,6 +857,30 @@ class WorkflowExecutionAgent:
         """Create non-blocking tools for DSPy ReAct execution"""
         tools = []
         
+        # Normalize MCP tool names for better readability
+        normalized_tools = {}
+        for tool_name, tool_func in self.available_tools.items():
+            # Strip MCP prefix to get original tool names
+            # Example: "mcp_hcmpro-api_hcmpro_list_job_offers" -> "hcmpro_list_job_offers"
+            if tool_name.startswith("mcp_") and "_" in tool_name[4:]:
+                # Find the server part and tool part
+                parts = tool_name[4:].split("_", 1)  # Remove "mcp_" prefix and split once
+                if len(parts) >= 2:
+                    server_part = parts[0]  # e.g., "hcmpro-api"
+                    tool_part = parts[1]    # e.g., "hcmpro_list_job_offers"
+
+                    # Use the tool part as the normalized name
+                    normalized_name = tool_part
+                    logger.debug(f"🔧 Normalized MCP tool: '{tool_name}' -> '{normalized_name}'")
+                    normalized_tools[normalized_name] = tool_func
+                else:
+                    normalized_tools[tool_name] = tool_func
+            else:
+                normalized_tools[tool_name] = tool_func
+
+        # Update available_tools with normalized names
+        self.available_tools = normalized_tools
+
         # Add available workflow tools
         logger.info(f"Adding workflow tools to DSPy ReAct tools: {self.available_tools.items()}")
         # for tool_name, tool_func in self.available_tools.items():
@@ -1179,13 +1203,19 @@ class WorkflowExecutionAgent:
                                                     tool_name = tool.get('name', '')
                                                 else:
                                                     tool_name = str(tool)
-                                                
+
                                                 logger.info(f"Processing tool: {tool_name}")
                                                 if isinstance(tool_name, str) and tool_name.startswith("system_"):
                                                     # Extract system tool name (remove "system_" prefix)
                                                     system_tool_name = tool_name[7:]
                                                     system_tool_names.append(system_tool_name)
                                                     logger.info(f"Found system tool: {system_tool_name}")
+                                                elif isinstance(tool_name, str) and tool_name.startswith("mcp_"):
+                                                    # Handle MCP tools (e.g., mcp_gmail-api_gmail_send_message)
+                                                    # Add mcp_service_call as the system tool to enable MCP integration
+                                                    if "mcp_service_call" not in system_tool_names:
+                                                        system_tool_names.append("mcp_service_call")
+                                                        logger.info(f"Found MCP tool: {tool_name}, added mcp_service_call to system tools")
                                             break
                                     
                                     if agent_found:
@@ -1261,7 +1291,9 @@ class WorkflowExecutionAgent:
                                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                                     future = executor.submit(run_in_new_loop)
                                     result = future.result(timeout=90)  # 90 seconds timeout
+                                    self.logger.info(f"System tool result: {str(result)[:200] + '...' if len(str(result)) > 200 else result}")
                                     self.logger.info(f"System tool '{async_func.__name__}' completed successfully")
+
                                     return result
                                     
                             except RuntimeError:

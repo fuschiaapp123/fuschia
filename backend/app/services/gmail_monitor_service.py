@@ -44,7 +44,7 @@ class EmailMessage:
 @dataclass
 class MonitoringConfig:
     """Configuration for Gmail monitoring"""
-    enabled: bool = False
+    enabled: bool = True
     check_interval_seconds: int = 300  # 5 minutes default
     query_filter: str = "is:unread"  # Only unread emails by default
     max_messages_per_check: int = 10
@@ -172,10 +172,35 @@ class GmailMonitorService:
         try:
             # Use Gmail MCP server to list messages
             self.logger.debug("Fetching recent emails from Gmail")
+
+            # Try broader query first to test connection
+            test_queries = [
+                self.config.query_filter,  # Original query
+                "in:inbox",  # Broader inbox query
+                ""  # All messages (most recent)
+            ]
+
+            for i, test_query in enumerate(test_queries):
+                self.logger.debug(f"Trying query {i+1}: '{test_query}'")
+                list_result = await gmail_mcp_server.call_tool("gmail_list_messages", {
+                    "query": test_query,
+                    "max_results": self.config.max_messages_per_check
+                })
+                self.logger.debug(f"Gmail list messages result for query '{test_query}'", result=list_result)
+
+                if list_result and list_result[0].get('text'):
+                    messages_data = json.loads(list_result[0]['text'])
+                    if messages_data.get('success') and messages_data.get('data'):
+                        self.logger.info(f"Found {len(messages_data['data'])} messages with query: '{test_query}'")
+                        # Use the first successful query for actual processing
+                        break
+
+            # Use the original query for processing
             list_result = await gmail_mcp_server.call_tool("gmail_list_messages", {
                 "query": self.config.query_filter,
                 "max_results": self.config.max_messages_per_check
             })
+            self.logger.debug("Gmail list messages result", result=list_result)
 
             if not list_result or not list_result[0].get('text'):
                 return []
@@ -204,6 +229,8 @@ class GmailMonitorService:
 
                     if full_message_data.get('success'):
                         email_msg = self._parse_gmail_message(full_message_data['data'])
+                        self.logger.debug("Fetched email message", message_id=message_id,
+                                          subject=email_msg.subject if email_msg else 'N/A')
                         if email_msg and self._should_process_message(email_msg):
                             email_messages.append(email_msg)
 
@@ -237,7 +264,7 @@ class GmailMonitorService:
 
             # Parse received time
             received_time = datetime.fromtimestamp(int(gmail_data.get('internalDate', 0)) / 1000)
-
+            self.logger.debug("Parsed Gmail message received_time = ", received_time=received_time.isoformat())
             return EmailMessage(
                 message_id=gmail_data.get('id', ''),
                 thread_id=gmail_data.get('threadId', ''),
@@ -283,6 +310,8 @@ class GmailMonitorService:
 
         # Skip very old messages (older than 1 hour)
         if message.received_time < datetime.now() - timedelta(hours=1):
+            self.logger.debug("Skipping old message", message_id=message.message_id,
+                              received_time=message.received_time.isoformat())
             return False
 
         return True

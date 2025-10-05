@@ -6,6 +6,7 @@ import { WorkflowExecutionVisualization } from '@/components/monitoring/Workflow
 import { AgentOrganizationVisualization } from '@/components/monitoring/AgentOrganizationVisualization';
 import { ThoughtsActionsVisualization, AgentThought } from '@/components/monitoring/ThoughtsActionsVisualization';
 import { GmailMonitor } from '@/components/monitoring/GmailMonitor';
+import { MCPMonitor } from '@/components/monitoring/MCPMonitor';
 import { monitoringService, WorkflowExecution, AgentOrganization } from '@/services/monitoringService';
 import { websocketService, AgentThought as WSAgentThought } from '@/services/websocketService';
 import { 
@@ -285,7 +286,7 @@ export const MonitoringModule: React.FC = () => {
       {/* Content */}
       <div className="flex-1 flex">
         {/* List Panel */}
-        <div className={`${currentTab === 'thoughts' || currentTab === 'gmail' ? 'w-full' : 'w-1/2'} bg-white ${currentTab !== 'thoughts' && currentTab !== 'gmail' ? 'border-r border-gray-200' : ''}`}>
+        <div className={`${currentTab === 'thoughts' || currentTab === 'gmail' || currentTab === 'mcp' ? 'w-full' : 'w-1/2'} bg-white ${currentTab !== 'thoughts' && currentTab !== 'gmail' && currentTab !== 'mcp' ? 'border-r border-gray-200' : ''}`}>
           {currentTab === 'workflows' ? (
             <div className="p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -402,11 +403,15 @@ export const MonitoringModule: React.FC = () => {
             <div className="h-full">
               <GmailMonitor />
             </div>
+          ) : currentTab === 'mcp' ? (
+            <div className="h-full">
+              <MCPMonitor />
+            </div>
           ) : null}
         </div>
 
-        {/* Detail Panel - Hidden for thoughts and gmail tabs */}
-        {currentTab !== 'thoughts' && currentTab !== 'gmail' && (
+        {/* Detail Panel - Hidden for thoughts, gmail, and mcp tabs */}
+        {currentTab !== 'thoughts' && currentTab !== 'gmail' && currentTab !== 'mcp' && (
           <div className="w-1/2 bg-gray-50">
             {currentTab === 'workflows' && selectedExecution ? (
               <WorkflowExecutionDetail execution={selectedExecution} />
