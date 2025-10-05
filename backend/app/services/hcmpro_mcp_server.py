@@ -69,7 +69,7 @@ class HCMProMCPServer:
         # HCM Pro API configuration
         self.base_url = os.environ.get("HCMPRO_BASE_URL", "http://localhost:3101")
         self.admin_email = os.environ.get("HCMPRO_ADMIN_EMAIL", "admin@acme.com")
-        self.admin_password = os.environ.get("HCMPRO_ADMIN_PASSWORD", "any_password")
+        self.admin_password = os.environ.get("HCMPRO_ADMIN_PASSWORD", "admin123")
         self.jwt_token: Optional[str] = None
         self.client = httpx.AsyncClient()
 
@@ -94,6 +94,7 @@ class HCMProMCPServer:
     async def _authenticate(self) -> bool:
         """Authenticate with HCM Pro API to get JWT token"""
         try:
+            logger.error(f"Authenticating with HCM Pro API... url = {self.base_url}, email = {self.admin_email}  password = {self.admin_password}")
             response = await self.client.post(
                 f"{self.base_url}/api/auth/login",
                 json={
@@ -196,6 +197,25 @@ class HCMProMCPServer:
                             }
                         },
                         "required": ["id"]
+                    }
+                },
+                {
+                    "name": "hcmpro_search_job_offers_by_candidate",
+                    "description": "Search for job offers by candidate name or email",
+                    "operation_type": "search_job_offers_by_candidate",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "candidate_name": {
+                                "type": "string",
+                                "description": "Candidate's full name to search for"
+                            },
+                            "candidate_email": {
+                                "type": "string",
+                                "description": "Candidate's email address to search for"
+                            }
+                        },
+                        "required": []
                     }
                 },
                 {
@@ -457,8 +477,12 @@ class HCMProMCPServer:
         if name not in self.tools:
             raise ValueError(f"Tool '{name}' not found")
 
+        # Retry authentication if not authenticated
         if not self._check_auth():
-            raise ValueError("HCM Pro authentication not available")
+            logger.info("HCM Pro not authenticated, attempting authentication...")
+            auth_success = await self._authenticate()
+            if not auth_success:
+                raise ValueError("HCM Pro authentication failed. Please check credentials and HCM Pro service availability.")
 
         tool = self.tools[name]
 
@@ -480,12 +504,16 @@ class HCMProMCPServer:
     async def _execute_hcmpro_operation(self, tool: HCMProMCPTool, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the actual HCM Pro API operation"""
         operation_type = tool.operation_type
+        logger.error(f"Executing HCM Pro operation '{operation_type}' with arguments: {arguments}")
 
         if operation_type == "list_job_offers":
             return await self._list_job_offers(arguments)
 
         elif operation_type == "get_job_offer":
             return await self._get_job_offer(arguments["id"])
+
+        elif operation_type == "search_job_offers_by_candidate":
+            return await self._search_job_offers_by_candidate(arguments)
 
         elif operation_type == "create_job_offer":
             return await self._create_job_offer(arguments)
@@ -545,6 +573,7 @@ class HCMProMCPServer:
     async def _get_job_offer(self, offer_id: str) -> Dict[str, Any]:
         """Get a specific job offer by ID"""
         try:
+            logger.error(f"Fetching job offer with ID: {offer_id}")
             response = await self.client.get(
                 f"{self.base_url}/api/job-offers/{offer_id}",
                 headers=self._get_headers()
@@ -563,6 +592,67 @@ class HCMProMCPServer:
 
         except Exception as e:
             logger.error(f"Error in get_job_offer: {e}")
+            raise
+
+    async def _search_job_offers_by_candidate(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Search for job offers by candidate name or email"""
+        try:
+            candidate_name = arguments.get("candidate_name")
+            candidate_email = arguments.get("candidate_email")
+
+            # Build search query
+            search_query = candidate_name or candidate_email or ""
+
+            if not search_query:
+                return {
+                    "operation": "search_job_offers_by_candidate",
+                    "success": False,
+                    "error": "Either candidate_name or candidate_email must be provided",
+                    "data": []
+                }
+
+            # Use the list_job_offers endpoint with search parameter
+            list_result = await self._list_job_offers({"search": search_query, "limit": 100})
+            logger.error(f"List result: {list_result}")
+
+            if not list_result.get("success"):
+                return {
+                    "operation": "search_job_offers_by_candidate",
+                    "success": False,
+                    "error": "Failed to search job offers",
+                    "data": []
+                }
+
+            # Filter results to match candidate name or email more precisely
+            all_offers = list_result.get("data", {}).get("jobOffers", [])
+            logger.error(f"All offers fetched: {all_offers}")
+            matched_offers = []
+
+            for offer in all_offers:
+                offer_candidate_name = offer.get("candidateName", "").lower()
+                offer_candidate_email = offer.get("candidateEmail", "").lower()
+
+                # Check if candidate name matches
+                if candidate_name and candidate_name.lower() in offer_candidate_name:
+                    matched_offers.append(offer)
+                # Check if candidate email matches
+                elif candidate_email and candidate_email.lower() == offer_candidate_email:
+                    matched_offers.append(offer)
+            
+            logger.error(f"Matched offers: {matched_offers}")
+            
+            return {
+                "operation": "search_job_offers_by_candidate",
+                "success": True,
+                "search_query": search_query,
+                "candidate_name": candidate_name,
+                "candidate_email": candidate_email,
+                "matched_count": len(matched_offers),
+                "data": matched_offers
+            }
+
+        except Exception as e:
+            logger.error(f"Error in search_job_offers_by_candidate: {e}")
             raise
 
     async def _create_job_offer(self, offer_data: Dict[str, Any]) -> Dict[str, Any]:

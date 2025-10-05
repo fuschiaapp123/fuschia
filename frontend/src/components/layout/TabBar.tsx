@@ -48,6 +48,7 @@ const defaultTabs: Record<string, Tab[]> = {
     { id: 'workflows', title: 'Workflow Executions' },
     { id: 'agents', title: 'Agent Organizations' },
     { id: 'thoughts', title: 'Thoughts & Actions' },
+    { id: 'mcp', title: 'MCP Services' },
     { id: 'gmail', title: 'Gmail Monitor' },
   ],
   settings: [

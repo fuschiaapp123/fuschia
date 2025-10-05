@@ -386,6 +386,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
 
   // Update nodes and edges when agentData changes
   useEffect(() => {
+    console.log('🔄 AgentData changed in store:', agentData);
     if (agentData?.nodes && agentData?.edges) {
       const previousNodeCount = nodes.length;
       const newNodeCount = agentData.nodes.length;
@@ -394,33 +395,54 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
       const nodesAreDifferent = JSON.stringify(nodes) !== JSON.stringify(agentData.nodes);
       const edgesAreDifferent = JSON.stringify(edges) !== JSON.stringify(agentData.edges);
 
+      // Update metadata independently if it exists and has meaningful data
+      if (agentData.metadata && agentData.metadata.name) {
+        console.log('📋 Updating metadata from app store:', agentData.metadata);
+        setAgentMetadata(prev => ({
+          ...prev,
+          ...agentData.metadata,
+          // Ensure counts are updated with actual node/edge counts
+          agentCount: agentData.nodes.length,
+          connectionCount: agentData.edges.length,
+        }));
+
+        // ✅ CRITICAL: Set currentTemplateId from metadata for upsert functionality
+        if (agentData.metadata.id) {
+          console.log('🔗 Setting currentTemplateId from Templates tab:', agentData.metadata.id);
+          setCurrentTemplateId(agentData.metadata.id);
+        }
+
+        console.log('📋 Metadata updated successfully');
+      }
+
       if (nodesAreDifferent || edgesAreDifferent) {
-        console.log('Updating nodes/edges from app store', {
+        console.log('📥 Updating nodes/edges from app store', {
           previousNodeCount,
           newNodeCount,
           nodesAreDifferent,
-          edgesAreDifferent
+          edgesAreDifferent,
+          agentDataMetadata: agentData.metadata
         });
 
         setNodes(agentData.nodes);
         setEdges(agentData.edges);
+      }
 
-        // Show canvas update notification if this seems to be an external update
-        if (previousNodeCount > 0 && newNodeCount !== previousNodeCount) {
-          setCanvasUpdateNotification({
-            show: true,
-            message: `Agent organization updated: ${newNodeCount} agents, ${agentData.edges.length} connections`,
-            timestamp: Date.now()
-          });
+      // Show canvas update notification if this seems to be an external update
+      if (previousNodeCount > 0 && newNodeCount !== previousNodeCount) {
+        setCanvasUpdateNotification({
+          show: true,
+          message: `Agent organization updated: ${newNodeCount} agents, ${agentData.edges.length} connections`,
+          timestamp: Date.now()
+        });
 
-          // Auto-hide notification after 5 seconds
-          setTimeout(() => {
-            setCanvasUpdateNotification(null);
-          }, 5000);
-        }
+        // Auto-hide notification after 5 seconds
+        setTimeout(() => {
+          setCanvasUpdateNotification(null);
+        }, 5000);
       }
     }
-  }, [agentData?.nodes, agentData?.edges, setNodes, setEdges]);
+  }, [agentData?.nodes, agentData?.edges, agentData?.metadata, setNodes, setEdges]);
 
   // Load available templates and categories from database only
   useEffect(() => {
@@ -455,13 +477,18 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
     loadTemplatesFromDatabase();
   }, []);
 
-  // Update metadata when nodes/edges change
+  // Update metadata counts when nodes/edges change, but preserve name and description from loaded templates
   useEffect(() => {
-    setAgentMetadata(prev => ({
-      ...prev,
-      agentCount: nodes.length,
-      connectionCount: edges.length,
-    }));
+    setAgentMetadata(prev => {
+      console.log('Updating metadata counts. Previous metadata:', prev);
+      const updated = {
+        ...prev,
+        agentCount: nodes.length,
+        connectionCount: edges.length,
+      };
+      console.log('Updated metadata:', updated);
+      return updated;
+    });
   }, [nodes.length, edges.length]);
 
   const onConnect = useCallback(
@@ -536,6 +563,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
 
   const showSaveAgentDialog = useCallback(() => {
     // Initialize form with current agent metadata (like WorkflowDesigner)
+    console.log('Current agent metadata for save dialog:', agentMetadata);
     setSaveFormData({
       name: agentMetadata.name !== 'Untitled Agent Network' ? agentMetadata.name : `Agent Network ${new Date().toLocaleDateString()}`,
       description: agentMetadata.description !== 'Describe what this agent organization does...' ? agentMetadata.description : 'Custom agent organization created in designer',
@@ -593,6 +621,8 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
         // First try to save to database
         const isConnected = await agentService.testConnection();
         if (isConnected) {
+          console.log('💾 Saving template with current ID for upsert:', currentTemplateId);
+          console.log('💾 Current metadata state:', agentMetadata);
           const savedTemplate = await agentService.saveAgentTemplateToDatabase({
             id: currentTemplateId, // Pass current template ID for upsert logic
             name: saveFormData.name,
@@ -607,6 +637,13 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
             nodes: nodes.map(node => ({ ...node, selected: false, dragging: false })),
             edges: edges.map(edge => ({ ...edge, selected: false }))
           });
+          console.log('💾 Saved template response:', savedTemplate);
+
+          // ✅ Update currentTemplateId with the saved template ID (for future saves)
+          if (savedTemplate.id && savedTemplate.id !== currentTemplateId) {
+            console.log('💾 Updating currentTemplateId after save:', savedTemplate.id);
+            setCurrentTemplateId(savedTemplate.id);
+          }
 
           // Also save as file if requested
           if (saveFormData.folder.trim()) {
@@ -669,19 +706,20 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
 
   // Helper function to validate and process template data
   const validateAndProcessTemplate = useCallback((template: AgentTemplate) => {
-    console.log('Processing template:', template);
-    
+    console.log('🔍 validateAndProcessTemplate called with:', template);
+
     // Validate template structure
     if (!template.name || !template.id) {
+      console.error('❌ Template validation failed: missing name or id', { name: template.name, id: template.id });
       throw new Error('Invalid template: missing name or id');
     }
-    
+
     // Ensure nodes array exists and has proper structure
     const nodes = template.nodes || [];
     const edges = template.edges || [];
-    
-    console.log('Template has', nodes.length, 'nodes,', edges.length, 'edges');
-    
+
+    console.log('✅ Template validation passed:', template.name, 'has', nodes.length, 'nodes,', edges.length, 'edges');
+
     return {
       ...template,
       nodes,
@@ -690,6 +728,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
   }, []);
 
   const loadAgentTemplate = useCallback((template: AgentTemplate) => {
+    console.log('🚀 loadAgentTemplate function called with:', template);
     try {
       console.log('Loading agent template:', template);
       
@@ -702,18 +741,20 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
       // Clear existing canvas first
       setNodes([]);
       setEdges([]);
-      
+
       // Set current template ID for potential updates
       setCurrentTemplateId(processedTemplate.id);
-      
-      // Update agent metadata with template information (like WorkflowDesigner)
-      setAgentMetadata({
+
+      // Update agent metadata with template information immediately
+      const templateMetadata = {
         name: processedTemplate.name,
         description: processedTemplate.description,
         category: processedTemplate.category || 'Custom',
         agentCount: processedTemplate.nodes?.length || 0,
         connectionCount: processedTemplate.edges?.length || 0,
-      });
+      };
+      console.log('Setting initial template metadata:', templateMetadata);
+      setAgentMetadata(templateMetadata);
     
     // Small delay to ensure clearing is visible and proper ReactFlow update
     setTimeout(() => {
@@ -786,14 +827,18 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
         
         // Additional small delay to ensure ReactFlow processes the new nodes and update metadata
         setTimeout(() => {
-          // Update metadata with actual loaded node/edge counts
-          setAgentMetadata(prev => ({
-            ...prev,
+          // Final metadata update to ensure template info is preserved
+          const finalMetadata = {
+            name: processedTemplate.name, // Ensure name is preserved
+            description: processedTemplate.description, // Ensure description is preserved
+            category: processedTemplate.category || 'Custom', // Ensure category is preserved
             agentCount: processedNodes.length,
             connectionCount: processedEdges.length,
-          }));
+          };
+          console.log('Setting final metadata after template load:', finalMetadata);
+          setAgentMetadata(finalMetadata);
           console.log('Template loaded and rendered with', processedNodes.length, 'nodes');
-        }, 50);
+        }, 100); // Increased delay to ensure all state updates are complete
       } else {
         // Fallback: Create agent nodes based on template characteristics
         console.log('Creating fallback nodes for template:', processedTemplate.name);
@@ -803,15 +848,19 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
         setNodes(agentNodes);
         setEdges(agentEdges);
         
-        // Update metadata with actual loaded node/edge counts
+        // Update metadata with actual loaded node/edge counts while preserving template info
         setTimeout(() => {
-          setAgentMetadata(prev => ({
-            ...prev,
+          const finalMetadata = {
+            name: processedTemplate.name, // Ensure name is preserved
+            description: processedTemplate.description, // Ensure description is preserved
+            category: processedTemplate.category || 'Custom', // Ensure category is preserved
             agentCount: agentNodes.length,
             connectionCount: agentEdges.length,
-          }));
+          };
+          console.log('Setting final fallback metadata:', finalMetadata);
+          setAgentMetadata(finalMetadata);
           console.log('Fallback template loaded with', agentNodes.length, 'nodes');
-        }, 50);
+        }, 100); // Increased delay to ensure all state updates are complete
       }
       
       console.log(`Loaded agent template: ${processedTemplate.name}`);
@@ -819,7 +868,12 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
     
     setShowTemplateLoader(false);
     } catch (error) {
-      console.error('Failed to load agent template:', error);
+      console.error('❌ Failed to load agent template:', error);
+      console.error('❌ Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        template: template
+      });
       alert(`Failed to load template: ${error instanceof Error ? error.message : 'Invalid template format'}`);
       setShowTemplateLoader(false);
     }
@@ -1686,7 +1740,10 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
                       <div
                         key={template.id}
                         className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer bg-white hover:border-fuschia-300"
-                        onClick={() => loadAgentTemplate(template)}
+                        onClick={() => {
+                          console.log('Template clicked!', template);
+                          loadAgentTemplate(template);
+                        }}
                       >
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex items-center space-x-2">

@@ -632,14 +632,30 @@ export const AgentTemplates: React.FC = () => {
     : availableTemplates.filter(template => template.category === selectedCategory);
 
   const handleTemplateLoad = (template: LocalAgentTemplate) => {
+    console.log('🎯 Templates tab: Loading template:', template.name, 'ID:', template.id);
     setAgentData({
       nodes: template.nodes,
       edges: template.edges,
+      metadata: {
+        id: template.id, // ✅ ADD: Include template ID for upsert
+        name: template.name,
+        description: template.description,
+        category: template.category,
+        agentCount: template.nodes?.length || 0,
+        connectionCount: template.edges?.length || 0,
+      }
     });
-    
+
     // Navigate to the Agent Designer (assuming there's a way to switch tabs)
     const { setActiveTab } = useAppStore.getState();
     setActiveTab('designer'); // This should switch to the Agent Designer tab
+
+    console.log('🎯 Templates tab: Set agent data with metadata and ID:', {
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      category: template.category
+    });
   };
 
   const handleCloneTemplate = async (template: LocalAgentTemplate) => {
@@ -937,6 +953,7 @@ export const AgentTemplates: React.FC = () => {
                 <div className="flex space-x-2">
                   <button
                     onClick={() => {
+                      console.log('🎯 Modal: Loading template:', selectedTemplate.name, 'ID:', selectedTemplate.id);
                       handleTemplateLoad(selectedTemplate);
                       setSelectedTemplate(null);
                     }}

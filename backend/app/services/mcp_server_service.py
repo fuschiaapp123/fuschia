@@ -161,6 +161,7 @@ class FuschiaMCPServer:
     
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Handle MCP call_tool request"""
+        
         if not self.is_running:
             await self.initialize()
         
