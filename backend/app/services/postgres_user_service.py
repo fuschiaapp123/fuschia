@@ -41,6 +41,7 @@ class PostgresUserService:
                     id=db_user.id,
                     username=db_user.email.split('@')[0],  # Use email prefix as username
                     email=db_user.email,
+                    full_name=db_user.full_name,
                     role=UserRole(db_user.role) if isinstance(db_user.role, str) else db_user.role,
                     is_active=db_user.is_active,
                     created_at=db_user.created_at
