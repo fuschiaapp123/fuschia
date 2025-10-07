@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 import structlog
 
 from app.core.config import settings
-from app.models.user import Token, UserCreate, User
+from app.models.user import Token, UserCreate, User, UserWithToken
 from app.services.postgres_user_service import postgres_user_service
 from app.auth.auth import create_access_token, get_current_active_user
 
@@ -12,8 +12,13 @@ router = APIRouter()
 logger = structlog.get_logger()
 
 
-@router.post("/register", response_model=User)
+@router.post("/register", response_model=UserWithToken)
 async def register(user_create: UserCreate):
+    """
+    Register a new user and automatically return an access token for immediate login.
+
+    This provides a seamless user experience by eliminating the need for a separate login step.
+    """
     try:
         existing_user = await postgres_user_service.get_user_by_email(user_create.email)
         if existing_user:
@@ -24,8 +29,24 @@ async def register(user_create: UserCreate):
             )
 
         user = await postgres_user_service.create_user(user_create)
-        logger.info("User registered successfully via API", user_id=user.id, email=user.email)
-        return user
+
+        # Generate access token for automatic login
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.email},
+            expires_delta=access_token_expires
+        )
+
+        logger.info("User registered successfully with auto-login",
+                   user_id=user.id,
+                   email=user.email,
+                   token_expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+        return UserWithToken(
+            user=user,
+            access_token=access_token,
+            token_type="bearer"
+        )
 
     except HTTPException:
         # Re-raise HTTP exceptions (like email already registered)
