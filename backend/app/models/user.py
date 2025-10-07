@@ -51,6 +51,13 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class UserWithToken(BaseModel):
+    """Response model for registration - includes user data and access token"""
+    user: User
+    access_token: str
+    token_type: str = "bearer"
+
+
 class TokenData(BaseModel):
     username: Optional[str] = None
 
