@@ -4,7 +4,6 @@ Test script to verify WebSocket user ID fallback functionality
 """
 
 import requests
-import json
 
 def test_websocket_user_fallback():
     """Test that anonymous chat requests use active WebSocket user IDs"""

@@ -2,7 +2,6 @@ from neo4j import AsyncGraphDatabase, AsyncDriver
 from neo4j.exceptions import AuthError, ServiceUnavailable
 from typing import Dict, Any, List, Optional
 import structlog
-import asyncio
 from app.core.config import settings
 
 logger = structlog.get_logger()

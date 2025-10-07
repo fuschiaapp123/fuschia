@@ -6,9 +6,8 @@ Resolves async/sync boundary issues with WebSocket communication from daemon thr
 import threading
 import time
 import uuid
-import asyncio
-from typing import Dict, Any, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, Future
+from typing import Dict, Any, Callable
+from concurrent.futures import ThreadPoolExecutor
 import structlog
 from dataclasses import dataclass
 from enum import Enum
@@ -118,8 +117,6 @@ class ThreadSafeHumanLoop:
         self._send_websocket_request_async(request)
         
         # Wait for response using a dedicated thread to avoid blocking the async event loop
-        import threading
-        import time
         from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
         
         def wait_for_event():
@@ -197,7 +194,7 @@ class ThreadSafeHumanLoop:
                     execution_id=request.execution_id,
                     message_content=formatted_message,
                     agent_id=request.agent_id,
-                    agent_name=f"Human-in-Loop Agent",
+                    agent_name="Human-in-Loop Agent",
                     task_id=request.task_id,
                     task_name="Human Interaction Required",
                     message_type='user_request',

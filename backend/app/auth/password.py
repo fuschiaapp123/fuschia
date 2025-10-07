@@ -1,5 +1,4 @@
 from passlib.context import CryptContext
-import hashlib
 
 # Use only pbkdf2_sha256 to avoid bcrypt 72-byte limit issues
 pwd_context = CryptContext(

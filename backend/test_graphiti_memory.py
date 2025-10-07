@@ -18,19 +18,16 @@ print("🔧 The new memory system is available at /api/v1/graphiti-memory/")
 exit(0)
 
 import asyncio
-import json
-from datetime import datetime, timedelta
+from datetime import datetime
 import uuid
 
 # Note: Updated to use new Graphiti enhanced memory system
-from app.services.graphiti_enhanced_memory_service import graphiti_enhanced_memory_service
-from app.services.graphiti_enhanced_workflow_agent import GraphitiEnhancedWorkflowAgent, graphiti_enhanced_orchestrator
 from app.models.graphiti_memory import (
     GraphEntity, GraphRelationship, MemoryQuery, TemporalInterval,
     EntityType, RelationshipType, EntityExtractionRequest
 )
 from app.models.agent_organization import (
-    AgentNode, WorkflowTask, AgentRole, AgentStrategy, TaskStatus
+    AgentNode, WorkflowTask, AgentRole, AgentStrategy
 )
 
 
@@ -123,6 +120,16 @@ async def test_entity_creation():
         print(f"❌ Entity creation failed: {e}")
         return []
 
+
+import pytest
+
+@pytest.fixture
+async def initialize_schema():
+    await graphiti_memory_service.initialize_schema()
+
+@pytest.fixture
+async def entities(initialize_schema):
+    return await test_entity_creation(initialize_schema)
 
 async def test_relationship_creation(entities):
     """Test relationship creation between entities"""
@@ -331,7 +338,7 @@ async def test_memory_enhanced_agent():
         # Execute task with memory enhancement
         result = await memory_agent.execute_task_with_memory(test_task, test_context)
         
-        print(f"✅ Memory-enhanced task execution completed")
+        print("✅ Memory-enhanced task execution completed")
         print(f"   Success: {result.get('success', False)}")
         print(f"   Confidence: {result.get('confidence', 0.0):.2f}")
         print(f"   Execution method: {result.get('execution_method', 'unknown')}")
@@ -344,7 +351,7 @@ async def test_memory_enhanced_agent():
         
         # Get agent memory summary
         memory_summary = await memory_agent.get_agent_memory_summary()
-        print(f"✅ Agent memory summary retrieved")
+        print("✅ Agent memory summary retrieved")
         print(f"   Total entities: {memory_summary['total_entities']}")
         print(f"   Total relationships: {memory_summary['total_relationships']}")
         print(f"   Entity types: {list(memory_summary['entity_types'].keys())}")
@@ -364,7 +371,7 @@ async def test_memory_stats():
     try:
         stats = await graphiti_memory_service.get_memory_stats(refresh=True)
         
-        print(f"✅ Memory statistics retrieved")
+        print("✅ Memory statistics retrieved")
         print(f"   Total entities: {stats.total_entities}")
         print(f"   Total relationships: {stats.total_relationships}")
         print(f"   Entity types: {stats.entities_by_type}")
@@ -445,7 +452,7 @@ async def test_workflow_memory_integration():
             context=workflow_context
         )
         
-        print(f"✅ Memory-enhanced workflow execution completed")
+        print("✅ Memory-enhanced workflow execution completed")
         print(f"   Workflow ID: {workflow_id}")
         print(f"   Execution ID: {execution_id}")
         print(f"   Total tasks: {result['total_tasks']}")
@@ -524,7 +531,7 @@ async def run_comprehensive_test():
     
     # Additional information
     if stats:
-        print(f"\nFinal Memory Statistics:")
+        print("\nFinal Memory Statistics:")
         print(f"   Total entities in memory: {stats.total_entities}")
         print(f"   Total relationships in memory: {stats.total_relationships}")
         print(f"   Entity types created: {list(stats.entities_by_type.keys())}")
@@ -540,10 +547,10 @@ if __name__ == "__main__":
         test_results = asyncio.run(run_comprehensive_test())
         
         if all(test_results.values()):
-            print(f"\n✅ All tests completed successfully!")
+            print("\n✅ All tests completed successfully!")
             exit(0)
         else:
-            print(f"\n❌ Some tests failed!")
+            print("\n❌ Some tests failed!")
             exit(1)
             
     except Exception as e:

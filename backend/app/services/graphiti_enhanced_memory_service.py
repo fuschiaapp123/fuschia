@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 # Graphiti imports
 from graphiti_core import Graphiti
-from graphiti_core.nodes import EpisodeType, EntityNode, CommunityNode
+from graphiti_core.nodes import EpisodeType
 
 # Local imports
 from app.core.config import settings

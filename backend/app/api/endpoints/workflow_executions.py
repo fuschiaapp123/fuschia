@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from app.services.workflow_execution_service import workflow_execution_service
-from app.models.agent_organization import ExecutionStatus, TaskStatus
+from app.models.agent_organization import ExecutionStatus
 from app.auth.auth import get_current_user
 from app.models.user import User
 from openai import OpenAI

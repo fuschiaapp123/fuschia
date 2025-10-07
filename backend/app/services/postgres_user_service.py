@@ -2,8 +2,7 @@ from typing import Optional, List
 from datetime import datetime
 import uuid
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.db.postgres import UserTable, AsyncSessionLocal

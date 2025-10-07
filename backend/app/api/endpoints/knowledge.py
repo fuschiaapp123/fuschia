@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Dict, Any
 
 from app.models.knowledge import (
     KnowledgeNode, KnowledgeNodeCreate, KnowledgeNodeUpdate,

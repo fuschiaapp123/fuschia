@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 import json
 import os
 import uuid
@@ -16,7 +16,6 @@ from app.services.agent_organization_service import agent_organization_service
 from app.services.mlflow_config import mlflow_tracker
 from app.services.tool_registry_service import tool_registry_service
 from openai import OpenAI
-import os
 
 logger = structlog.get_logger()
 
@@ -157,7 +156,7 @@ class IntentDetectionAgent:
                         "template_type": template.template_type.value
                     })
                 return json.dumps(templates_info)
-            return f"No templates found for workflows"
+            return "No templates found for workflows"
         except Exception as e:
             self.logger.error("Error retrieving workflow templates", error=str(e))
             return "[]"
@@ -178,7 +177,7 @@ class IntentDetectionAgent:
                         "name": template.name
                     })
                 return json.dumps(templates_info)
-            return f"No templates found for agents"
+            return "No templates found for agents"
         except Exception as e:
             self.logger.error("Error retrieving agent templates", error=str(e))
             return "[]"

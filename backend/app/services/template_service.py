@@ -1,14 +1,12 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, text
-from sqlalchemy.orm import selectinload
-from typing import List, Optional, Dict, Any
+from sqlalchemy import select, and_, or_, text
+from typing import List, Optional
 import uuid
 from datetime import datetime
 import structlog
 
 from app.db.postgres import WorkflowTemplateTable, TemplateTable, AsyncSessionLocal
 from app.models.template import (
-    Template, TemplateCreate, TemplateUpdate, TemplateMatch, 
+    Template, TemplateCreate, TemplateMatch, 
     TemplateSearchResult, TemplateType, TemplateStatus
 )
 
@@ -36,7 +34,7 @@ class TemplateService:
                 template_id = str(uuid.uuid4())
                 
                 # DEBUG: Log the template data being saved
-                print(f"🔍 DEBUG: Creating WorkflowTemplateTable:")
+                print("🔍 DEBUG: Creating WorkflowTemplateTable:")
                 print(f"   - Name: {template_data.name}")
                 print(f"   - use_memory_enhancement: {template_data.use_memory_enhancement}")
                 
@@ -175,7 +173,7 @@ class TemplateService:
                 
                 if existing_template:
                     # DEBUG: Log the update operation
-                    print(f"🔍 DEBUG: Updating existing template:")
+                    print("🔍 DEBUG: Updating existing template:")
                     print(f"   - Name: {template_data.name}")
                     print(f"   - use_memory_enhancement: {template_data.use_memory_enhancement}")
                     

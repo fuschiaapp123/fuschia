@@ -10,7 +10,7 @@ from app.models.agent_organization import (
     AgentNode, AgentRole, AgentStrategy, AgentCapability, AgentTool,
     AgentConnection
 )
-from app.models.template import TemplateType, Template, TemplateStatus, TemplateComplexity
+from app.models.template import TemplateType, Template, TemplateStatus
 
 logger = structlog.get_logger()
 

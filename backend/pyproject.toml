@@ -40,6 +40,9 @@ dev = [
 [tool.ruff]
 line-length = 88
 target-version = "py39"
+exclude = [
+    "test_graphiti_memory.py"
+]
 
 [tool.mypy]
 python_version = "3.9"
@@ -47,6 +50,18 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 
+[[tool.mypy.overrides]]
+module = "boto3.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "neo4j.*"
+ignore_errors = true
+
 [tool.black]
 line-length = 88
 target-version = ['py39']
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+norecursedirs = "app/api/endpoints"

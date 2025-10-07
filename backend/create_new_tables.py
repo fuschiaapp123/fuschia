@@ -4,7 +4,6 @@ Script to create the new database tables (workflow_templates, agent_templates)
 """
 import asyncio
 import sys
-import os
 
 # Add the backend directory to the Python path
 sys.path.append('/Users/sanjay/Lab/Fuschia-alfa/backend')
@@ -17,7 +16,6 @@ async def create_new_tables():
     try:
         # Import after path setup
         from app.db.postgres import (
-            WorkflowTemplateTable, AgentTemplateTable, AgentOrganizationTable,
             AsyncSessionLocal, engine, Base
         )
         from sqlalchemy import text

@@ -7,13 +7,9 @@ import json
 import logging
 import os
 import base64
-import pickle
 from typing import Dict, List, Any, Optional
-from datetime import datetime
 from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
-import httpx
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
