@@ -7,7 +7,6 @@ including creating configurations, adding examples, and running evaluations.
 """
 
 import asyncio
-import json
 from datetime import datetime
 
 from app.services.dspy_evaluation_service import dspy_evaluation_service
@@ -98,13 +97,13 @@ async def test_dspy_evaluation_system():
     print("\n3. Validating configuration...")
     try:
         # Simple validation check
-        print(f"✅ Configuration validation:")
-        print(f"   Valid: True")
+        print("✅ Configuration validation:")
+        print("   Valid: True")
         print(f"   Examples: {len(updated_config.examples)}")
         print(f"   Metrics: {len(updated_config.metrics)}")
         
         if len(updated_config.examples) < 10:
-            print(f"   Warning: Less than 10 examples may lead to poor optimization results")
+            print("   Warning: Less than 10 examples may lead to poor optimization results")
             
     except Exception as e:
         print(f"❌ Failed to validate config: {e}")
@@ -113,7 +112,7 @@ async def test_dspy_evaluation_system():
     print("\n4. Getting task evaluation summary...")
     try:
         summary = await dspy_evaluation_service.get_task_evaluation_summary("test-task-001")
-        print(f"✅ Task summary:")
+        print("✅ Task summary:")
         print(f"   Task: {summary.task_label}")
         print(f"   Examples: {summary.total_examples}")
         print(f"   Evaluations: {summary.evaluation_count}")
@@ -146,14 +145,14 @@ async def test_dspy_evaluation_system():
             save_results=True
         )
         
-        print(f"✅ Evaluation request structure valid:")
+        print("✅ Evaluation request structure valid:")
         print(f"   Config ID: {eval_request.evaluation_config_id}")
         print(f"   Run optimization: {eval_request.run_optimization}")
         print(f"   Save results: {eval_request.save_results}")
         
         # Note: We're not running the actual evaluation here as it requires
         # a properly configured DSPy environment with LLM access
-        print(f"   ⚠️ Actual evaluation skipped (requires LLM setup)")
+        print("   ⚠️ Actual evaluation skipped (requires LLM setup)")
         
     except Exception as e:
         print(f"❌ Failed to create evaluation request: {e}")
@@ -162,7 +161,7 @@ async def test_dspy_evaluation_system():
     print("\n7. Testing utility functions...")
     try:
         # Test metric display names (using service methods if available)
-        print(f"   Testing metric display mapping...")
+        print("   Testing metric display mapping...")
         metrics_tested = 0
         for metric in DSPyEvaluationMetric:
             print(f"   {metric.value} available ✓")
@@ -258,7 +257,7 @@ if __name__ == "__main__":
         # Run example operation tests
         asyncio.run(test_example_operations())
         
-        print(f"\n✅ All tests completed successfully!")
+        print("\n✅ All tests completed successfully!")
         
     except Exception as e:
         print(f"\n❌ Test suite failed with error: {e}")

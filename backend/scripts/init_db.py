@@ -7,8 +7,6 @@ Creates sample data for development and testing
 import asyncio
 import sys
 import os
-import uuid
-from datetime import datetime
 
 # Add the backend directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -234,10 +232,10 @@ async def main():
         print("\nCreating sample users...")
         users = await create_sample_users()
 
-        print(f"\nCreating sample knowledge graph...")
+        print("\nCreating sample knowledge graph...")
         nodes = await create_sample_knowledge_graph()
 
-        print(f"\n✅ Database initialization completed successfully!")
+        print("\n✅ Database initialization completed successfully!")
         print(f"Created {len(users)} users and {len(nodes)} knowledge nodes")
 
         print("\nSample user credentials:")

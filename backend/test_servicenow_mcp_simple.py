@@ -7,7 +7,6 @@ Tests the core ServiceNow MCP server without database dependencies
 import asyncio
 import json
 import logging
-import os
 from typing import Dict, List, Any
 
 # Configure logging

@@ -1,14 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import Column, String, Boolean, DateTime, Enum as SQLEnum, text, Integer, JSON, ForeignKey
-from sqlalchemy.sql import func
+from sqlalchemy import Column, String, Boolean, DateTime, text, Integer, JSON, ForeignKey
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 import structlog
-from app.models.user import UserRole
-from app.models.template import TemplateType, TemplateComplexity, TemplateStatus
-from app.models.tool_registry import ToolStatus, ToolCategory
 
 load_dotenv()
 

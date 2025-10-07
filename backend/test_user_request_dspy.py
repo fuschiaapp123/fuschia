@@ -4,7 +4,6 @@ Test script to verify user request is passed to DSPy modules
 """
 
 import requests
-import json
 import time
 
 def test_user_request_in_dspy():
@@ -68,7 +67,7 @@ def test_user_request_in_dspy():
                             print(f"   🔍 Execution: {exec_id[:12]}... → User: {user_id[:12]}...")
                             
                             # Check if this execution has the user request in context
-                            print(f"   📋 This execution should contain the user request in execution context")
+                            print("   📋 This execution should contain the user request in execution context")
                             print(f"   💡 DSPy modules should now have access to: '{user_request[:50]}...'")
                 
                 print("\n📋 What this test validates:")

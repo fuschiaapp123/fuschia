@@ -4,7 +4,6 @@ Test script to verify the enhanced chat endpoint authentication fix
 """
 
 import requests
-import json
 
 def test_enhanced_chat_endpoint():
     """Test the enhanced chat endpoint with and without authentication"""

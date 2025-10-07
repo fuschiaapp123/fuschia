@@ -2,26 +2,19 @@
 Tool Registry Service for DSPy function calling
 """
 
-import os
 import json
 import uuid
 import time
-import inspect
-import hashlib
-import tempfile
-import traceback
 from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime
 import structlog
 from pathlib import Path
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update
-from app.db.postgres import AsyncSessionLocal, ToolFunctionTable, AgentToolAssociationTable, ToolExecutionLogTable
+from app.db.postgres import AsyncSessionLocal, ToolFunctionTable, ToolExecutionLogTable
 
 from app.models.tool_registry import (
     ToolFunction, 
     AgentToolAssociation, 
-    ToolExecutionLog,
     ToolRegistryRequest,
     ToolRegistryResponse,
     ToolExecutionRequest,

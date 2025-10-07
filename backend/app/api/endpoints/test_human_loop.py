@@ -5,7 +5,6 @@ Test endpoints for the new thread-safe human-in-the-loop functionality
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
-import asyncio
 import structlog
 
 from app.services.thread_safe_human_loop import thread_safe_human_loop, HumanRequestType, create_thread_safe_human_tools
@@ -115,7 +114,6 @@ async def test_human_loop_tools(execution_id: str, task_id: str, agent_id: str):
         async def test_tool_in_thread():
             """Test calling a human loop tool from a background thread"""
             import threading
-            import time
             
             result = {"response": None, "error": None}
             

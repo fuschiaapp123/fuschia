@@ -6,8 +6,7 @@ import structlog
 
 from app.db.postgres import WorkflowExecutionTable, WorkflowTaskTable, AsyncSessionLocal
 from app.models.agent_organization import (
-    WorkflowExecution, WorkflowTask, WorkflowExecutionCreate,
-    ExecutionStatus, TaskStatus
+    WorkflowExecution, WorkflowTask, ExecutionStatus, TaskStatus
 )
 from app.services.template_service import template_service
 
@@ -98,7 +97,7 @@ class WorkflowExecutionService:
                 )
                 
                 # DEBUG: Log memory enhancement inheritance
-                print(f"🔍 DEBUG: Memory enhancement inheritance:")
+                print("🔍 DEBUG: Memory enhancement inheritance:")
                 print(f"   - Template use_memory_enhancement: {template.use_memory_enhancement}")
                 print(f"   - Context use_memory_enhancement: {context.get('use_memory_enhancement', 'not set')}")
                 print(f"   - Final use_memory_enhancement: {use_memory_enhancement}")

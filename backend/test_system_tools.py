@@ -8,7 +8,6 @@ without requiring full AWS/OpenAI setup.
 
 import asyncio
 import sys
-import os
 from pathlib import Path
 
 # Add the backend directory to Python path
@@ -16,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from app.services.system_tools_service import (
     system_tools_service, 
-    ContextEnhancementTool,
     SystemToolMetadata,
     SystemToolCategory
 )
@@ -48,7 +46,7 @@ async def test_system_tools_service():
                 "Deploy application to production environment",
                 {"priority": "high", "team": "devops"}
             )
-            print(f"✅ Context Enhancement Result:")
+            print("✅ Context Enhancement Result:")
             print(f"   {result[:200]}..." if len(result) > 200 else f"   {result}")
         else:
             print("❌ Context Enhancement Tool not available")
@@ -101,7 +99,7 @@ async def test_system_tools_service():
         total_tools = len(system_tools_service.tools)
         initialized_tools = sum(1 for tool in system_tools_service.tools.values() if tool.initialized)
         
-        print(f"📊 Summary:")
+        print("📊 Summary:")
         print(f"   Total Tools: {total_tools}")
         print(f"   Initialized: {initialized_tools}")
         print(f"   Success Rate: {initialized_tools/total_tools*100:.1f}%")

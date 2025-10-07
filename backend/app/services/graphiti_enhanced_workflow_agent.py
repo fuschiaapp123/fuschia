@@ -9,7 +9,6 @@ This agent integrates with the official Graphiti temporal knowledge graph to pro
 """
 
 from typing import List, Optional, Dict, Any
-import asyncio
 import structlog
 from datetime import datetime
 

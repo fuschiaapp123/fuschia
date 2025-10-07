@@ -3,7 +3,7 @@ MLflow Analytics API endpoints for DSPy intent detection monitoring
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import structlog
 from app.services.mlflow_dashboard import dashboard
 

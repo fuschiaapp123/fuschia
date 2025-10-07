@@ -477,3 +477,6 @@ profile.json
 # MLFlow
 backend/mlruns/
 mlruns/
+service-account-key.json
+.gemini/
+check_*.py

@@ -5,15 +5,14 @@ from datetime import datetime
 
 from app.services.template_service import template_service
 from app.services.agent_organization_service import agent_organization_service
-from app.models.template import TemplateType, TemplateSearchResult
+from app.models.template import TemplateType
 from openai import OpenAI
 import os
 
 from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage
 
 logger = structlog.get_logger()
 
@@ -127,7 +126,7 @@ class IntentDetectionAgent:
                             "template_type": template.template_type.value
                         })
                     return json.dumps(templates_info)
-                return f"No templates found for workflows"
+                return "No templates found for workflows"
             except Exception as e:
                 self.logger.error("Failed to get workflow template names", error=str(e))
                 return f"Error getting workflow template names: {str(e)}"
@@ -149,7 +148,7 @@ class IntentDetectionAgent:
                             "name": template.name
                         })
                     return json.dumps(templates_info)
-                return f"No templates found for agents"
+                return "No templates found for agents"
             except Exception as e:
                 self.logger.error("Failed to get agent templates", error=str(e))
                 return f"Error getting agent templates: {str(e)}"

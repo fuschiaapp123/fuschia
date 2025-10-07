@@ -11,7 +11,7 @@ import os
 # Add the backend directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app.db.postgres import init_db, test_db_connection, engine, Base
+from app.db.postgres import test_db_connection, engine, Base
 from app.db.postgres import WorkflowExecutionTable, WorkflowTaskTable
 import structlog
 

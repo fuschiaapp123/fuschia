@@ -3,7 +3,7 @@ Gmail Monitor API Endpoints
 Provides REST API for managing Gmail mailbox monitoring
 """
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime

@@ -5,23 +5,15 @@ Monitors Gmail inbox for new messages and triggers workflows based on intent cla
 
 import asyncio
 import json
-import logging
-import os
-import time
-import hashlib
 from typing import Dict, List, Any, Optional, Set
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 
 import structlog
-from sqlalchemy import select, and_, desc
-from sqlalchemy.orm import sessionmaker
 
-from app.db.postgres import AsyncSessionLocal, Base
 from app.services.gmail_mcp_server import gmail_mcp_server
 from app.services.intent_agent import create_intent_agent
 from app.services.workflow_execution_service import WorkflowExecutionService
-from app.services.template_service import template_service
 
 logger = structlog.get_logger()
 

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.db.postgres import init_db, test_db_connection, engine, Base
+from app.db.postgres import init_db, test_db_connection, engine
 import structlog
 
 router = APIRouter()

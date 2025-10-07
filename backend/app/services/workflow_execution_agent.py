@@ -2,7 +2,6 @@ from typing import List, Optional, Dict, Any, Callable, Tuple
 import json
 import asyncio
 from datetime import datetime, timedelta
-from enum import Enum
 import structlog
 from typing import Awaitable
 import uuid
@@ -14,9 +13,8 @@ from pydantic import BaseModel, Field
 
 from app.models.agent_organization import (
     AgentNode, AgentOrganization, WorkflowTask, WorkflowExecution,
-    HumanInteractionRequest, AgentStrategy, AgentRole, TaskStatus, ExecutionStatus
+    HumanInteractionRequest, AgentStrategy, TaskStatus
 )
-from app.services.template_service import template_service
 from app.services.websocket_manager import websocket_manager
 from app.services.tool_registry_service import tool_registry_service
 from openai import OpenAI
@@ -956,7 +954,6 @@ class WorkflowExecutionAgent:
         async def ask_user_question(question: str) -> str:
             """Ask the user a question via WebSocket and wait for response"""
             from app.services.websocket_manager import websocket_manager
-            import uuid
             import asyncio
             
             request_id = str(uuid.uuid4())
@@ -1000,7 +997,6 @@ class WorkflowExecutionAgent:
         async def request_user_approval(action_description: str) -> str:
             """Request user approval via WebSocket and wait for response"""
             from app.services.websocket_manager import websocket_manager
-            import uuid
             import asyncio
             
             request_id = str(uuid.uuid4())
@@ -1052,7 +1048,6 @@ class WorkflowExecutionAgent:
         async def request_missing_information(info_type: str, context: str = "") -> str:
             """Request missing information via WebSocket and wait for response"""
             from app.services.websocket_manager import websocket_manager
-            import uuid
             import asyncio
             
             request_id = str(uuid.uuid4())
@@ -1275,7 +1270,6 @@ class WorkflowExecutionAgent:
                                 self.logger.debug(f"Running {async_func.__name__} in separate thread to avoid deadlock")
                                 
                                 import concurrent.futures
-                                import threading
                                 
                                 def run_in_new_loop():
                                     """Run the async function in a completely new event loop"""
@@ -1769,7 +1763,7 @@ class WorkflowExecutionAgent:
             return {
                 'success': True,
                 'result': result,
-                'observation': f"Database query completed successfully"
+                'observation': "Database query completed successfully"
             }
         except Exception as e:
             return {
@@ -1786,7 +1780,7 @@ class WorkflowExecutionAgent:
             return {
                 'success': True,
                 'result': result,
-                'observation': f"API request successful"
+                'observation': "API request successful"
             }
         except Exception as e:
             return {

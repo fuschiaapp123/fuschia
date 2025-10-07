@@ -1,7 +1,6 @@
 import asyncio
 import json
 import queue
-import threading
 from typing import Dict, List, Any, Optional
 from fastapi import WebSocket
 import structlog
@@ -623,7 +622,7 @@ class WebSocketManager:
         elif status == 'waiting_approval':
             content = f"⏳ **Task Awaiting Approval**: {task_id}\n"
             content += f"**Agent**: {agent_id}\n"
-            content += f"Human approval required to proceed."
+            content += "Human approval required to proceed."
             
         else:
             content = f"🔄 **Task Update**: {task_id}\n"
@@ -681,7 +680,7 @@ class WebSocketManager:
             agent_id="system",
             agent_name="Human-in-the-Loop System",
             task_id=task_id,
-            task_name=f"User Response Request",
+            task_name="User Response Request",
             message_type='user_request',
             requires_response=True,
             metadata={

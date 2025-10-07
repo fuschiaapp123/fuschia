@@ -63,7 +63,7 @@ async def save_workflow(
     """
     try:
         # DEBUG: Log the incoming request data
-        print(f"🔍 DEBUG: Received workflow save request:")
+        print("🔍 DEBUG: Received workflow save request:")
         print(f"   - Name: {workflow_data.name}")
         print(f"   - use_memory_enhancement: {workflow_data.use_memory_enhancement}")
         print(f"   - All fields: {workflow_data.dict()}")

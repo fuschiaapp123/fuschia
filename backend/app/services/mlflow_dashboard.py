@@ -4,7 +4,7 @@ MLflow Dashboard and Monitoring utilities for DSPy Intent Detection
 
 import mlflow
 import mlflow.tracking
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 import pandas as pd
 from datetime import datetime, timedelta
 import structlog

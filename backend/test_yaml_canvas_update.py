@@ -5,7 +5,6 @@ Test script for YAML canvas update functionality
 
 import asyncio
 import requests
-import json
 
 async def test_yaml_canvas_update():
     """Test sending YAML canvas updates through the workflow system"""
@@ -100,7 +99,7 @@ YaMl_EnD"""
             if any(keyword in yaml_content.lower() for keyword in ['agent', 'role:', 'skills:', 'department:']):
                 canvas_type = "agent"
             
-            print(f"✅ Workflow YAML detected successfully")
+            print("✅ Workflow YAML detected successfully")
             print(f"   Canvas Type: {canvas_type}")
             print(f"   Content Length: {len(yaml_content)} chars")
         else:
@@ -122,7 +121,7 @@ YaMl_EnD"""
             if any(keyword in yaml_content.lower() for keyword in ['agent', 'role:', 'skills:', 'department:']):
                 canvas_type = "agent"
             
-            print(f"✅ Agent YAML detected successfully")
+            print("✅ Agent YAML detected successfully")
             print(f"   Canvas Type: {canvas_type}")
             print(f"   Content Length: {len(yaml_content)} chars")
         else:
@@ -133,7 +132,7 @@ YaMl_EnD"""
         response = requests.get("http://localhost:8000/api/v1/debug/debug/websocket/status")
         if response.status_code == 200:
             data = response.json()
-            print(f"✅ WebSocket service is running")
+            print("✅ WebSocket service is running")
             print(f"   Active connections: {len(data.get('active_connections', {}))}")
             print(f"   Execution mappings: {len(data.get('execution_users', {}))}")
         else:

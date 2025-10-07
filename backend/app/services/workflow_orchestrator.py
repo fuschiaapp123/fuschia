@@ -258,7 +258,7 @@ class WorkflowOrchestrator:
                                 await websocket_manager.send_execution_update(execution.id, {
                                     'type': 'potential_canvas_update',
                                     'content': response,
-                                    'message': f"Potential canvas data detected - please review",
+                                    'message': "Potential canvas data detected - please review",
                                     'task_id': ready_tasks[i].id
                                 })
                         

@@ -9,7 +9,6 @@ import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 from app.services.intent_agent import create_intent_agent
-from app.auth.auth import get_current_user
 from app.models.user import User
 from fastapi.security import HTTPBearer
 from jose import JWTError, jwt
@@ -75,7 +74,7 @@ async def get_fallback_user_id() -> str:
 # Initialize OpenAI client with proper error handling
 try:
     llm_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-except Exception as e:
+except Exception:
     # Warning: OpenAI client initialization failed - continuing without LLM
     llm_client = None
 
@@ -575,13 +574,13 @@ def generate_agent_response(service_agent: str, specialist_agent: dict, message:
         
         if successful_actions:
             if 'incident' in agent_name.lower():
-                return f"I've processed your request through our IT incident management system. I've created a new incident to track your issue with login access. Our IT team will be notified and should reach out to assist you soon."
+                return "I've processed your request through our IT incident management system. I've created a new incident to track your issue with login access. Our IT team will be notified and should reach out to assist you soon."
             elif 'change' in agent_name.lower():
-                return f"I've logged your request in our change management system. The necessary approvals will be obtained and you'll be notified of the implementation timeline."
+                return "I've logged your request in our change management system. The necessary approvals will be obtained and you'll be notified of the implementation timeline."
             elif 'payroll' in agent_name.lower():
-                return f"I've reviewed your payroll inquiry regarding overtime hours. I'm escalating this to our payroll specialist who will review your records and ensure any missing overtime is processed in the next pay cycle."
+                return "I've reviewed your payroll inquiry regarding overtime hours. I'm escalating this to our payroll specialist who will review your records and ensure any missing overtime is processed in the next pay cycle."
             elif 'billing' in agent_name.lower():
-                return f"I've looked into your billing inquiry about the charge discrepancy. I'm working with our billing team to review your account and will provide a resolution within 24 hours."
+                return "I've looked into your billing inquiry about the charge discrepancy. I'm working with our billing team to review your account and will provide a resolution within 24 hours."
             else:
                 return f"I've processed your request through our {agent_name} system and taken the appropriate actions. You should receive follow-up communication shortly."
         else:
@@ -859,7 +858,7 @@ The multi-agent system is now working on your request with Chain of Thought and 
                 workflow_result = await _fallback_to_legacy_workflow(intent_result, user_message)
                 main_response = f"🤖 **Intent Detected:** {intent_result.detected_intent.replace('_', ' ').title()}\n\n{workflow_result.response if workflow_result else 'Processing your request with available tools.'}"
                 
-            except Exception as workflow_error:
+            except Exception:
                 # Fall back to regular chat if workflow fails
                 main_response = f"I understand you need help with {intent_result.detected_intent.replace('_', ' ')}. Let me assist you with that.\n\n{intent_result.suggested_action}"
         
@@ -895,11 +894,11 @@ def handle_workflow_design_intent(message: str, request: ChatRequest = None) -> 
     if any(keyword in message.lower() for keyword in ['create', 'design', 'build', 'make']):
         return f"I'll help you design a workflow for: '{message}'. To create a workflow, you can use our visual workflow designer where you can define steps with objectives and completion criteria. Would you like me to provide a YAML template for your specific use case?"
     else:
-        return f"I can help you with workflow design questions. You can create workflows using our visual designer, import/export them, or ask me to generate workflow templates. What specific aspect of workflow design interests you?"
+        return "I can help you with workflow design questions. You can create workflows using our visual designer, import/export them, or ask me to generate workflow templates. What specific aspect of workflow design interests you?"
 
 def handle_agent_management_intent(message: str) -> str:
     """Handle agent management queries"""
-    return f"I can help you understand our multi-agent system. We have specialized agents for IT support, HR inquiries, and customer service. Each agent has specific tools and capabilities. Would you like to know more about agent organization, their tools, or how they collaborate?"
+    return "I can help you understand our multi-agent system. We have specialized agents for IT support, HR inquiries, and customer service. Each agent has specific tools and capabilities. Would you like to know more about agent organization, their tools, or how they collaborate?"
 
 def handle_knowledge_inquiry_intent(message: str) -> str:
     """Handle knowledge and information queries"""
@@ -911,7 +910,7 @@ def handle_system_status_intent() -> str:
 
 def handle_general_chat_intent(message: str, request: ChatRequest = None) -> str:
     """Handle general chat and unclear requests"""
-    return f"Hello! I'm your AI assistant for the Fuschia Intelligent Automation Platform. I can help you with:\n\n• 🔧 IT support and system issues\n• 👥 HR inquiries (payroll, benefits)\n• 📞 Customer service questions\n• 🔄 Workflow design and automation\n• 🤖 Agent management\n• 📚 Platform knowledge and documentation\n\nHow can I assist you today?"
+    return "Hello! I'm your AI assistant for the Fuschia Intelligent Automation Platform. I can help you with:\n\n• 🔧 IT support and system issues\n• 👥 HR inquiries (payroll, benefits)\n• 📞 Customer service questions\n• 🔄 Workflow design and automation\n• 🤖 Agent management\n• 📚 Platform knowledge and documentation\n\nHow can I assist you today?"
 
 class HumanLoopResponse(BaseModel):
     request_id: str
@@ -989,7 +988,7 @@ async def _fallback_to_legacy_workflow(user_message: str) -> Optional[WorkflowTr
     try:
         
         # Load agent organization for workflow trigger
-        agent_org_path = f"/Users/sanjay/Lab/Fuschia-alfa/backend/data/agent-org-default.yaml"
+        agent_org_path = "/Users/sanjay/Lab/Fuschia-alfa/backend/data/agent-org-default.yaml"
         with open(agent_org_path, 'r') as stream:
             agent_org = yaml.safe_load(stream)
         print(f"Loaded agent organization from {agent_org_path}")

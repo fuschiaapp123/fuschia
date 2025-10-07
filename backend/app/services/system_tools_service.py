@@ -20,17 +20,13 @@ from enum import Enum
 import os
 from pathlib import Path
 
-# PDF and document processing
-try:
-    import PyPDF2
-    import docx
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
-    from langchain_openai import OpenAIEmbeddings
-    from langchain_community.vectorstores import FAISS
-    from langchain.schema import Document
-    DOCUMENT_PROCESSING_AVAILABLE = True
-except ImportError:
-    DOCUMENT_PROCESSING_AVAILABLE = False
+import PyPDF2
+import docx
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain.schema import Document
+
 
 logger = structlog.get_logger()
 
@@ -117,9 +113,7 @@ class RAGKnowledgeTool(BaseSystemTool):
         """Initialize S3 connection and embeddings"""
         try:
             # Quick configuration checks to fail fast
-            if not DOCUMENT_PROCESSING_AVAILABLE:
-                self.logger.warning("Document processing dependencies not available")
-                return False
+            
             
             openai_api_key = os.getenv('OPENAI_API_KEY')
             if not openai_api_key:
@@ -345,7 +339,7 @@ class RAGKnowledgeTool(BaseSystemTool):
             response = f"Found {len(results)} relevant documents for query '{query}':\n\n"
             response += "\n".join(formatted_results)
             
-            self.logger.info(f"RAG search completed", query=query, results_count=len(results))
+            self.logger.info("RAG search completed", query=query, results_count=len(results))
             return response
             
         except Exception as e:
@@ -695,11 +689,11 @@ class SystemToolsService:
                 try:
                     success = await tool.initialize()
                     if success:
-                        self.logger.info(f"System tool initialized", tool=tool_name)
+                        self.logger.info("System tool initialized", tool=tool_name)
                     else:
-                        self.logger.warning(f"System tool failed to initialize", tool=tool_name)
+                        self.logger.warning("System tool failed to initialize", tool=tool_name)
                 except Exception as e:
-                    self.logger.error(f"System tool initialization error", tool=tool_name, error=str(e))
+                    self.logger.error("System tool initialization error", tool=tool_name, error=str(e))
             
             self.initialized = True
             self.logger.info("System Tools Service initialized", tool_count=len(self.tools))
@@ -725,7 +719,7 @@ class SystemToolsService:
     async def register_tool(self, tool: BaseSystemTool):
         """Register a system tool"""
         self.tools[tool.metadata.name] = tool
-        self.logger.info(f"Registered system tool", tool=tool.metadata.name, category=tool.metadata.category.value)
+        self.logger.info("Registered system tool", tool=tool.metadata.name, category=tool.metadata.category.value)
     
     def get_tool(self, tool_name: str) -> Optional[BaseSystemTool]:
         """Get a system tool by name"""
@@ -761,7 +755,7 @@ class SystemToolsService:
             try:
                 await tool.cleanup()
             except Exception as e:
-                self.logger.error(f"Error cleaning up tool", tool=tool.metadata.name, error=str(e))
+                self.logger.error("Error cleaning up tool", tool=tool.metadata.name, error=str(e))
 
 
 # Global system tools service instance

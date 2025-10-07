@@ -5,7 +5,6 @@ Debug script to help identify and fix WebSocket user ID mismatches
 
 import asyncio
 import requests
-import json
 
 async def check_websocket_connections():
     """Check current WebSocket connections and identify user mismatches"""
@@ -56,7 +55,7 @@ async def check_websocket_connections():
                             f"http://localhost:8000/api/v1/ws/update_execution_user/{execution_id}/{connected_user_id}"
                         )
                         if update_response.status_code == 200:
-                            print(f"   ✅ Successfully remapped execution to connected user")
+                            print("   ✅ Successfully remapped execution to connected user")
                         else:
                             print(f"   ❌ Failed to remap: {update_response.status_code}")
                     except Exception as e:
@@ -66,7 +65,7 @@ async def check_websocket_connections():
         
         # Task health check
         task_health = data.get("task_health", {})
-        print(f"\n🔧 WebSocket Task Health:")
+        print("\n🔧 WebSocket Task Health:")
         print(f"   Status: {task_health.get('status', 'unknown')}")
         print(f"   Queue Size: {task_health.get('queue_size', 0)}")
         print(f"   Processing: {task_health.get('processing_flag', False)}")

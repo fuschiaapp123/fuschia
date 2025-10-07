@@ -6,7 +6,7 @@ LangGraph-based orchestration for intelligent business process automation
 import yaml
 import json
 import os
-from typing import Dict, List, Any, Optional, Union, Callable
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 from openai import OpenAI

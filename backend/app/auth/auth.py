@@ -6,7 +6,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.config import settings
 from app.models.user import TokenData, User
-from app.auth.password import verify_password, get_password_hash
 
 security = HTTPBearer()
 

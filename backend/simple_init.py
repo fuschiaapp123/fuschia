@@ -71,7 +71,7 @@ async def main():
     users = await create_users()
 
     if users:
-        print(f"\n✅ Database initialization completed successfully!")
+        print("\n✅ Database initialization completed successfully!")
         print(f"Created {len(users)} users")
         print("\nSample user credentials:")
         print("Admin: admin@fuschia.com / admin123")

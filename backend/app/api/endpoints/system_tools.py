@@ -2,16 +2,14 @@
 REST API endpoints for System Tools management and monitoring
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel
 import structlog
 from datetime import datetime
 
 from app.services.system_tools_service import (
-    system_tools_service, 
-    SystemToolCategory,
-    SystemToolMetadata
+    system_tools_service
 )
 
 router = APIRouter()
