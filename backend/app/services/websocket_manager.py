@@ -118,9 +118,9 @@ class WebSocketManager:
                 # Periodic health check to ensure we're still running
                 current_time = datetime.utcnow()
                 if (current_time - last_health_check).total_seconds() > health_check_interval:
-                    logger.debug("Message processing health check", 
-                               queue_size=self.message_queue.qsize(),
-                               processing_flag=self._processing_messages)
+                    # logger.debug("Message processing health check", 
+                    #          queue_size=self.message_queue.qsize(),
+                    #          processing_flag=self._processing_messages)
                     last_health_check = current_time
                 # Check for messages with a short timeout
                 try:

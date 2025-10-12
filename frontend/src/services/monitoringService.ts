@@ -10,6 +10,10 @@ export interface WorkflowExecution {
   current_tasks: any[];
   completed_tasks: any[];
   failed_tasks: any[];
+  template_data?: {
+    nodes?: any[];
+    edges?: any[];
+  };
   started_at: string;
   estimated_completion?: string;
   actual_completion?: string;

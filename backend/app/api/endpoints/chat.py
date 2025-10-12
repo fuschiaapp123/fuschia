@@ -668,7 +668,7 @@ async def enhanced_chat_endpoint(request: ChatRequest, current_user: Optional[Us
         matched_request_id = None
         
         if found_request_ids and websocket_manager.pending_responses:
-            print(f"@@@===> Found request IDs in user message: {found_request_ids}")
+            
             # Try to match found request ID patterns with actual pending requests
             for found_id in found_request_ids:
                 # Handle truncated request IDs (like "abc12345...")
@@ -687,7 +687,7 @@ async def enhanced_chat_endpoint(request: ChatRequest, current_user: Optional[Us
         # Method 2: If no specific request ID found, but there are pending requests,
         # assume this is a response to the most recent request (fallback behavior)
         if not matched_request_id and websocket_manager.pending_responses:
-            print("@@@===> No specific request ID found in user message, checking for most recent pending request...")  
+              
             # Check if the message seems like a response (not a new question/command)
             response_indicators = [
                 'yes', 'no', 'approve', 'reject', 'confirm', 'deny', 'ok', 'sure',
@@ -705,7 +705,7 @@ async def enhanced_chat_endpoint(request: ChatRequest, current_user: Optional[Us
         
         # If we found a matching request, submit the response
         if matched_request_id:
-            print(f"@@@===> Matched user response to pending request ID: {matched_request_id}")
+            
             # human_loop_handled = True
             request_data = websocket_manager.pending_responses[matched_request_id]
             print(f"Processing user response for human-in-the-loop request: {matched_request_id}")
@@ -733,8 +733,7 @@ async def enhanced_chat_endpoint(request: ChatRequest, current_user: Optional[Us
         # Only proceed with intent detection if no human-in-the-loop request was handled
         # and there are no pending responses that might be waiting for user input
         if websocket_manager.pending_responses:
-            print(f"@@@===> No matching request found for user response: {user_message}.")
-            print(f"@@@===> Pending responses: {websocket_manager.pending_responses.keys()}")
+            
             # There are still pending human-in-the-loop requests, but this message
             # didn't match any of them. This might be a new request while agents are waiting.
             # In this case, inform the user about pending requests rather than triggering new intent detection.
@@ -752,14 +751,13 @@ async def enhanced_chat_endpoint(request: ChatRequest, current_user: Optional[Us
             }
         
         # Step 1: Detect intent with context (only when no pending human-in-the-loop requests)
-        print(f"@@@===> Detecting intent for message: {user_message}")
+        
         intent_result = await detect_intent(
             user_message,
             user_role=request.user_role,
             current_module=request.current_module,
             current_tab=request.current_tab
         )
-        print(f"@@@===> chat.py: Intent detected: {intent_result} with confidence {intent_result}")
         
         # Step 2: Determine if workflow execution should be triggered
         workflow_result = None

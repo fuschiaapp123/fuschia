@@ -38,6 +38,10 @@ interface WorkflowExecutionVisualizationProps {
     current_tasks: WorkflowTask[];
     completed_tasks: WorkflowTask[];
     failed_tasks: WorkflowTask[];
+    template_data?: {
+      nodes?: any[];
+      edges?: any[];
+    };
   };
 }
 
@@ -101,22 +105,123 @@ const nodeTypes = {
   taskNode: TaskNode,
 };
 
-export const WorkflowExecutionVisualization: React.FC<WorkflowExecutionVisualizationProps> = ({ 
-  execution 
+export const WorkflowExecutionVisualization: React.FC<WorkflowExecutionVisualizationProps> = ({
+  execution
 }) => {
   // Create nodes and edges from execution data
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
+    const nodes: Node[] = [];
+    const edges: Edge[] = [];
+
+    // Use template_data if available (actual workflow structure from designer)
+    if (execution.template_data?.nodes && execution.template_data.nodes.length > 0) {
+      console.log('📊 WorkflowExecutionVisualization: Using template data', {
+        nodeCount: execution.template_data.nodes.length,
+        edgeCount: execution.template_data.edges?.length || 0,
+        nodes: execution.template_data.nodes,
+        edges: execution.template_data.edges,
+      });
+
+      // Create a map of task statuses by task ID
+      const taskStatusMap = new Map<string, 'completed' | 'in_progress' | 'failed' | 'pending'>();
+
+      execution.completed_tasks.forEach(task => {
+        taskStatusMap.set(task.id, 'completed');
+      });
+      execution.current_tasks.forEach(task => {
+        taskStatusMap.set(task.id, 'in_progress');
+      });
+      execution.failed_tasks.forEach(task => {
+        taskStatusMap.set(task.id, 'failed');
+      });
+
+      // Create nodes from template data with real-time status
+      execution.template_data.nodes.forEach((templateNode: any) => {
+        const taskStatus = taskStatusMap.get(templateNode.id) || 'pending';
+
+        nodes.push({
+          id: templateNode.id,
+          type: 'taskNode',
+          position: templateNode.position || { x: 0, y: 0 },
+          data: {
+            label: templateNode.data?.label || 'Unnamed Task',
+            status: taskStatus,
+            type: templateNode.data?.type,
+          },
+        });
+      });
+
+      // Create edges from template data
+      if (execution.template_data.edges && Array.isArray(execution.template_data.edges)) {
+        console.log('🔗 Processing edges:', {
+          totalEdges: execution.template_data.edges.length,
+          edges: execution.template_data.edges,
+          nodeIds: nodes.map(n => n.id),
+        });
+
+        // Create a set of valid node IDs for fast lookup
+        const validNodeIds = new Set(nodes.map(n => n.id));
+
+        execution.template_data.edges.forEach((templateEdge: any, index: number) => {
+          // Handle both direct edge format and nested edge format
+          const edgeId = templateEdge.id || `e${templateEdge.source}-${templateEdge.target}`;
+          const sourceId = templateEdge.source;
+          const targetId = templateEdge.target;
+
+          // Only add edge if both source and target nodes exist
+          const sourceExists = validNodeIds.has(sourceId);
+          const targetExists = validNodeIds.has(targetId);
+
+          if (sourceExists && targetExists) {
+            const sourceStatus = taskStatusMap.get(sourceId);
+            const newEdge = {
+              id: edgeId,
+              source: sourceId,
+              target: targetId,
+              type: 'smoothstep',
+              animated: sourceStatus === 'in_progress',
+              style: { stroke: '#94a3b8', strokeWidth: 2 },
+              markerEnd: {
+                type: 'arrowclosed' as any,
+                color: '#94a3b8',
+              },
+            };
+            edges.push(newEdge);
+            console.log(`✅ Edge ${index + 1} added:`, edgeId);
+          } else {
+            console.warn(`⚠️ Edge ${index + 1} skipped - invalid node reference:`, {
+              edgeId,
+              sourceId: sourceId + (sourceExists ? ' ✓' : ' ✗ MISSING'),
+              targetId: targetId + (targetExists ? ' ✓' : ' ✗ MISSING'),
+            });
+          }
+        });
+      } else {
+        console.warn('⚠️ No edges found in template_data:', {
+          hasEdges: !!execution.template_data.edges,
+          isArray: Array.isArray(execution.template_data.edges),
+          edgesValue: execution.template_data.edges,
+        });
+      }
+
+      console.log('📊 Created visualization:', {
+        nodesCreated: nodes.length,
+        edgesCreated: edges.length,
+        nodes,
+        edges,
+      });
+
+      return { nodes, edges };
+    }
+
+    // Fallback: create visualization from task data
     const allTasks = [
       ...execution.completed_tasks.map(task => ({ ...task, status: 'completed' as const })),
       ...execution.current_tasks.map(task => ({ ...task, status: 'in_progress' as const })),
       ...execution.failed_tasks.map(task => ({ ...task, status: 'failed' as const })),
     ];
 
-    // Create nodes
-    const nodes: Node[] = [];
-    const edges: Edge[] = [];
-
-    // If we don't have task data, create a simple visualization based on execution status
+    // If we don't have task data or template data, create a simple visualization
     if (allTasks.length === 0) {
       // Create a simple flow for demonstration
       const demoTasks = [
@@ -197,10 +302,29 @@ export const WorkflowExecutionVisualization: React.FC<WorkflowExecutionVisualiza
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  const onConnect = useCallback(
-    (params: any) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
-  );
+  // Debug: Log what's being rendered
+  console.log('🎨 WorkflowExecutionVisualization rendering:', {
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    sampleNodes: nodes.slice(0, 3).map(n => ({ id: n.id, label: n.data.label })),
+    sampleEdges: edges.slice(0, 3).map(e => ({ id: e.id, source: e.source, target: e.target })),
+    allNodeIds: nodes.map(n => n.id),
+    allEdgeSources: edges.map(e => e.source),
+    allEdgeTargets: edges.map(e => e.target),
+  });
+
+  // Check for ID mismatches
+  const nodeIdSet = new Set(nodes.map(n => n.id));
+  const missingSourceNodes = edges.filter(e => !nodeIdSet.has(e.source));
+  const missingTargetNodes = edges.filter(e => !nodeIdSet.has(e.target));
+
+  if (missingSourceNodes.length > 0 || missingTargetNodes.length > 0) {
+    console.error('❌ Edge-Node ID Mismatch Detected!');
+    console.error('Missing source nodes:', missingSourceNodes.map(e => ({ edge: e.id, source: e.source })));
+    console.error('Missing target nodes:', missingTargetNodes.map(e => ({ edge: e.id, target: e.target })));
+  } else {
+    console.log('✅ All edges have valid source/target nodes');
+  }
 
   const getExecutionStatusColor = () => {
     switch (execution.status) {
@@ -218,28 +342,12 @@ export const WorkflowExecutionVisualization: React.FC<WorkflowExecutionVisualiza
   };
 
   return (
-    <div className="h-96 w-full border rounded-lg overflow-hidden">
-      <div className="bg-white border-b px-4 py-2">
-        <div className="flex items-center justify-between">
-          <h4 className="font-medium text-gray-900">
-            {execution.workflow_name} - Execution Flow
-          </h4>
-          <div className="flex items-center space-x-4 text-sm text-gray-600">
-            <span>✅ {execution.completed_tasks.length} completed</span>
-            <span>⏳ {execution.current_tasks.length} in progress</span>
-            {execution.failed_tasks.length > 0 && (
-              <span className="text-red-600">❌ {execution.failed_tasks.length} failed</span>
-            )}
-          </div>
-        </div>
-      </div>
-      
+    <div className="h-full w-full flex flex-col overflow-hidden">
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
         nodeTypes={nodeTypes}
         connectionLineType={ConnectionLineType.SmoothStep}
         fitView

@@ -73,6 +73,12 @@ class WorkflowService {
       console.log('🔍 DEBUG: Complete payload to send:', JSON.stringify(payload, null, 2));
       console.log('🔍 DEBUG: payload.use_memory_enhancement:', payload.use_memory_enhancement);
 
+      // DEBUG: Log node types specifically
+      console.log('🔍 DEBUG: Node types being saved:');
+      payload.template_data.nodes.forEach((node: any, index: number) => {
+        console.log(`   Node ${index + 1}: ${node.data?.label || 'Unnamed'} - Type: ${node.data?.type || 'MISSING'}`);
+      });
+
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };

@@ -30,6 +30,7 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     ESCALATED = "escalated"
+    PAUSED = "paused"
 
 
 class ExecutionStatus(str, Enum):

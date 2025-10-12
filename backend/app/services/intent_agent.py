@@ -169,7 +169,7 @@ class IntentDetectionAgent:
             templates = await agent_organization_service.list_agent_templates(
                 status="active"
             )
-            
+
             if templates:
                 templates_info = []
                 for template in templates:
@@ -182,6 +182,57 @@ class IntentDetectionAgent:
         except Exception as e:
             self.logger.error("Error retrieving agent templates", error=str(e))
             return "[]"
+
+    async def check_paused_workflows(self, message: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Check if the incoming message matches any paused workflow executions
+
+        Returns information about matching paused workflow if found
+        """
+        try:
+            from app.services.workflow_execution_service import workflow_execution_service
+
+            # Get paused workflows for the user
+            paused_workflows = await workflow_execution_service.find_paused_workflow_executions(
+                user_id=user_id,
+                limit=10
+            )
+
+            if not paused_workflows:
+                return None
+
+            # Use LLM to determine if message relates to any paused workflow
+            message_lower = message.lower()
+
+            for workflow in paused_workflows:
+                workflow_name = workflow['workflow_template_name'].lower()
+                workflow_desc = workflow.get('workflow_description', '').lower()
+                paused_task = workflow.get('paused_task')
+                pause_reason = paused_task.get('pause_reason', '') if paused_task else ''
+
+                # Simple keyword matching
+                # Check if message mentions the workflow name or context
+                if (workflow_name in message_lower or
+                    any(word in message_lower for word in ['resume', 'continue', 'paused', 'waiting'])):
+
+                    # Check execution context for relevant keywords
+                    execution_context = workflow.get('execution_context', {})
+                    original_request = execution_context.get('user_request', '').lower()
+
+                    # If there's significant overlap, this might be a match
+                    if workflow_name in message_lower or (original_request and len(original_request) > 10 and original_request in message_lower):
+                        self.logger.info(
+                            "Found matching paused workflow",
+                            execution_id=workflow['execution_id'],
+                            workflow_name=workflow['workflow_template_name'],
+                            message_snippet=message[:100]
+                        )
+                        return workflow
+
+            return None
+
+        except Exception as e:
+            self.logger.error("Failed to check paused workflows", error=str(e))
+            return None
     
     def _get_intent_categories(self) -> str:
         """Get available intent categories"""
@@ -455,7 +506,8 @@ class IntentDetectionAgent:
         user_role: Optional[str] = None,
         current_module: Optional[str] = None,
         current_tab: Optional[str] = None,
-        model: str = "gpt-3.5-turbo"
+        model: str = "gpt-3.5-turbo",
+        user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Main intent detection method using DSPy with MLflow observability and tracing
@@ -549,7 +601,8 @@ class IntentDetectionAgent:
             }
 
             # Add workflow_execution dictionary if workflow is required
-            await self._add_workflow_execution_info(result, message, user_role, current_module, current_tab)
+            # Also check for paused workflows that match the message
+            await self._add_workflow_execution_info(result, message, user_role, current_module, current_tab, user_id)
 
             
             # Calculate response time
@@ -626,25 +679,65 @@ class IntentDetectionAgent:
         message: str,
         user_role: Optional[str],
         current_module: Optional[str],
-        current_tab: Optional[str]
+        current_tab: Optional[str],
+        user_id: Optional[str] = None
     ) -> None:
-        """Add workflow_execution dictionary to intent result if workflow is required"""
+        """Add workflow_execution dictionary to intent result if workflow is required
+
+        First checks for paused workflows that match the message.
+        If found, returns the paused workflow for resumption.
+        """
         try:
-            # Check if workflow execution is required
+            # FIRST: Check if there's a paused workflow that matches this message
+            paused_workflow = await self.check_paused_workflows(message, user_id=user_id)
+
+            if paused_workflow:
+                # Found a matching paused workflow - suggest resuming it
+                intent_result["detected_intent"] = "WORKFLOW_RESUME"
+                intent_result["requires_workflow"] = True
+                intent_result["confidence"] = 0.95  # High confidence for paused workflow match
+                intent_result["paused_workflow"] = paused_workflow
+                intent_result["workflow_execution"] = {
+                    "recommended": True,
+                    "execution_type": "RESUME",
+                    "execution_id": paused_workflow['execution_id'],
+                    "workflow_template_id": paused_workflow['workflow_template_id'],
+                    "workflow_template_name": paused_workflow['workflow_template_name'],
+                    "organization_id": paused_workflow.get('organization_id'),
+                    "confidence": 0.95,
+                    "paused_task": paused_workflow.get('paused_task'),
+                    "execution_context": {
+                        "user_request": message,
+                        "detected_intent": "WORKFLOW_RESUME",
+                        "user_role": user_role,
+                        "current_module": current_module,
+                        "current_tab": current_tab,
+                        "resume_reason": f"User message matches paused workflow: {paused_workflow['workflow_template_name']}",
+                        "original_execution_context": paused_workflow.get('execution_context', {})
+                    }
+                }
+
+                self.logger.info(
+                    "Detected paused workflow match - suggesting resume",
+                    execution_id=paused_workflow['execution_id'],
+                    workflow_name=paused_workflow['workflow_template_name'],
+                    message_snippet=message[:100]
+                )
+                return
+
+            # No paused workflow match - proceed with normal intent detection
             requires_workflow = intent_result.get("requires_workflow", False)
             workflow_template_name = intent_result.get("workflow_template_name")
             workflow_template_id = intent_result.get("workflow_template_id")
             agent_template_id = intent_result.get("agent_template_id")
             agent_template_name = intent_result.get("agent_template_name")
             confidence = intent_result.get("confidence", 0.0)
-            
+
             # Only add workflow_execution if confidence is high enough and workflow is required
             if requires_workflow and confidence >= 0.7 and workflow_template_name and workflow_template_name != "TEMPLATE_NOT_FOUND":
-                # Generate a template ID based on the workflow name
-                # template_id = f"template_{workflow_name.lower().replace(' ', '_')}"
-                
                 intent_result["workflow_execution"] = {
                     "recommended": True,
+                    "execution_type": "NEW",
                     "workflow_template_id": workflow_template_id,
                     "workflow_template_name": workflow_template_name,
                     "agent_template_id": agent_template_id,
@@ -662,7 +755,7 @@ class IntentDetectionAgent:
                         "suggested_action": intent_result.get("suggested_action", "")
                     }
                 }
-                
+
                 self.logger.info(
                     "Added workflow execution info",
                     workflow_template_id=workflow_template_id,
@@ -677,7 +770,7 @@ class IntentDetectionAgent:
                     "recommended": False,
                     "reason": "Low confidence or no specific workflow template found"
                 }
-                
+
         except Exception as e:
             self.logger.error("Failed to add workflow execution info", error=str(e))
             # Add a basic workflow_execution dict to avoid missing key errors

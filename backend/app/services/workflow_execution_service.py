@@ -1,4 +1,4 @@
-from sqlalchemy import select, and_, desc
+from sqlalchemy import select, and_, desc, func
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
@@ -507,6 +507,81 @@ class WorkflowExecutionService:
         except Exception as e:
             self.logger.error("Failed to update task results", task_id=task_id, error=str(e))
             return False
+
+    async def find_paused_workflow_executions(
+        self,
+        user_id: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Find workflow executions that are in PAUSED state
+
+        Returns list of paused executions with workflow template information
+        """
+        try:
+            async with AsyncSessionLocal() as session:
+                query = select(WorkflowExecutionTable).where(
+                    WorkflowExecutionTable.status == ExecutionStatus.PAUSED.value
+                )
+
+                # Filter by user if specified
+                if user_id:
+                    query = query.where(WorkflowExecutionTable.initiated_by == user_id)
+
+                query = query.order_by(desc(WorkflowExecutionTable.started_at)).limit(limit)
+
+                result = await session.execute(query)
+                db_executions = result.scalars().all()
+
+                paused_workflows = []
+                for db_execution in db_executions:
+                    # Get workflow template information
+                    template = await template_service.get_template(db_execution.workflow_template_id)
+
+                    # Get paused task information
+                    paused_task_info = None
+                    if db_execution.current_tasks:
+                        for task_id in db_execution.current_tasks:
+                            task_result = await session.execute(
+                                select(WorkflowTaskTable).where(
+                                    and_(
+                                        WorkflowTaskTable.id == task_id,
+                                        WorkflowTaskTable.status == TaskStatus.PAUSED.value
+                                    )
+                                )
+                            )
+                            paused_task = task_result.scalar_one_or_none()
+                            if paused_task:
+                                paused_task_info = {
+                                    'task_id': paused_task.id,
+                                    'task_name': paused_task.name,
+                                    'pause_reason': paused_task.results.get('pause_reason', 'Unknown') if paused_task.results else 'Unknown'
+                                }
+                                break
+
+                    paused_workflows.append({
+                        'execution_id': db_execution.id,
+                        'workflow_template_id': db_execution.workflow_template_id,
+                        'workflow_template_name': template.name if template else 'Unknown Workflow',
+                        'workflow_description': template.description if template else '',
+                        'organization_id': db_execution.organization_id,
+                        'initiated_by': db_execution.initiated_by,
+                        'started_at': db_execution.started_at.isoformat() if db_execution.started_at else None,
+                        'execution_context': db_execution.execution_context or {},
+                        'paused_task': paused_task_info,
+                        'completed_tasks_count': len(db_execution.completed_tasks or []),
+                        'total_tasks_count': await session.scalar(
+                            select(func.count()).select_from(WorkflowTaskTable).where(
+                                WorkflowTaskTable.execution_id == db_execution.id
+                            )
+                        )
+                    })
+
+                self.logger.info(f"Found {len(paused_workflows)} paused workflow executions", user_id=user_id)
+                return paused_workflows
+
+        except Exception as e:
+            self.logger.error("Failed to find paused workflow executions", error=str(e))
+            return []
 
 
 # Global service instance
