@@ -75,7 +75,6 @@ class HCMProMCPServer:
 
     async def initialize(self) -> None:
         """Initialize the HCM Pro MCP server with available operations"""
-        logger.info(f"Initializing HCM Pro MCP Server: {self.server_id}")
 
         # Authenticate to get JWT token
         success = await self._authenticate()
@@ -89,12 +88,10 @@ class HCMProMCPServer:
         await self._load_hcmpro_resources()
 
         self.is_running = True
-        logger.info(f"HCM Pro MCP Server initialized with {len(self.tools)} tools and {len(self.resources)} resources")
-
+        
     async def _authenticate(self) -> bool:
         """Authenticate with HCM Pro API to get JWT token"""
         try:
-            logger.error(f"Authenticating with HCM Pro API... url = {self.base_url}, email = {self.admin_email}  password = {self.admin_password}")
             response = await self.client.post(
                 f"{self.base_url}/api/auth/login",
                 json={
@@ -107,7 +104,7 @@ class HCMProMCPServer:
             if response.status_code == 200:
                 auth_data = response.json()
                 self.jwt_token = auth_data.get("token") or auth_data.get("access_token")
-                logger.info("HCM Pro authentication successful")
+                
                 return True
             else:
                 logger.error(f"HCM Pro authentication failed: {response.status_code} - {response.text}")
@@ -412,8 +409,6 @@ class HCMProMCPServer:
                 )
                 self.tools[tool.name] = tool
 
-            logger.info(f"Loaded {len(self.tools)} HCM Pro tools")
-
         except Exception as e:
             logger.error(f"Error loading HCM Pro tools: {e}")
 
@@ -450,8 +445,6 @@ class HCMProMCPServer:
             )
             self.resources[departments_resource.uri] = departments_resource
 
-            logger.info(f"Loaded {len(self.resources)} HCM Pro resources")
-
         except Exception as e:
             logger.error(f"Error loading HCM Pro resources: {e}")
 
@@ -479,7 +472,6 @@ class HCMProMCPServer:
 
         # Retry authentication if not authenticated
         if not self._check_auth():
-            logger.info("HCM Pro not authenticated, attempting authentication...")
             auth_success = await self._authenticate()
             if not auth_success:
                 raise ValueError("HCM Pro authentication failed. Please check credentials and HCM Pro service availability.")
@@ -504,7 +496,6 @@ class HCMProMCPServer:
     async def _execute_hcmpro_operation(self, tool: HCMProMCPTool, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the actual HCM Pro API operation"""
         operation_type = tool.operation_type
-        logger.error(f"Executing HCM Pro operation '{operation_type}' with arguments: {arguments}")
 
         if operation_type == "list_job_offers":
             return await self._list_job_offers(arguments)
@@ -573,7 +564,6 @@ class HCMProMCPServer:
     async def _get_job_offer(self, offer_id: str) -> Dict[str, Any]:
         """Get a specific job offer by ID"""
         try:
-            logger.error(f"Fetching job offer with ID: {offer_id}")
             response = await self.client.get(
                 f"{self.base_url}/api/job-offers/{offer_id}",
                 headers=self._get_headers()
@@ -613,7 +603,7 @@ class HCMProMCPServer:
 
             # Use the list_job_offers endpoint with search parameter
             list_result = await self._list_job_offers({"search": search_query, "limit": 100})
-            logger.error(f"List result: {list_result}")
+            
 
             if not list_result.get("success"):
                 return {
@@ -625,7 +615,6 @@ class HCMProMCPServer:
 
             # Filter results to match candidate name or email more precisely
             all_offers = list_result.get("data", {}).get("jobOffers", [])
-            logger.error(f"All offers fetched: {all_offers}")
             matched_offers = []
 
             for offer in all_offers:

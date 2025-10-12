@@ -5,7 +5,6 @@ import { hasPermission } from '@/utils/roles';
 import { WorkflowExecutionVisualization } from '@/components/monitoring/WorkflowExecutionVisualization';
 import { AgentOrganizationVisualization } from '@/components/monitoring/AgentOrganizationVisualization';
 import { ThoughtsActionsVisualization, AgentThought } from '@/components/monitoring/ThoughtsActionsVisualization';
-import { GmailMonitor } from '@/components/monitoring/GmailMonitor';
 import { MCPMonitor } from '@/components/monitoring/MCPMonitor';
 import { monitoringService, WorkflowExecution, AgentOrganization } from '@/services/monitoringService';
 import { websocketService, AgentThought as WSAgentThought } from '@/services/websocketService';
@@ -284,10 +283,69 @@ export const MonitoringModule: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex">
-        {/* List Panel */}
-        <div className={`${currentTab === 'thoughts' || currentTab === 'gmail' || currentTab === 'mcp' ? 'w-full' : 'w-1/2'} bg-white ${currentTab !== 'thoughts' && currentTab !== 'gmail' && currentTab !== 'mcp' ? 'border-r border-gray-200' : ''}`}>
-          {currentTab === 'workflows' ? (
+      <div className="flex-1 flex flex-col">
+        {currentTab === 'workflows' && selectedExecution ? (
+          // Full-width visualization layout for workflows
+          <div className="flex-1 flex flex-col">
+            {/* Workflow Execution Info Header */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">{selectedExecution.workflow_name}</h2>
+                  <p className="text-sm text-gray-600">Execution ID: {selectedExecution.id}</p>
+                  <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
+                    <span>Started by: {selectedExecution.initiated_by_name}</span>
+                    <span>Started: {new Date(selectedExecution.started_at).toLocaleString()}</span>
+                    <div className="flex items-center space-x-2">
+                      {getStatusIcon(selectedExecution.status)}
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadgeClasses(selectedExecution.status)}`}>
+                        {selectedExecution.status.charAt(0).toUpperCase() + selectedExecution.status.slice(1)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedExecution(null)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md"
+                >
+                  ← Back to List
+                </button>
+              </div>
+            </div>
+
+            {/* Full-width Visualization */}
+            <div className="flex-1 bg-gray-50 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 h-full">
+                <WorkflowExecutionVisualization execution={selectedExecution} />
+              </div>
+            </div>
+
+            {/* Task Details Footer */}
+            <div className="bg-white border-t border-gray-200 px-6 py-4">
+              <div className="flex items-center space-x-8 text-sm">
+                <div className="flex items-center space-x-2">
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                  <span className="font-medium">{selectedExecution.completed_tasks.length} Completed</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Play className="w-4 h-4 text-blue-600" />
+                  <span className="font-medium">{selectedExecution.current_tasks.length} In Progress</span>
+                </div>
+                {selectedExecution.failed_tasks.length > 0 && (
+                  <div className="flex items-center space-x-2">
+                    <XCircle className="w-4 h-4 text-red-600" />
+                    <span className="font-medium text-red-600">{selectedExecution.failed_tasks.length} Failed</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Original two-panel layout for other tabs
+          <div className="flex-1 flex">
+            {/* List Panel */}
+            <div className={`${currentTab === 'thoughts' || currentTab === 'mcp' ? 'w-full' : 'w-1/2'} bg-white ${currentTab !== 'thoughts' && currentTab !== 'mcp' ? 'border-r border-gray-200' : ''}`}>
+              {currentTab === 'workflows' ? (
             <div className="p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Workflow Executions
@@ -399,32 +457,28 @@ export const MonitoringModule: React.FC = () => {
                 onRefresh={handleRefreshThoughts}
               />
             </div>
-          ) : currentTab === 'gmail' ? (
-            <div className="h-full">
-              <GmailMonitor />
-            </div>
-          ) : currentTab === 'mcp' ? (
-            <div className="h-full">
-              <MCPMonitor />
-            </div>
-          ) : null}
-        </div>
-
-        {/* Detail Panel - Hidden for thoughts, gmail, and mcp tabs */}
-        {currentTab !== 'thoughts' && currentTab !== 'gmail' && currentTab !== 'mcp' && (
-          <div className="w-1/2 bg-gray-50">
-            {currentTab === 'workflows' && selectedExecution ? (
-              <WorkflowExecutionDetail execution={selectedExecution} />
-            ) : currentTab === 'agents' && selectedAgent ? (
-              <AgentOrganizationDetail organization={selectedAgent} />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <Eye className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">
-                    Select a {currentTab === 'workflows' ? 'workflow execution' : 'agent organization'} to view details
-                  </p>
+              ) : currentTab === 'mcp' ? (
+                <div className="h-full">
+                  <MCPMonitor />
                 </div>
+              ) : null}
+            </div>
+
+            {/* Detail Panel - Only for agents tab, workflows use full-width */}
+            {currentTab === 'agents' && (
+              <div className="w-1/2 bg-gray-50">
+                {selectedAgent ? (
+                  <AgentOrganizationDetail organization={selectedAgent} />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <Eye className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600">
+                        Select an agent organization to view details
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

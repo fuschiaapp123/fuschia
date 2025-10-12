@@ -3,11 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import structlog
 from contextlib import asynccontextmanager
+import logging
 
 from app.core.config import settings
 from app.db.neo4j import neo4j_driver
 from app.db.postgres import init_db, test_db_connection
 from app.api.router import api_router
+
+# Reduce uvicorn access log verbosity
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 print("Starting Fuschia Backend API...")
 logger = structlog.get_logger()
@@ -48,7 +52,18 @@ async def lifespan(app: FastAPI):
         logger.info("WebSocket manager message processing initialized")
     except Exception as e:
         logger.error(f"WebSocket manager initialization failed: {e}")
-    
+
+    # Initialize Gmail Monitor Service (optional auto-start)
+    try:
+        from app.services.gmail_monitor_service import gmail_monitor_service
+        logger.info("Gmail Monitor Service available - use /api/v1/gmail-monitor/start to enable")
+        # Uncomment the following lines to auto-start monitoring on application startup:
+        await gmail_monitor_service.initialize()
+        await gmail_monitor_service.start_monitoring()
+        logger.info("Gmail Monitor Service started automatically")
+    except Exception as e:
+        logger.warning(f"Gmail Monitor Service initialization failed: {e}")
+
     yield
     
     logger.info("Shutting down Fuschia Backend API")

@@ -527,18 +527,48 @@ class MCPIntegrationTool(BaseSystemTool):
             import json
             if not self.initialized:
                 await self.initialize()
-            
+
             # Parse parameters JSON string
             try:
                 params_dict = json.loads(parameters) if parameters else {}
             except json.JSONDecodeError:
                 params_dict = {}
-            
+
             return await self.execute(service=service, method=method, parameters=params_dict)
-        
+
         mcp_service_call.__name__ = self.metadata.name
         mcp_service_call.__doc__ = self.metadata.description
         return mcp_service_call
+
+    def get_individual_mcp_tools(self) -> List[Callable]:
+        """Get individual DSPy tools for each MCP server method (for better LLM discoverability)"""
+        if not self.initialized:
+            return []
+
+        individual_tools = []
+
+        for service_name, mcp_server in self.mcp_servers.items():
+            # Get all available tools from the MCP server
+            if hasattr(mcp_server, 'tools') and mcp_server.tools:
+                for tool_name, tool_info in mcp_server.tools.items():
+                    # Create a wrapper function for this specific tool
+                    def create_tool_wrapper(svc_name, tname, tinfo):
+                        async def tool_func(**kwargs) -> str:
+                            """Execute MCP tool"""
+                            if not self.initialized:
+                                await self.initialize()
+                            return await self.execute(service=svc_name, method=tname, parameters=kwargs)
+
+                        # Set function metadata
+                        tool_func.__name__ = f"{tname}"
+                        tool_func.__doc__ = tinfo.get('description', f"Execute {tname} from {svc_name}")
+                        return tool_func
+
+                    individual_tools.append(create_tool_wrapper(service_name, tool_name, tool_info))
+                    self.logger.debug(f"Created individual DSPy tool: {tool_name}")
+
+        self.logger.info(f"Created {len(individual_tools)} individual MCP tools")
+        return individual_tools
 
 
 class ContextEnhancementTool(BaseSystemTool):

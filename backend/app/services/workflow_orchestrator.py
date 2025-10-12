@@ -66,16 +66,17 @@ class WorkflowOrchestrator:
             organization = await self._get_agent_organization(organization_id)
             if not organization:
                 raise ValueError(f"Agent organization {organization_id} not found")
-            self.logger.debug("Retrieved agent organization", organization_id=organization_id)
+            self.logger.debug("Retrieved agent organization", organization_id=organization.id)
             # Create workflow execution using the database service
+            # IMPORTANT: Use organization.id (the actual organization ID) not organization_id (which might be a template ID)
             execution = await workflow_execution_service.create_execution(
                 workflow_template_id=workflow_template_id,
                 initiated_by=initiated_by,
-                organization_id=organization_id,
+                organization_id=organization.id,  # Use the actual organization ID from the retrieved/created organization
                 execution_context=initial_context or {},
                 priority=1
             )
-            self.logger.debug("Created workflow execution in database", execution_id=execution.id)
+            self.logger.debug("Created workflow execution in database", execution_id=execution.id, actual_organization_id=organization.id)
             
             # Store execution in memory for orchestration
             self.active_executions[execution.id] = execution
@@ -209,7 +210,10 @@ class WorkflowOrchestrator:
                 # Wait for all assigned tasks to complete
                 if execution_coroutines:
                     task_results = await asyncio.gather(*execution_coroutines, return_exceptions=True)
-                    
+
+                    # Check if any task returned to PENDING state
+                    has_pending_task = False
+
                     # Process results
                     for i, result in enumerate(task_results):
                         self.logger.debug(
@@ -218,10 +222,50 @@ class WorkflowOrchestrator:
                             task_id=ready_tasks[i].id,
                             result=result
                         )
+
+                        # Check for PENDING status - workflow should pause
+                        if isinstance(result, dict) and result.get('status') == TaskStatus.PENDING.value:
+                            has_pending_task = True
+                            self.logger.info(
+                                "Task in PENDING state detected - workflow will pause",
+                                execution_id=execution.id,
+                                task_id=ready_tasks[i].id
+                            )
+
+                        # Check for PAUSED status - workflow should pause immediately
+                        if isinstance(result, dict) and result.get('status') == TaskStatus.PAUSED.value:
+                            self.logger.info(
+                                "Task PAUSED - stopping workflow execution",
+                                execution_id=execution.id,
+                                task_id=ready_tasks[i].id,
+                                pause_reason=result.get('pause_reason', 'Task requested pause')
+                            )
+
+                            # Update workflow status to PAUSED
+                            execution.status = ExecutionStatus.PAUSED
+                            await workflow_execution_service.update_execution_status(
+                                execution.id,
+                                ExecutionStatus.PAUSED
+                            )
+
+                            # Send WebSocket notification
+                            await websocket_manager.send_execution_update(execution.id, {
+                                'status': 'paused',
+                                'message': f'⏸️ Workflow paused: {result.get("pause_reason", "Task requested pause")}',
+                                'task_id': ready_tasks[i].id,
+                                'pause_reason': result.get('pause_reason', 'Task requested pause')
+                            })
+
+                            self.logger.info(
+                                "Workflow execution paused - can be resumed later",
+                                execution_id=execution.id
+                            )
+                            return  # Stop workflow execution
+
                         # Enhanced YAML canvas update detection and processing
                         results = result.get('results') if isinstance(result, dict) else None
                         response = results.get('response') if results else None
-                        
+
                         if response and isinstance(response, str):
                             # Check for YAML canvas update markers
                             if ("YaMl_StArT" in response and "YaMl_EnD" in response):
@@ -270,7 +314,26 @@ class WorkflowOrchestrator:
                             )
                         else:
                             self._process_task_result(result, execution)
-                
+
+                    # If any task is in PENDING state, pause the workflow execution
+                    if has_pending_task:
+                        execution.status = ExecutionStatus.PAUSED
+                        # Update status in database
+                        await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.PAUSED)
+
+                        # Send pause notification
+                        await websocket_manager.send_execution_update(execution.id, {
+                            'status': 'paused',
+                            'message': '⏸️  Workflow paused - task returned to PENDING state',
+                            'pending_tasks': [t.id for t in execution.tasks if t.status == TaskStatus.PENDING]
+                        })
+
+                        self.logger.info(
+                            "Workflow execution paused due to PENDING task",
+                            execution_id=execution.id
+                        )
+                        break  # Exit the workflow execution loop
+
                 # Brief pause before next iteration
                 await asyncio.sleep(1)
             
@@ -334,6 +397,7 @@ class WorkflowOrchestrator:
             await graphiti_enhanced_memory_service.initialize()
             
             # Get organization for agents
+            self.logger.debug("Retrieving agent organization for Graphiti execution", organization_id=execution.organization_id)
             organization = await self._get_agent_organization(execution.organization_id)
             if not organization:
                 raise ValueError(f"Agent organization {execution.organization_id} not found")
@@ -495,7 +559,18 @@ class WorkflowOrchestrator:
                 await workflow_execution_service.update_task_status(
                     task.id, TaskStatus.FAILED, agent.agent_node.id, result
                 )
-            
+            elif result.get('status') == TaskStatus.PENDING.value:
+                # Task returned to PENDING state - needs to pause
+                # Update task status to PENDING in database
+                await workflow_execution_service.update_task_status(
+                    task.id, TaskStatus.PENDING, agent.agent_node.id, result
+                )
+                self.logger.info(
+                    "Task returned to PENDING state - workflow will pause",
+                    task_id=task.id,
+                    execution_id=execution.id
+                )
+
             return result
             
         except Exception as e:
@@ -573,6 +648,8 @@ class WorkflowOrchestrator:
                                     ready_tasks: List[WorkflowTask],
                                     execution: WorkflowExecution) -> Dict[str, str]:
         """Assign ready tasks to appropriate agents"""
+
+        self.logger.debug("Assigning tasks to agents", execution_id=execution.id, ready_task_count=len(ready_tasks))
         
         assignments = {}
         organization = await self._get_agent_organization(execution.organization_id)
@@ -769,30 +846,67 @@ class WorkflowOrchestrator:
     
     def _create_tasks_from_template(self, workflow_template) -> List[WorkflowTask]:
         """Create workflow tasks from template"""
-        
+
         tasks = []
         template_data = workflow_template.template_data
+
+        # Debug: Log the entire template_data structure
+        self.logger.info(
+            "Creating tasks from workflow template",
+            workflow_template_id=workflow_template.id,
+            workflow_name=workflow_template.name,
+            template_data_type=type(template_data).__name__,
+            has_nodes='nodes' in template_data if isinstance(template_data, dict) else False,
+            node_count=len(template_data.get('nodes', [])) if isinstance(template_data, dict) else 0
+        )
+
+        # Debug: Log first node structure if available
+        if isinstance(template_data, dict) and 'nodes' in template_data and len(template_data['nodes']) > 0:
+            first_node = template_data['nodes'][0]
+            self.logger.info(
+                "Sample node structure",
+                node_keys=list(first_node.keys()),
+                node_data_keys=list(first_node.get('data', {}).keys()) if 'data' in first_node else [],
+                node_type_value=first_node.get('data', {}).get('type', 'NOT FOUND'),
+                full_node_data=first_node.get('data', {})
+            )
+
         # Map original node IDs to new unique task IDs for dependency resolution
         node_id_mapping = {}
-        
+
         if isinstance(template_data, dict) and 'nodes' in template_data:
             for node in template_data['nodes']:
                 original_node_id = node.get('id', str(uuid.uuid4()))
                 unique_task_id = str(uuid.uuid4())  # Always generate unique ID
-                
+
                 # Store mapping for dependency resolution
                 node_id_mapping[original_node_id] = unique_task_id
-                
+
+                # Extract node data and type
+                node_data = node.get('data', {})
+                node_type = node_data.get('type', 'action')
+
+                # Debug logging to verify node type extraction
+                self.logger.info(
+                    "Creating task from workflow node",
+                    node_id=original_node_id,
+                    task_id=unique_task_id,
+                    node_label=node_data.get('label', 'Unnamed Task'),
+                    node_type=node_type,
+                    node_data_keys=list(node_data.keys())
+                )
+
                 task = WorkflowTask(
                     id=unique_task_id,
-                    name=node.get('data', {}).get('label', 'Unnamed Task'),
-                    description=node.get('data', {}).get('description', ''),
-                    objective=node.get('data', {}).get('objective', ''),
-                    completion_criteria=node.get('data', {}).get('completionCriteria', ''),
+                    name=node_data.get('label', 'Unnamed Task'),
+                    description=node_data.get('description', ''),
+                    objective=node_data.get('objective', ''),
+                    completion_criteria=node_data.get('completionCriteria', ''),
                     status=TaskStatus.PENDING,
                     context={
-                        **node.get('data', {}),
-                        'original_node_id': original_node_id  # Store original ID for reference
+                        **node_data,
+                        'original_node_id': original_node_id,  # Store original ID for reference
+                        'task_type': node_type  # Pass node type as task_type
                     }
                 )
                 tasks.append(task)
@@ -820,7 +934,7 @@ class WorkflowOrchestrator:
         
         try:
             from app.services.agent_organization_service import agent_organization_service
-            
+            self.logger.debug("Retrieving agent organization", organization_id=organization_id)
             # First, try to get existing organization from database
             organization = await agent_organization_service.get_agent_organization(organization_id)
             

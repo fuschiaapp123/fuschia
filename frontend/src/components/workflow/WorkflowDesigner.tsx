@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Node,
@@ -14,13 +14,17 @@ import {
   Panel,
   Handle,
   Position,
+  getNodesBounds,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Plus, Play, Save, Upload, FolderOpen, Trash2, Settings, Brain } from 'lucide-react';
+import { Plus, Play, Save, Upload, FolderOpen, Trash2, Settings, Brain, FileImage, FileText } from 'lucide-react';
+import { toJpeg, toPng } from 'html-to-image';
+import jsPDF from 'jspdf';
 import { cn } from '@/utils/cn';
 import { useAppStore } from '@/store/appStore';
 import { Drawer } from '@/components/ui/Drawer';
 import { NodePropertyForm } from './NodePropertyForm';
+import { EdgePropertyForm } from './EdgePropertyForm';
 import { templateService, WorkflowTemplate } from '@/services/templateService';
 import { workflowService } from '@/services/workflowService';
 import { workflowExecutionService } from '@/services/workflowExecutionService';
@@ -74,6 +78,75 @@ const WorkflowStepNode: React.FC<{ data: WorkflowStepData; selected: boolean }> 
     }
   };
 
+  // Render diamond shape for condition nodes
+  if (data.type === 'condition') {
+    return (
+      <div className="relative" style={{ width: '200px', height: '200px' }}>
+        {/* Input Handle - top center */}
+        <Handle
+          type="target"
+          position={Position.Top}
+          className="!bg-gray-500 !border-2 !border-white !w-3 !h-3"
+          style={{ top: '0px', left: '50%', transform: 'translateX(-50%)' }}
+        />
+
+        {/* Diamond SVG */}
+        <svg width="200" height="200" className="absolute top-0 left-0">
+          <polygon
+            points="100,10 190,100 100,190 10,100"
+            fill="#fef9c3"
+            stroke="#fde047"
+            strokeWidth={selected ? "3" : "2"}
+            className={selected ? 'stroke-fuschia-500' : ''}
+          />
+        </svg>
+
+        {/* Content inside diamond */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
+          <div className="flex items-center space-x-2 mb-2">
+            <span className="text-sm">{getTypeIcon()}</span>
+            <span className="text-xs font-semibold uppercase tracking-wide">
+              {data.type}
+            </span>
+          </div>
+
+          <div className="font-medium text-sm text-center mb-1">{data.label}</div>
+
+          {data.description && (
+            <div className="text-xs text-gray-600 text-center leading-tight">
+              {data.description.length > 30 ? `${data.description.substring(0, 30)}...` : data.description}
+            </div>
+          )}
+        </div>
+
+        {/* Output Handle - bottom center */}
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          className="!bg-gray-500 !border-2 !border-white !w-3 !h-3"
+          style={{ bottom: '0px', left: '50%', transform: 'translateX(-50%)' }}
+        />
+
+        {/* Left and Right handles for branching */}
+        <Handle
+          type="source"
+          position={Position.Left}
+          id="false"
+          className="!bg-red-500 !border-2 !border-white !w-3 !h-3"
+          style={{ top: '50%', left: '0px', transform: 'translateY(-50%)' }}
+        />
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="true"
+          className="!bg-green-500 !border-2 !border-white !w-3 !h-3"
+          style={{ top: '50%', right: '0px', transform: 'translateY(-50%)' }}
+        />
+      </div>
+    );
+  }
+
+  // Default rectangular node for other types
   return (
     <div
       className={cn(
@@ -90,7 +163,7 @@ const WorkflowStepNode: React.FC<{ data: WorkflowStepData; selected: boolean }> 
           className="!bg-gray-500 !border-2 !border-white !w-3 !h-3"
         />
       )}
-      
+
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center space-x-2">
           <span className="text-sm">{getTypeIcon()}</span>
@@ -99,27 +172,27 @@ const WorkflowStepNode: React.FC<{ data: WorkflowStepData; selected: boolean }> 
           </span>
         </div>
       </div>
-      
+
       <div className="font-medium text-sm mb-1">{data.label}</div>
-      
+
       {data.objective && (
         <div className="text-xs text-gray-600 mb-1">
           <span className="font-medium">Objective:</span> {data.objective.length > 40 ? `${data.objective.substring(0, 40)}...` : data.objective}
         </div>
       )}
-      
+
       {data.completionCriteria && (
         <div className="text-xs text-gray-500 mb-1">
           <span className="font-medium">Success:</span> {data.completionCriteria.length > 35 ? `${data.completionCriteria.substring(0, 35)}...` : data.completionCriteria}
         </div>
       )}
-      
+
       {data.description && (
         <div className="text-xs text-gray-500 leading-tight">
           {data.description}
         </div>
       )}
-      
+
       {/* Output Handle - only show if not an end node */}
       {data.type !== 'end' && (
         <Handle
@@ -200,20 +273,22 @@ interface WorkflowDesignerProps {
   initialEdges?: Edge[];
 }
 
-export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({ 
-  initialNodes: propInitialNodes, 
+export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
+  initialNodes: propInitialNodes,
   initialEdges: propInitialEdges
 }) => {
   const { workflowData } = useAppStore();
-  
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+
   // Use prop nodes/edges if provided, otherwise use workflow data from store, otherwise use default
   const defaultNodes = propInitialNodes || (workflowData?.nodes) || initialNodes;
   const defaultEdges = propInitialEdges || (workflowData?.edges) || initialEdges;
-  
+
   const [nodes, setNodes, onNodesChange] = useNodesState(defaultNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(defaultEdges);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showTemplateLoader, setShowTemplateLoader] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -225,7 +300,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     category: 'Custom',
     folder: '',
   });
-  
+
   // Workflow metadata state
   const [workflowMetadata, setWorkflowMetadata] = useState({
     name: 'Untitled Workflow',
@@ -300,6 +375,13 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
+    setSelectedEdge(null);
+    setIsDrawerOpen(true);
+  }, []);
+
+  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+    setSelectedEdge(edge);
+    setSelectedNode(null);
     setIsDrawerOpen(true);
   }, []);
 
@@ -313,9 +395,24 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     );
   }, [setNodes]);
 
+  const handleEdgeUpdate = useCallback((edgeId: string, newData: Partial<Edge>) => {
+    setEdges((eds) =>
+      eds.map((edge) =>
+        edge.id === edgeId
+          ? { ...edge, ...newData }
+          : edge
+      )
+    );
+  }, [setEdges]);
+
+  const handleEdgeDelete = useCallback((edgeId: string) => {
+    setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
+  }, [setEdges]);
+
   const handleDrawerClose = useCallback(() => {
     setIsDrawerOpen(false);
     setSelectedNode(null);
+    setSelectedEdge(null);
   }, []);
 
   const addNewNode = useCallback(() => {
@@ -688,7 +785,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     if (nodes.length === 0 && edges.length === 0) {
       return; // Canvas is already empty
     }
-    
+
     if (confirm('Are you sure you want to clear the canvas? This will remove all nodes and edges.')) {
       setNodes([]);
       setEdges([]);
@@ -699,6 +796,144 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
       });
     }
   }, [nodes.length, edges.length, setNodes, setEdges]);
+
+  // Export as JPG
+  const exportAsJPG = useCallback(async () => {
+    if (nodes.length === 0) {
+      alert('No nodes to export. Please add some workflow steps first.');
+      return;
+    }
+
+    try {
+      // Calculate the bounding box of all nodes with padding for edges
+      const nodesBounds = getNodesBounds(nodes);
+      const padding = 100;
+
+      // Get the ReactFlow wrapper element
+      const flowElement = reactFlowWrapper.current;
+      if (!flowElement) {
+        throw new Error('ReactFlow element not found');
+      }
+
+      // Get the viewport element
+      const viewportElement = flowElement.querySelector('.react-flow__viewport') as HTMLElement;
+      if (!viewportElement) {
+        throw new Error('Viewport element not found');
+      }
+
+      // Store original transform
+      const originalTransform = viewportElement.style.transform;
+      const originalWidth = flowElement.style.width;
+      const originalHeight = flowElement.style.height;
+
+      // Calculate dimensions with padding
+      const width = nodesBounds.width + padding * 2;
+      const height = nodesBounds.height + padding * 2;
+
+      // Temporarily set size and transform
+      flowElement.style.width = `${width}px`;
+      flowElement.style.height = `${height}px`;
+      viewportElement.style.transform = `translate(${-nodesBounds.x + padding}px, ${-nodesBounds.y + padding}px) scale(1)`;
+
+      // Wait for layout
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Use html-to-image which better handles SVG
+      const dataUrl = await toJpeg(flowElement, {
+        quality: 0.95,
+        width: width,
+        height: height,
+        backgroundColor: '#f9fafb',
+        pixelRatio: 2,
+      });
+
+      // Restore original styles
+      flowElement.style.width = originalWidth;
+      flowElement.style.height = originalHeight;
+      viewportElement.style.transform = originalTransform;
+
+      // Download
+      const link = document.createElement('a');
+      link.download = `${workflowMetadata.name || 'workflow'}.jpg`;
+      link.href = dataUrl;
+      link.click();
+    } catch (error) {
+      console.error('Error exporting as JPG:', error);
+      alert(`Failed to export workflow as JPG: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, [nodes, workflowMetadata.name]);
+
+  // Export as PDF
+  const exportAsPDF = useCallback(async () => {
+    if (nodes.length === 0) {
+      alert('No nodes to export. Please add some workflow steps first.');
+      return;
+    }
+
+    try {
+      // Calculate the bounding box of all nodes with padding for edges
+      const nodesBounds = getNodesBounds(nodes);
+      const padding = 100;
+
+      // Get the ReactFlow wrapper element
+      const flowElement = reactFlowWrapper.current;
+      if (!flowElement) {
+        throw new Error('ReactFlow element not found');
+      }
+
+      // Get the viewport element
+      const viewportElement = flowElement.querySelector('.react-flow__viewport') as HTMLElement;
+      if (!viewportElement) {
+        throw new Error('Viewport element not found');
+      }
+
+      // Store original transform
+      const originalTransform = viewportElement.style.transform;
+      const originalWidth = flowElement.style.width;
+      const originalHeight = flowElement.style.height;
+
+      // Calculate dimensions with padding
+      const width = nodesBounds.width + padding * 2;
+      const height = nodesBounds.height + padding * 2;
+
+      // Temporarily set size and transform
+      flowElement.style.width = `${width}px`;
+      flowElement.style.height = `${height}px`;
+      viewportElement.style.transform = `translate(${-nodesBounds.x + padding}px, ${-nodesBounds.y + padding}px) scale(1)`;
+
+      // Wait for layout
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Use html-to-image which better handles SVG
+      const dataUrl = await toPng(flowElement, {
+        width: width,
+        height: height,
+        backgroundColor: '#f9fafb',
+        pixelRatio: 2,
+      });
+
+      // Restore original styles
+      flowElement.style.width = originalWidth;
+      flowElement.style.height = originalHeight;
+      viewportElement.style.transform = originalTransform;
+
+      // Create PDF with appropriate orientation
+      const pdf = new jsPDF({
+        orientation: width > height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [width, height],
+      });
+
+      // Add image to PDF
+      pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
+
+      // Download PDF
+      pdf.save(`${workflowMetadata.name || 'workflow'}.pdf`);
+    } catch (error) {
+      console.error('Error exporting as PDF:', error);
+      alert(`Failed to export workflow as PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, [nodes, workflowMetadata.name]);
 
   const handlePropertiesEdit = useCallback(() => {
     setIsPropertiesDialogOpen(true);
@@ -739,7 +974,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
   }, []);
 
   return (
-    <div className="h-full w-full relative">
+    <div className="h-full w-full relative" ref={reactFlowWrapper}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -747,6 +982,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
         nodeTypes={nodeTypes}
         fitView
         className="bg-gray-50"
@@ -815,6 +1051,26 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
               >
                 <Brain className="w-4 h-4" />
                 <span>Memory Enhanced</span>
+              </button>
+
+              <div className="h-6 w-px bg-gray-300"></div>
+
+              <button
+                onClick={exportAsJPG}
+                className="flex items-center space-x-1 px-3 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors text-sm"
+                title="Export as JPG"
+              >
+                <FileImage className="w-4 h-4" />
+                <span>Export JPG</span>
+              </button>
+
+              <button
+                onClick={exportAsPDF}
+                className="flex items-center space-x-1 px-3 py-2 bg-amber-500 text-white rounded-md hover:bg-amber-600 transition-colors text-sm"
+                title="Export as PDF"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Export PDF</span>
               </button>
             </div>
           </div>
@@ -901,18 +1157,33 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
         </Panel>
       </ReactFlow>
       
-      {/* Node Property Drawer */}
+      {/* Node/Edge Property Drawer */}
       <Drawer
         isOpen={isDrawerOpen}
         onClose={handleDrawerClose}
-        title={selectedNode ? `Edit ${selectedNode.data?.label || 'Node'}` : 'Node Properties'}
+        title={
+          selectedNode
+            ? `Edit ${selectedNode.data?.label || 'Node'}`
+            : selectedEdge
+            ? 'Edit Edge Properties'
+            : 'Properties'
+        }
         size="md"
       >
-        <NodePropertyForm
-          node={selectedNode}
-          onUpdate={handleNodeUpdate}
-          onClose={handleDrawerClose}
-        />
+        {selectedNode ? (
+          <NodePropertyForm
+            node={selectedNode}
+            onUpdate={handleNodeUpdate}
+            onClose={handleDrawerClose}
+          />
+        ) : selectedEdge ? (
+          <EdgePropertyForm
+            edge={selectedEdge}
+            onUpdate={handleEdgeUpdate}
+            onDelete={handleEdgeDelete}
+            onClose={handleDrawerClose}
+          />
+        ) : null}
       </Drawer>
 
       {/* Template Loader Dialog */}

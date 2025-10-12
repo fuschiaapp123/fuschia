@@ -1,20 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Brain, 
-  Play, 
-  Pause, 
-  MessageSquare, 
-  Clock, 
-  User, 
+import {
+  Brain,
+  Play,
+  Pause,
+  MessageSquare,
+  Clock,
+  User,
   Zap,
   CheckCircle,
-  AlertTriangle,
   XCircle,
   Filter,
   Search,
   Download,
-  RefreshCw
+  RefreshCw,
+  FileText,
+  FileJson
 } from 'lucide-react';
+import jsPDF from 'jspdf';
 
 export interface AgentThought {
   id: string;
@@ -49,7 +51,26 @@ export const ThoughtsActionsVisualization: React.FC<ThoughtsActionsVisualization
   const [searchTerm, setSearchTerm] = useState('');
   const [isPaused, setIsPaused] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const consoleRef = useRef<HTMLDivElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportMenu]);
 
   // Filter thoughts based on selected filter and search term
   const filteredThoughts = thoughts.filter(thought => {
@@ -115,7 +136,7 @@ export const ThoughtsActionsVisualization: React.FC<ThoughtsActionsVisualization
     return `${time}.${ms}`;
   };
 
-  const exportThoughts = () => {
+  const exportAsJSON = () => {
     const data = filteredThoughts.map(thought => ({
       timestamp: thought.timestamp,
       agent: thought.agentName,
@@ -134,6 +155,121 @@ export const ThoughtsActionsVisualization: React.FC<ThoughtsActionsVisualization
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const exportAsText = () => {
+    let text = `Agent Thoughts & Actions Log\n`;
+    text += `Generated: ${new Date().toISOString()}\n`;
+    text += `Total Messages: ${filteredThoughts.length}\n`;
+    text += `${'='.repeat(80)}\n\n`;
+
+    filteredThoughts.forEach((thought, index) => {
+      text += `[${index + 1}] ${formatTimestamp(thought.timestamp)} | ${thought.type.toUpperCase()}\n`;
+      text += `Agent: ${thought.agentName}\n`;
+      text += `Workflow: ${thought.workflowName}\n`;
+      text += `Message: ${thought.message}\n`;
+
+      if (thought.metadata) {
+        if (thought.metadata.step) text += `Step: ${thought.metadata.step}\n`;
+        if (thought.metadata.tool) text += `Tool: ${thought.metadata.tool}\n`;
+        if (thought.metadata.confidence) text += `Confidence: ${(thought.metadata.confidence * 100).toFixed(1)}%\n`;
+        if (thought.metadata.reasoning) text += `Reasoning: ${thought.metadata.reasoning}\n`;
+      }
+
+      text += `${'-'.repeat(80)}\n\n`;
+    });
+
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `agent-thoughts-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const exportAsPDF = () => {
+    const pdf = new jsPDF();
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    const maxWidth = pageWidth - margin * 2;
+    let yPosition = margin;
+
+    // Title
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Agent Thoughts & Actions Log', margin, yPosition);
+    yPosition += 10;
+
+    // Metadata
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, yPosition);
+    yPosition += 6;
+    pdf.text(`Total Messages: ${filteredThoughts.length}`, margin, yPosition);
+    yPosition += 10;
+
+    // Thoughts
+    pdf.setFontSize(9);
+    filteredThoughts.forEach((thought, index) => {
+      // Check if we need a new page
+      if (yPosition > pageHeight - 40) {
+        pdf.addPage();
+        yPosition = margin;
+      }
+
+      // Timestamp and Type
+      pdf.setFont('helvetica', 'bold');
+      const header = `[${index + 1}] ${formatTimestamp(thought.timestamp)} | ${thought.type.toUpperCase()}`;
+      pdf.text(header, margin, yPosition);
+      yPosition += 5;
+
+      // Agent and Workflow
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Agent: ${thought.agentName}`, margin, yPosition);
+      yPosition += 5;
+      pdf.text(`Workflow: ${thought.workflowName}`, margin, yPosition);
+      yPosition += 5;
+
+      // Message (with word wrap)
+      pdf.setFont('helvetica', 'italic');
+      const messageLines = pdf.splitTextToSize(`Message: ${thought.message}`, maxWidth);
+      messageLines.forEach((line: string) => {
+        if (yPosition > pageHeight - 20) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+        pdf.text(line, margin, yPosition);
+        yPosition += 5;
+      });
+
+      // Metadata
+      if (thought.metadata) {
+        pdf.setFont('helvetica', 'normal');
+        if (thought.metadata.step) {
+          pdf.text(`Step: ${thought.metadata.step}`, margin, yPosition);
+          yPosition += 5;
+        }
+        if (thought.metadata.tool) {
+          pdf.text(`Tool: ${thought.metadata.tool}`, margin, yPosition);
+          yPosition += 5;
+        }
+        if (thought.metadata.confidence) {
+          pdf.text(`Confidence: ${(thought.metadata.confidence * 100).toFixed(1)}%`, margin, yPosition);
+          yPosition += 5;
+        }
+      }
+
+      yPosition += 5; // Space between entries
+    });
+
+    pdf.save(`agent-thoughts-${new Date().toISOString().split('T')[0]}.pdf`);
+    setShowExportMenu(false);
   };
 
   return (
@@ -178,13 +314,40 @@ export const ThoughtsActionsVisualization: React.FC<ThoughtsActionsVisualization
               <RefreshCw className="w-4 h-4" />
             </button>
           )}
-          <button
-            onClick={exportThoughts}
-            className="p-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors"
-            title="Export to JSON"
-          >
-            <Download className="w-4 h-4" />
-          </button>
+          <div className="relative" ref={exportMenuRef}>
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="p-2 bg-gray-600 hover:bg-gray-500 rounded-md transition-colors"
+              title="Export"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-600 rounded-md shadow-lg z-10">
+                <button
+                  onClick={exportAsJSON}
+                  className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-left hover:bg-gray-700 transition-colors rounded-t-md"
+                >
+                  <FileJson className="w-4 h-4" />
+                  <span>Export as JSON</span>
+                </button>
+                <button
+                  onClick={exportAsText}
+                  className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-left hover:bg-gray-700 transition-colors"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Export as Text</span>
+                </button>
+                <button
+                  onClick={exportAsPDF}
+                  className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-left hover:bg-gray-700 transition-colors rounded-b-md"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Export as PDF</span>
+                </button>
+              </div>
+            )}
+          </div>
           {onClear && (
             <button
               onClick={onClear}
@@ -202,7 +365,7 @@ export const ThoughtsActionsVisualization: React.FC<ThoughtsActionsVisualization
           <Filter className="w-4 h-4 text-gray-400" />
           <select
             value={filter}
-            onChange={(e) => setFilter(e.target.value as any)}
+            onChange={(e) => setFilter(e.target.value as typeof filter)}
             className="bg-gray-800 border border-gray-600 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Types</option>

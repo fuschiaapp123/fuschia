@@ -482,7 +482,7 @@ class ToolRegistryService:
                 'math': __import__('math'),
                 'random': __import__('random')
             }
-            print(f"-=->>> Compiling tool function: {tool.name}, tool code: {tool.function_code}")
+            
             # Execute the function code
             exec(tool.function_code, safe_globals)
             

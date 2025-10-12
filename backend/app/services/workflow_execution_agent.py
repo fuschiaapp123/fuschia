@@ -8,7 +8,7 @@ import uuid
 import os
 
 import dspy
-from dspy import Signature, InputField, OutputField
+from dspy import Signature, InputField, OutputField, History
 from pydantic import BaseModel, Field
 
 from app.models.agent_organization import (
@@ -48,7 +48,7 @@ except Exception as e:
 # DSPy Signatures for different execution strategies
 class SimpleTaskExecution(Signature):
     """Execute a task using simple direct execution strategy"""
-    
+
     # Input fields
     task_name: str = InputField(desc="Name of the task to execute")
     task_description: str = InputField(desc="Detailed description of the task")
@@ -60,17 +60,20 @@ class SimpleTaskExecution(Signature):
     agent_capabilities: str = InputField(desc="List of agent capabilities")
     available_tools: str = InputField(desc="Available tools for task execution")
     execution_context: str = InputField(desc="JSON context for task execution")
-    
+    conversation_history: History = InputField(desc="Previous conversation messages and context for multi-turn interactions")
+
     # Output fields
     execution_result: str = OutputField(desc="Result of task execution")
     confidence_score: str = OutputField(desc="Confidence score between 0.0 and 1.0")
     success_status: str = OutputField(desc="Whether execution was successful (true/false)")
     reasoning: str = OutputField(desc="Explanation of the execution approach and results")
+    task_status: str = OutputField(desc="Task execution status: COMPLETED (default), PAUSED (if task needs to pause), FAILED (if error occurred)")
+    pause_reason: str = OutputField(desc="Reason for pausing if task_status is PAUSED, otherwise empty string")
 
 
 class ChainOfThoughtPlanning(Signature):
     """Plan task execution using Chain of Thought reasoning"""
-    
+
     # Input fields
     task_name: str = InputField(desc="Name of the task to plan")
     task_description: str = InputField(desc="Detailed description of the task")
@@ -80,12 +83,15 @@ class ChainOfThoughtPlanning(Signature):
     agent_capabilities: str = InputField(desc="List of agent capabilities")
     available_tools: str = InputField(desc="Available tools for task execution")
     execution_context: str = InputField(desc="JSON context for task execution")
-    
+    conversation_history: History = InputField(desc="Previous conversation messages and context for multi-turn interactions")
+
     # Output fields
     reasoning_steps: str = OutputField(desc="JSON list of reasoning steps")
     execution_plan: str = OutputField(desc="Detailed execution plan")
     required_tools: str = OutputField(desc="Tools needed for execution")
     confidence_score: str = OutputField(desc="Confidence score between 0.0 and 1.0")
+    task_status: str = OutputField(desc="Task execution status: COMPLETED (default), PAUSED (if task needs to pause), FAILED (if error occurred)")
+    pause_reason: str = OutputField(desc="Reason for pausing if task_status is PAUSED, otherwise empty string")
 
 
 class HumanInputRequest:
@@ -112,6 +118,8 @@ class TaskResult(BaseModel):
     task_id: str = Field(description="ID of the executed task")
     agent_id: str = Field(description="ID of the executing agent")
     completed_at: str = Field(description="ISO timestamp of completion")
+    task_status: Optional[str] = Field(default=None, description="Task execution status: COMPLETED, PAUSED, FAILED, etc.")
+    pause_reason: Optional[str] = Field(default=None, description="Reason for pausing task execution if task_status is PAUSED")
 
 
 # DSPy Modules for different execution strategies
@@ -123,15 +131,16 @@ class SimpleExecutionModule(dspy.Module):
         self.execute_task = dspy.Predict(SimpleTaskExecution)
     
     def forward(self, task_name, task_description, task_objective, completion_criteria, user_request,
-                agent_name, agent_role, agent_capabilities, available_tools, execution_context):
-        
+                agent_name, agent_role, agent_capabilities, available_tools, execution_context,
+                conversation_history):
+
         # Get available tools from registry
         try:
             available_tools_list = tool_registry_service.get_tools_for_dspy()
         except Exception as e:
             logger.warning("Failed to get tools from registry", error=str(e))
             available_tools_list = []
-        
+
         result = self.execute_task(
             task_name=task_name,
             task_description=task_description,
@@ -142,9 +151,10 @@ class SimpleExecutionModule(dspy.Module):
             agent_role=agent_role,
             agent_capabilities=agent_capabilities,
             available_tools=available_tools,
-            execution_context=execution_context
+            execution_context=execution_context,
+            conversation_history=conversation_history
         )
-        
+
         return result
 
 
@@ -156,8 +166,8 @@ class ChainOfThoughtModule(dspy.Module):
         self.plan_execution = dspy.ChainOfThought(ChainOfThoughtPlanning)
     
     def forward(self, task_name, task_description, task_objective, completion_criteria, user_request,
-                agent_capabilities, available_tools, execution_context):
-        
+                agent_capabilities, available_tools, execution_context, conversation_history):
+
         result = self.plan_execution(
             task_name=task_name,
             task_description=task_description,
@@ -166,9 +176,10 @@ class ChainOfThoughtModule(dspy.Module):
             user_request=user_request,
             agent_capabilities=agent_capabilities,
             available_tools=available_tools,
-            execution_context=execution_context
+            execution_context=execution_context,
+            conversation_history=conversation_history
         )
-        
+
         return result
 
 
@@ -177,8 +188,11 @@ class TaskExecutionSignature(Signature):
     task_name = InputField(desc="Name of the task to execute")
     task_objective = InputField(desc="Main objective or goal of the task")
     current_context = InputField(desc="Current execution context and available information")
-    
+    conversation_history: History = InputField(desc="Previous conversation messages and context for multi-turn interactions")
+
     response = OutputField(desc="Final response or result after completing the task")
+    task_status = OutputField(desc="Task execution status: COMPLETED (default), PAUSED (if task needs to pause), FAILED (if error occurred)")
+    pause_reason = OutputField(desc="Reason for pausing if task_status is PAUSED, otherwise empty string")
 
 
 class WorkflowExecutionAgent:
@@ -235,7 +249,11 @@ class WorkflowExecutionAgent:
         self.task_history: List[Dict[str, Any]] = []
         self.reasoning_history: List[Dict[str, Any]] = []
         self.pending_approvals: Dict[str, HumanInteractionRequest] = {}
-        
+
+        # Conversation history for multi-turn interactions (DSPy History)
+        self.conversation_history: History = History(messages=[])
+        self.logger.info("Initialized DSPy conversation history for multi-turn interactions")
+
         # Initialize tools
         self.available_tools = self._initialize_tools()
         
@@ -273,31 +291,45 @@ class WorkflowExecutionAgent:
         
         return tools
     
-    async def execute_task(self, 
+    async def execute_task(self,
                           task: WorkflowTask,
                           execution_context: Dict[str, Any],
                           workflow_execution: WorkflowExecution) -> Dict[str, Any]:
         """Execute a single workflow task"""
-        
+
         # Set the current execution ID for human-in-the-loop tools
         self.current_execution_id = workflow_execution.id
-        
+
         task_id = task.id
+        self.logger.info("Preparing to execute task", task_id=task_id, task_context=task.context)
+        # Extract task_type from task context (passed from workflow node)
+        task_type = task.context.get('node_type', 'action') if task.context else 'action'
+
         self.logger.info(
             "Starting task execution",
             task_id=task_id,
             task_name=task.name,
+            task_type=task_type,
             objective=task.objective
         )
-        
+
         # Update task status
         task.status = TaskStatus.IN_PROGRESS
         task.started_at = datetime.utcnow()
         task.assigned_agent_id = self.agent_node.id
-        
+
         try:
-            # Choose execution strategy
-            if self.agent_node.strategy == AgentStrategy.SIMPLE:
+            # Condition tasks always use simple strategy regardless of agent configuration
+            if task_type == 'condition':
+                self.logger.info(
+                    "Forcing simple strategy for condition task",
+                    task_id=task_id,
+                    task_name=task.name,
+                    original_strategy=self.agent_node.strategy.value
+                )
+                result = await self._execute_with_simple(task, execution_context, workflow_execution)
+            # Choose execution strategy based on agent configuration for other task types
+            elif self.agent_node.strategy == AgentStrategy.SIMPLE:
                 result = await self._execute_with_simple(task, execution_context, workflow_execution)
             elif self.agent_node.strategy == AgentStrategy.CHAIN_OF_THOUGHT:
                 result = await self._execute_with_chain_of_thought(task, execution_context, workflow_execution)
@@ -306,10 +338,31 @@ class WorkflowExecutionAgent:
             else:  # HYBRID
                 result = await self._execute_with_hybrid_strategy(task, execution_context, workflow_execution)
             
+            # Check if task execution resulted in a PAUSED status
+            if result.get('status') == 'PAUSED' or result.get('task_status') == 'PAUSED':
+                task.status = TaskStatus.PAUSED
+                task.results = result
+                self.logger.info(
+                    "Task execution paused",
+                    task_id=task_id,
+                    reason=result.get('pause_reason', 'Task requested pause')
+                )
+
+                # Clean up execution ID
+                self.current_execution_id = None
+
+                return {
+                    'task_id': task_id,
+                    'status': TaskStatus.PAUSED.value,
+                    'results': result,
+                    'agent_id': self.agent_node.id,
+                    'pause_reason': result.get('pause_reason', 'Task requested pause')
+                }
+
             # Check if human approval required
-            if (self.agent_node.requires_human_approval or 
+            if (self.agent_node.requires_human_approval or
                 result.get('confidence', 1.0) < self.agent_node.human_escalation_threshold):
-                
+
                 approval_result = await self._request_human_approval(task, result, workflow_execution)
                 if approval_result['status'] == 'approved':
                     task.status = TaskStatus.COMPLETED
@@ -321,7 +374,7 @@ class WorkflowExecutionAgent:
             else:
                 task.status = TaskStatus.COMPLETED
                 task.completed_at = datetime.utcnow()
-            
+
             # Store results
             task.results = result
             
@@ -416,7 +469,7 @@ class WorkflowExecutionAgent:
                 }
             )
             
-            # Use DSPy to execute task
+            # Use DSPy to execute task with conversation history
             with dspy.context(lm=self.llm):
                 prediction = self.simple_executor(
                     task_name=task.name,
@@ -428,8 +481,25 @@ class WorkflowExecutionAgent:
                     agent_role=self.agent_node.role.value,
                     agent_capabilities=agent_capabilities,
                     available_tools=available_tools,
-                    execution_context=execution_context_str
+                    execution_context=execution_context_str,
+                    conversation_history=self.conversation_history
                 )
+
+            # Append this interaction to conversation history
+            self.conversation_history.messages.append({
+                "role": "user",
+                "content": f"Task: {task.name}\nObjective: {task.objective}\nRequest: {user_request}"
+            })
+            self.conversation_history.messages.append({
+                "role": "assistant",
+                "content": f"Result: {prediction.execution_result}\nReasoning: {prediction.reasoning}"
+            })
+
+            self.logger.info(
+                "Updated conversation history",
+                task_id=task.id,
+                history_length=len(self.conversation_history.messages)
+            )
             
             # Send DSPy response to WebSocket
             await websocket_manager.send_agent_thought(
@@ -452,7 +522,11 @@ class WorkflowExecutionAgent:
             # Convert DSPy prediction to expected format
             success = prediction.success_status.lower() == 'true'
             confidence = float(prediction.confidence_score) if prediction.confidence_score.replace('.', '').isdigit() else 0.8
-            
+
+            # Extract task_status and pause_reason from prediction
+            task_status = getattr(prediction, 'task_status', 'COMPLETED')
+            pause_reason = getattr(prediction, 'pause_reason', '')
+
             result = {
                 'success': success,
                 'strategy': 'simple',
@@ -464,7 +538,16 @@ class WorkflowExecutionAgent:
                 'agent_id': self.agent_node.id,
                 'completed_at': datetime.utcnow().isoformat()
             }
-            
+
+            # Include task_status and pause_reason if present
+            if task_status and task_status != 'COMPLETED':
+                result['task_status'] = task_status
+                self.logger.info(f"Task status from DSPy simple: {task_status}")
+
+            if pause_reason:
+                result['pause_reason'] = pause_reason
+                self.logger.info(f"Pause reason from DSPy simple: {pause_reason}")
+
             self.logger.info(
                 "DSPy simple strategy execution completed",
                 task_id=task.id,
@@ -472,7 +555,7 @@ class WorkflowExecutionAgent:
                 success=success,
                 confidence=confidence
             )
-            
+
             return result
             
         except Exception as e:
@@ -634,7 +717,7 @@ class WorkflowExecutionAgent:
                 }
             )
             
-            # Use DSPy to plan task execution
+            # Use DSPy to plan task execution with conversation history
             with dspy.context(lm=self.llm):
                 prediction = self.cot_planner(
                     task_name=task.name,
@@ -644,8 +727,25 @@ class WorkflowExecutionAgent:
                     user_request=user_request,
                     agent_capabilities=agent_capabilities,
                     available_tools=available_tools,
-                    execution_context=execution_context_str
+                    execution_context=execution_context_str,
+                    conversation_history=self.conversation_history
                 )
+
+            # Append this interaction to conversation history
+            self.conversation_history.messages.append({
+                "role": "user",
+                "content": f"Task: {task.name}\nObjective: {task.objective}\nRequest: {user_request}"
+            })
+            self.conversation_history.messages.append({
+                "role": "assistant",
+                "content": f"Plan: {prediction.execution_plan}\nTools: {prediction.required_tools}"
+            })
+
+            self.logger.info(
+                "Updated conversation history",
+                task_id=task.id,
+                history_length=len(self.conversation_history.messages)
+            )
             
             # Parse reasoning steps from DSPy output
             reasoning_steps = []
@@ -676,7 +776,11 @@ class WorkflowExecutionAgent:
             
             # Convert DSPy prediction to expected format
             confidence = float(prediction.confidence_score) if prediction.confidence_score.replace('.', '').isdigit() else 0.8
-            
+
+            # Extract task_status and pause_reason from prediction
+            task_status = getattr(prediction, 'task_status', 'COMPLETED')
+            pause_reason = getattr(prediction, 'pause_reason', '')
+
             result = {
                 'success': True,
                 'strategy': 'chain_of_thought',
@@ -690,7 +794,16 @@ class WorkflowExecutionAgent:
                 'agent_id': self.agent_node.id,
                 'completed_at': datetime.utcnow().isoformat()
             }
-            
+
+            # Include task_status and pause_reason if present
+            if task_status and task_status != 'COMPLETED':
+                result['task_status'] = task_status
+                self.logger.info(f"Task status from DSPy CoT: {task_status}")
+
+            if pause_reason:
+                result['pause_reason'] = pause_reason
+                self.logger.info(f"Pause reason from DSPy CoT: {pause_reason}")
+
             self.logger.info(
                 "DSPy Chain of Thought execution completed",
                 task_id=task.id,
@@ -698,7 +811,7 @@ class WorkflowExecutionAgent:
                 confidence=confidence,
                 reasoning_steps_count=len(reasoning_steps)
             )
-            
+
             return result
             
         except Exception as e:
@@ -881,71 +994,71 @@ class WorkflowExecutionAgent:
 
         # Add available workflow tools
         logger.info(f"Adding workflow tools to DSPy ReAct tools: {self.available_tools.items()}")
-        # for tool_name, tool_func in self.available_tools.items():
-        #     def create_tool_wrapper(name, func):
-        #         def sync_tool_wrapper(*args, **kwargs):
-        #             """Synchronous wrapper for workflow tools"""
-        #             import asyncio
-        #             try:
-        #                 # Check if we're already in an event loop
-        #                 try:
-        #                     asyncio.get_running_loop()
-        #                     # We're in an async context, but DSPy expects sync calls
-        #                     # Create a new thread to run the async function
-        #                     import concurrent.futures
+        for tool_name, tool_func in self.available_tools.items():
+            def create_tool_wrapper(name, func):
+                def sync_tool_wrapper(*args, **kwargs):
+                    """Synchronous wrapper for workflow tools"""
+                    import asyncio
+                    try:
+                        # Check if we're already in an event loop
+                        try:
+                            asyncio.get_running_loop()
+                            # We're in an async context, but DSPy expects sync calls
+                            # Create a new thread to run the async function
+                            import concurrent.futures
                             
-        #                     def run_in_thread():
-        #                         # Create new event loop in thread
-        #                         new_loop = asyncio.new_event_loop()
-        #                         asyncio.set_event_loop(new_loop)
-        #                         try:
-        #                             # Log detailed function information for debugging
-        #                             func_name = getattr(func, '__name__', str(func))
-        #                             func_module = getattr(func, '__module__', 'unknown')
-        #                             func_qualname = getattr(func, '__qualname__', func_name)
-        #                             logger.info(f"Executing tool '{name}' -> function '{func_name}' from module '{func_module}'", 
-        #                                        args=args, kwargs=kwargs, function_type='async' if asyncio.iscoroutinefunction(func) else 'sync')
+                            def run_in_thread():
+                                # Create new event loop in thread
+                                new_loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(new_loop)
+                                try:
+                                    # Log detailed function information for debugging
+                                    func_name = getattr(func, '__name__', str(func))
+                                    func_module = getattr(func, '__module__', 'unknown')
+                                    func_qualname = getattr(func, '__qualname__', func_name)
+                                    logger.info(f"Executing tool '{name}' -> function '{func_name}' from module '{func_module}'", 
+                                               args=args, kwargs=kwargs, function_type='async' if asyncio.iscoroutinefunction(func) else 'sync')
                                     
-        #                             if asyncio.iscoroutinefunction(func):
-        #                                 result = new_loop.run_until_complete(func(*args, **kwargs))
-        #                             else:
-        #                                 result = func(*args, **kwargs)
-        #                             logger.info(f"Tool '{name}' ({func_qualname}) execution completed successfully", result=str(result)[:200] + '...' if len(str(result)) > 200 else result)
-        #                             return result
-        #                         finally:
-        #                             new_loop.close()
+                                    if asyncio.iscoroutinefunction(func):
+                                        result = new_loop.run_until_complete(func(*args, **kwargs))
+                                    else:
+                                        result = func(*args, **kwargs)
+                                    logger.info(f"Tool '{name}' ({func_qualname}) execution completed successfully", result=str(result)[:200] + '...' if len(str(result)) > 200 else result)
+                                    return result
+                                finally:
+                                    new_loop.close()
                             
-        #                     with concurrent.futures.ThreadPoolExecutor() as executor:
-        #                         logger.info(f"Submitting tool {name} to thread executor", args=args, kwargs=kwargs)
-        #                         future = executor.submit(run_in_thread)
-        #                         result = future.result(timeout=30)
-        #                         logger.info(f"Tool {name} executed successfully", result=result)
-        #                         return result
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                logger.info(f"Submitting tool {name} to thread executor", args=args, kwargs=kwargs)
+                                future = executor.submit(run_in_thread)
+                                result = future.result(timeout=30)
+                                logger.info(f"Tool {name} executed successfully", result=result)
+                                return result
                                 
-        #                 except RuntimeError:
-        #                     # No event loop running, we can use asyncio.run
-        #                     func_name = getattr(func, '__name__', str(func))
-        #                     func_module = getattr(func, '__module__', 'unknown')
-        #                     func_qualname = getattr(func, '__qualname__', func_name)
-        #                     logger.info(f"Executing tool '{name}' -> function '{func_qualname}' from module '{func_module}' (no event loop)", 
-        #                                args=args, kwargs=kwargs, function_type='async' if asyncio.iscoroutinefunction(func) else 'sync')
+                        except RuntimeError:
+                            # No event loop running, we can use asyncio.run
+                            func_name = getattr(func, '__name__', str(func))
+                            func_module = getattr(func, '__module__', 'unknown')
+                            func_qualname = getattr(func, '__qualname__', func_name)
+                            logger.info(f"Executing tool '{name}' -> function '{func_qualname}' from module '{func_module}' (no event loop)", 
+                                       args=args, kwargs=kwargs, function_type='async' if asyncio.iscoroutinefunction(func) else 'sync')
                             
-        #                     if asyncio.iscoroutinefunction(func):
-        #                         result = asyncio.run(func(*args, **kwargs))
-        #                     else:
-        #                         result = func(*args, **kwargs)
-        #                     logger.info(f"Tool '{name}' ({func_qualname}) execution completed successfully", result=str(result)[:200] + '...' if len(str(result)) > 200 else result)
-        #                     return result
+                            if asyncio.iscoroutinefunction(func):
+                                result = asyncio.run(func(*args, **kwargs))
+                            else:
+                                result = func(*args, **kwargs)
+                            logger.info(f"Tool '{name}' ({func_qualname}) execution completed successfully", result=str(result)[:200] + '...' if len(str(result)) > 200 else result)
+                            return result
                             
-        #             except Exception as e:
-        #                 logger.error(f"Tool {name} execution failed", error=str(e), args=args, kwargs=kwargs)
-        #                 return f"Tool {name} failed: {str(e)}"
+                    except Exception as e:
+                        logger.error(f"Tool {name} execution failed", error=str(e), args=args, kwargs=kwargs)
+                        return f"Tool {name} failed: {str(e)}"
                 
-        #         sync_tool_wrapper.__name__ = name
-        #         sync_tool_wrapper.__doc__ = f"Execute the {name} tool"
-        #         return sync_tool_wrapper
+                sync_tool_wrapper.__name__ = name
+                sync_tool_wrapper.__doc__ = f"Execute the {name} tool"
+                return sync_tool_wrapper
             
-        #     tools.append(create_tool_wrapper(tool_name, tool_func))
+            tools.append(create_tool_wrapper(tool_name, tool_func))
         logger.info("Workflow tools added to DSPy ReAct tools", tool_count=len(tools))
 
         # Clean Human-in-the-Loop Tools Suite
@@ -1157,41 +1270,42 @@ class WorkflowExecutionAgent:
                 try:
                     # Get system tools from workflow template's agent data
                     system_tool_names = []
-                    
+                    mcp_tool_names = []  # Collect MCP tool names separately
+
                     try:
                         from app.db.postgres import AsyncSessionLocal
                         from sqlalchemy import text
-                        
+
                         async with AsyncSessionLocal() as session:
                             logger.info(f"Searching for agent {agent_id} in agent organizations")
-                            
+
                             # Search through agent organizations to find the agent
                             result = await session.execute(text('''
-                                SELECT id, name, agents_data 
-                                FROM agent_organizations 
+                                SELECT id, name, agents_data
+                                FROM agent_organizations
                                 WHERE agents_data IS NOT NULL AND agents_data != '[]'
                                 ORDER BY created_at DESC
                             '''))
-                            
+
                             agent_orgs = result.fetchall()
                             logger.info(f"Found {len(agent_orgs)} agent organizations to search")
-                            
+
                             agent_found = False
                             for org_id, org_name, agents_data_str in agent_orgs:
                                 try:
                                     import json
                                     agents_data = json.loads(agents_data_str)
-                                    
+
                                     # Check if this organization contains our target agent
                                     for agent_data in agents_data:
                                         if str(agent_data.get('id')) == str(agent_id):
                                             logger.info(f"Found agent {agent_id} in organization: {org_name} (ID: {org_id})")
                                             agent_found = True
-                                            
+
                                             # Get system tools from this agent's configuration
                                             agent_tools = agent_data.get('agentTools', []) or agent_data.get('tools', [])
                                             logger.info(f"Agent {agent_id} has {len(agent_tools)} tools: {agent_tools}")
-                                            
+
                                             for tool in agent_tools:
                                                 # Handle both dict format (saved from form) and string format (legacy)
                                                 if isinstance(tool, dict):
@@ -1206,11 +1320,13 @@ class WorkflowExecutionAgent:
                                                     system_tool_names.append(system_tool_name)
                                                     logger.info(f"Found system tool: {system_tool_name}")
                                                 elif isinstance(tool_name, str) and tool_name.startswith("mcp_"):
-                                                    # Handle MCP tools (e.g., mcp_gmail-api_gmail_send_message)
-                                                    # Add mcp_service_call as the system tool to enable MCP integration
-                                                    if "mcp_service_call" not in system_tool_names:
-                                                        system_tool_names.append("mcp_service_call")
-                                                        logger.info(f"Found MCP tool: {tool_name}, added mcp_service_call to system tools")
+                                                    # Extract MCP tool name (e.g., mcp_gmail-api_gmail_list_messages -> gmail_list_messages)
+                                                    # Format: mcp_{server}_{tool_name}
+                                                    parts = tool_name.split('_', 2)  # Split into ['mcp', 'server', 'tool_name']
+                                                    if len(parts) >= 3:
+                                                        mcp_tool_name = parts[2]  # Get the actual tool name
+                                                        mcp_tool_names.append(mcp_tool_name)
+                                                        logger.info(f"Found MCP tool: {mcp_tool_name} (from {tool_name})")
                                             break
                                     
                                     if agent_found:
@@ -1227,15 +1343,31 @@ class WorkflowExecutionAgent:
                         self.logger.warning(f"Failed to fetch agent system tools from workflow template: {str(db_error)}")
                     
                     logger.info(f"Agent {agent_id} in workflow template {workflow_execution.workflow_template_id} selected system tools: {system_tool_names}")
+
                     # Get DSPy-compatible system tools for selected tools only
                     available_system_tools = system_tools_service.get_dspy_tools()
                     logger.info(f"Available DSPy system tools: {[tool.__name__ for tool in available_system_tools]}")
+
                     # Match selected tool names to available system tools
                     for tool_func in available_system_tools:
-                        # Check if this system tool is selected by the agent
                         if tool_func.__name__ in system_tool_names:
                             selected_system_tools.append(tool_func)
-                    logger.info(f"Loaded {len(selected_system_tools)} selected system tools for agent {agent_id}")         
+                    logger.info(f"Matched {len(selected_system_tools)} selected system tools: {[t.__name__ for t in selected_system_tools]}")
+
+                    # Load MCP tools directly (Gmail, HCMPro, etc.) - only selected ones
+                    from app.services.mcp_tools_service import mcp_tools_service
+                    if not mcp_tools_service.initialized:
+                        await mcp_tools_service.initialize()
+
+                    # Pass the filtered list of MCP tool names to only load selected tools
+                    mcp_tools = mcp_tools_service.get_dspy_tools(
+                        selected_tool_names=mcp_tool_names if mcp_tool_names else None
+                    )
+                    selected_system_tools.extend(mcp_tools)
+                    logger.info(f"Loaded {len(mcp_tools)} MCP tools: {[t.__name__ for t in mcp_tools]}")
+
+                    logger.info(f"Loaded {len(selected_system_tools)} total tools for agent {agent_id} "
+                              f"(system: {len(selected_system_tools) - len(mcp_tools)}, mcp: {len(mcp_tools)})")         
                 except Exception as e:
                     self.logger.warning(f"Failed to load agent system tool selection for agent {agent_id}: {str(e)}")
                     # Fallback to no system tools
@@ -1433,13 +1565,30 @@ class WorkflowExecutionAgent:
                 'agent_capabilities': self.agent_node.capabilities if hasattr(self.agent_node, 'capabilities') else []
             }
             
-            # Execute with DSPy ReAct using async call
+            # Execute with DSPy ReAct using async call with conversation history
             with dspy.context(lm=self.llm):
                 result = await react_agent.acall(
                     task_name=task.name,
-                    task_objective=task.objective or "Complete the task successfully", 
-                    current_context=json.dumps(context_info, default=str)
+                    task_objective=task.objective or "Complete the task successfully",
+                    current_context=json.dumps(context_info, default=str),
+                    conversation_history=self.conversation_history
                 )
+
+            # Append this interaction to conversation history
+            self.conversation_history.messages.append({
+                "role": "user",
+                "content": f"Task: {task.name}\nObjective: {task.objective}\nContext: {json.dumps(context_info, default=str)}"
+            })
+            self.conversation_history.messages.append({
+                "role": "assistant",
+                "content": f"ReAct Result: {result.response}"
+            })
+
+            self.logger.info(
+                "Updated conversation history",
+                task_id=task.id,
+                history_length=len(self.conversation_history.messages)
+            )
               
             # Send completion thought to WebSocket
             await websocket_manager.send_agent_thought(
@@ -1478,8 +1627,12 @@ class WorkflowExecutionAgent:
                 'completions': getattr(result, 'completions', []),
                 'prediction_data': {k: v for k, v in result.__dict__.items() if not k.startswith('_')}
             })
-            
-            return {
+
+            # Extract task_status and pause_reason from DSPy result
+            task_status = getattr(result, 'task_status', 'COMPLETED')
+            pause_reason = getattr(result, 'pause_reason', '')
+
+            return_dict = {
                 'success': True,
                 'strategy': 'react',
                 'confidence': 0.9,
@@ -1490,6 +1643,17 @@ class WorkflowExecutionAgent:
                 'completed_at': datetime.utcnow().isoformat(),
                 'react_result': react_result_serializable
             }
+
+            # Include task_status and pause_reason if present
+            if task_status and task_status != 'COMPLETED':
+                return_dict['task_status'] = task_status
+                self.logger.info(f"Task status from DSPy: {task_status}")
+
+            if pause_reason:
+                return_dict['pause_reason'] = pause_reason
+                self.logger.info(f"Pause reason from DSPy: {pause_reason}")
+
+            return return_dict
             
         except Exception as e:
             self.logger.error("DSPy ReAct execution failed", task_id=task.id, error=str(e))

@@ -21,14 +21,14 @@ if DATABASE_URL.startswith("sqlite"):
     # SQLite configuration
     engine = create_async_engine(
         DATABASE_URL,
-        echo=True,  # Set to False in production
+        echo=False,  # Set to False in production
         connect_args={"check_same_thread": False}
     )
 else:
     # PostgreSQL configuration
     engine = create_async_engine(
         DATABASE_URL,
-        echo=True,  # Set to False in production
+        echo=False,  # Set to False in production
         pool_size=20,
         max_overflow=30,
         pool_pre_ping=True,
