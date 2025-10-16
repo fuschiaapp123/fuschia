@@ -42,6 +42,7 @@ async def get_task_details_with_original_ids(task_ids: List[str], template_data:
                 'name': node.get('data', {}).get('label', 'Unnamed Task'),
                 'type': node.get('data', {}).get('type', 'action'),
                 'description': node.get('data', {}).get('description', ''),
+                'status': task_record.status,  # Include actual task status
             })
         else:
             # Fallback: use task record data
@@ -50,8 +51,40 @@ async def get_task_details_with_original_ids(task_ids: List[str], template_data:
                 'name': task_record.name or f'Task {task_record.id[:8]}',
                 'type': task_record.context.get('task_type', 'unknown') if task_record.context else 'unknown',
                 'description': task_record.description or '',
+                'status': task_record.status,  # Include actual task status
             })
     return tasks
+
+
+async def get_all_tasks_with_status(execution_id: str, template_data: dict, db: AsyncSession):
+    """Get all tasks for an execution with their current status from the database
+
+    Returns a map of original_node_id -> task_status
+    """
+    if not template_data or 'nodes' not in template_data:
+        return {}
+
+    # Fetch all tasks for this execution
+    task_query = select(WorkflowTaskTable).where(
+        WorkflowTaskTable.execution_id == execution_id
+    )
+    task_result = await db.execute(task_query)
+    task_records = task_result.scalars().all()
+
+    # Create a map of original_node_id -> task_status
+    status_map = {}
+    for task_record in task_records:
+        original_node_id = task_record.context.get('original_node_id') if task_record.context else None
+        if original_node_id:
+            status_map[original_node_id] = {
+                'status': task_record.status,
+                'name': task_record.name,
+                'description': task_record.description,
+                'started_at': task_record.started_at.isoformat() if task_record.started_at else None,
+                'completed_at': task_record.completed_at.isoformat() if task_record.completed_at else None,
+            }
+
+    return status_map
 
 @router.get("/workflow-executions")
 async def get_workflow_executions(
@@ -87,6 +120,9 @@ async def get_workflow_executions(
                 if edges:
                     print(f"   First edge sample: {edges[0]}")
 
+            # Get all tasks with their current status from the database
+            task_status_map = await get_all_tasks_with_status(execution.id, template_data, db)
+
             result_list.append({
                 "id": execution.id,
                 "workflow_template_id": execution.workflow_template_id,
@@ -101,6 +137,7 @@ async def get_workflow_executions(
                 "failed_tasks": await get_task_details_with_original_ids(
                     execution.failed_tasks or [], template_data, execution.id, db
                 ),
+                "task_status_map": task_status_map,  # Include complete task status map
                 "template_data": template_data,  # Include workflow structure (nodes/edges)
                 "started_at": execution.started_at.isoformat(),
                 "estimated_completion": execution.estimated_completion.isoformat() if execution.estimated_completion else None,
@@ -152,6 +189,9 @@ async def get_my_workflow_executions(
                 if edges:
                     print(f"   First edge sample: {edges[0]}")
 
+            # Get all tasks with their current status from the database
+            task_status_map = await get_all_tasks_with_status(execution.id, template_data, db)
+
             result_list.append({
                 "id": execution.id,
                 "workflow_template_id": execution.workflow_template_id,
@@ -166,6 +206,7 @@ async def get_my_workflow_executions(
                 "failed_tasks": await get_task_details_with_original_ids(
                     execution.failed_tasks or [], template_data, execution.id, db
                 ),
+                "task_status_map": task_status_map,  # Include complete task status map
                 "template_data": template_data,  # Include workflow structure (nodes/edges)
                 "started_at": execution.started_at.isoformat(),
                 "estimated_completion": execution.estimated_completion.isoformat() if execution.estimated_completion else None,

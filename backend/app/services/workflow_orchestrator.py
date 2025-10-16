@@ -188,10 +188,13 @@ class WorkflowOrchestrator:
                     execution_id=execution.id,
                     task_assignments=task_assignments
                 )
+
                 # Execute tasks in parallel
                 execution_coroutines = []
                 for task_id, agent_id in task_assignments.items():
+                    self.logger.debug("Preparing to execute task", task_id=task_id, agent_id=agent_id)
                     task = next(t for t in execution.tasks if t.id == task_id)
+                    self.logger.debug("Found task for execution", task_id=task.id, task_name=task.name) 
                     agent = self.agent_instances[agent_id]
                     self.logger.debug(
                         "Executing task with agent",
@@ -201,6 +204,7 @@ class WorkflowOrchestrator:
                     coroutine = self._execute_task_with_monitoring(
                         agent, task, execution.execution_context, execution
                     )
+                    self.logger.debug("Prepared task execution coroutine", task_id=task.id)
                     execution_coroutines.append(coroutine)
                 self.logger.debug(
                     "Prepared execution coroutines for tasks",
@@ -523,48 +527,55 @@ class WorkflowOrchestrator:
                                           context: Dict[str, Any],
                                           execution: WorkflowExecution) -> Dict[str, Any]:
         """Execute task with monitoring and error handling"""
-        
+
         try:
-            # Update execution tracking
-            execution.current_tasks.append(task.id)
-            
-            # Update task status to IN_PROGRESS in database
+            # Update task status to IN_PROGRESS using helper method
+            execution.update_task_status(task.id, TaskStatus.IN_PROGRESS)
+
+            # Update task status in database
             await workflow_execution_service.update_task_status(
                 task.id, TaskStatus.IN_PROGRESS, agent.agent_node.id
             )
-            
+
             # Execute task
             result = await agent.execute_task(task, context, execution)
-            
+
             # Handle handoffs
             if result.get('requires_handoff'):
                 handoff_result = await self._handle_task_handoff(
                     task, result, agent, execution
                 )
                 result.update(handoff_result)
-            
-            # Update execution tracking
-            if task.id in execution.current_tasks:
-                execution.current_tasks.remove(task.id)
-            
-            if result.get('status') == TaskStatus.COMPLETED.value:
-                execution.completed_tasks.append(task.id)
-                # Update task status to COMPLETED in database
-                await workflow_execution_service.update_task_status(
-                    task.id, TaskStatus.COMPLETED, agent.agent_node.id, result
+
+            # Determine final status based on result
+            result_status_str = result.get('status', 'completed')
+
+            # Map string status to TaskStatus enum
+            if result_status_str == TaskStatus.PAUSED.value or result_status_str == 'PAUSED':
+                final_status = TaskStatus.PAUSED
+            elif result_status_str == TaskStatus.FAILED.value or result_status_str == 'failed':
+                final_status = TaskStatus.FAILED
+            elif result_status_str == TaskStatus.PENDING.value or result_status_str == 'pending':
+                final_status = TaskStatus.PENDING
+            else:
+                final_status = TaskStatus.COMPLETED
+
+            # Update task status using helper method
+            execution.update_task_status(task.id, final_status)
+
+            # Update task status in database
+            await workflow_execution_service.update_task_status(
+                task.id, final_status, agent.agent_node.id, result
+            )
+
+            if final_status == TaskStatus.PAUSED:
+                self.logger.info(
+                    "Task paused - workflow will pause",
+                    task_id=task.id,
+                    execution_id=execution.id,
+                    pause_reason=result.get('pause_reason', 'Unknown')
                 )
-            elif result.get('status') == TaskStatus.FAILED.value:
-                execution.failed_tasks.append(task.id)
-                # Update task status to FAILED in database
-                await workflow_execution_service.update_task_status(
-                    task.id, TaskStatus.FAILED, agent.agent_node.id, result
-                )
-            elif result.get('status') == TaskStatus.PENDING.value:
-                # Task returned to PENDING state - needs to pause
-                # Update task status to PENDING in database
-                await workflow_execution_service.update_task_status(
-                    task.id, TaskStatus.PENDING, agent.agent_node.id, result
-                )
+            elif final_status == TaskStatus.PENDING:
                 self.logger.info(
                     "Task returned to PENDING state - workflow will pause",
                     task_id=task.id,
@@ -572,7 +583,7 @@ class WorkflowOrchestrator:
                 )
 
             return result
-            
+
         except Exception as e:
             self.logger.error(
                 "Task monitoring failed",
@@ -580,13 +591,11 @@ class WorkflowOrchestrator:
                 agent_id=agent.agent_node.id,
                 error=str(e)
             )
-            
-            # Clean up tracking
-            if task.id in execution.current_tasks:
-                execution.current_tasks.remove(task.id)
-            execution.failed_tasks.append(task.id)
-            
-            # Update task status to FAILED in database
+
+            # Update task status to FAILED using helper method
+            execution.update_task_status(task.id, TaskStatus.FAILED)
+
+            # Update task status in database
             await workflow_execution_service.update_task_status(
                 task.id, TaskStatus.FAILED, agent.agent_node.id, {
                     'error': str(e),
@@ -748,41 +757,23 @@ class WorkflowOrchestrator:
     
     def _get_ready_tasks(self, execution: WorkflowExecution) -> List[WorkflowTask]:
         """Get tasks that are ready to execute (dependencies satisfied)"""
-        
-        ready_tasks = []
-        completed_task_ids = set(execution.completed_tasks)
-        current_task_ids = set(execution.current_tasks)
-        failed_task_ids = set(execution.failed_tasks)
-        
-        for task in execution.tasks:
-            # Skip if already processed or currently running
-            if (task.id in completed_task_ids or 
-                task.id in current_task_ids or 
-                task.id in failed_task_ids):
-                continue
-            
-            # Check if all dependencies are satisfied
-            dependencies_satisfied = all(
-                dep_id in completed_task_ids for dep_id in task.dependencies
-            )
-            
-            if dependencies_satisfied:
-                ready_tasks.append(task)
-        
-        return ready_tasks
+        # Use the WorkflowExecution helper method which checks task status directly
+        return execution.get_ready_tasks()
     
     def _is_workflow_complete(self, execution: WorkflowExecution) -> bool:
         """Check if workflow execution is complete"""
-        
+        # A workflow is complete when all tasks are either completed or failed
         total_tasks = len(execution.tasks)
-        processed_tasks = len(execution.completed_tasks) + len(execution.failed_tasks)
-        
-        return processed_tasks >= total_tasks
+        completed = len([t for t in execution.tasks if t.status == TaskStatus.COMPLETED])
+        failed = len([t for t in execution.tasks if t.status == TaskStatus.FAILED])
+
+        return (completed + failed) >= total_tasks
     
     def _all_tasks_completed(self, execution: WorkflowExecution) -> bool:
         """Check if all tasks completed successfully"""
-        
-        return len(execution.completed_tasks) == len(execution.tasks)
+        total_tasks = len(execution.tasks)
+        completed = len([t for t in execution.tasks if t.status == TaskStatus.COMPLETED])
+        return completed == total_tasks
     
     def _process_task_result(self, result: Dict[str, Any], execution: WorkflowExecution) -> None:
         """Process task execution result"""
@@ -1161,16 +1152,56 @@ class WorkflowOrchestrator:
     
     async def resume_execution(self, execution_id: str) -> bool:
         """Resume paused workflow execution"""
-        
+
+        # First check if execution is already in memory
         execution = self.active_executions.get(execution_id)
-        if execution and execution.status == ExecutionStatus.PAUSED:
-            execution.status = ExecutionStatus.RUNNING
-            # Update status in database
-            await workflow_execution_service.update_execution_status(execution_id, ExecutionStatus.RUNNING)
-            # Restart execution task
-            asyncio.create_task(self._execute_workflow(execution))
-            return True
-        return False
+
+        # If not in memory, load from database
+        if not execution:
+            self.logger.info("Execution not in memory, loading from database",
+                           execution_id=execution_id)
+            execution = await workflow_execution_service.get_execution(execution_id)
+
+            if not execution:
+                self.logger.error("Execution not found in database",
+                                execution_id=execution_id)
+                return False
+
+        self.logger.info("Attempting to resume execution",
+                       execution_id=execution_id,
+                       status=execution.status.value if execution else None)
+
+        # Check if execution is paused
+        if execution.status != ExecutionStatus.PAUSED:
+            self.logger.warning("Cannot resume execution - not in PAUSED state",
+                              execution_id=execution_id,
+                              current_status=execution.status.value)
+            return False
+
+        # Update status to RUNNING
+        execution.status = ExecutionStatus.RUNNING
+
+        # Synchronize task lists with actual task statuses
+        execution.sync_task_lists()
+
+        # Add to active executions if not already there
+        self.active_executions[execution_id] = execution
+
+        # Update status in database
+        await workflow_execution_service.update_execution_status(
+            execution_id,
+            ExecutionStatus.RUNNING
+        )
+
+        self.logger.info("Resuming workflow execution",
+                       execution_id=execution_id,
+                       workflow_template_id=execution.workflow_template_id,
+                       progress=execution.get_execution_progress())
+
+        # Restart execution task
+        asyncio.create_task(self._execute_workflow(execution))
+
+        return True
     
     def _get_agent_name(self, agent_id: str) -> str:
         """Get agent name from agent ID, with fallback to ID if not found"""

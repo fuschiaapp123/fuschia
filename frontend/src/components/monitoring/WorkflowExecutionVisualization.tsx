@@ -11,13 +11,16 @@ import {
   Background,
   BackgroundVariant,
   MiniMap,
+  MarkerType,
+  Handle,
+  Position,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { 
-  CheckCircle, 
-  Play, 
-  Clock, 
-  XCircle, 
+import {
+  CheckCircle,
+  Play,
+  Clock,
+  XCircle,
   Pause,
   AlertCircle
 } from 'lucide-react';
@@ -88,16 +91,48 @@ const TaskNode: React.FC<{
     }
   };
 
+  const getStatusLabel = () => {
+    switch (data.status) {
+      case 'completed':
+        return 'Completed';
+      case 'in_progress':
+        return 'In Progress';
+      case 'failed':
+        return 'Failed';
+      case 'paused':
+        return 'Paused';
+      case 'pending':
+        return 'Pending';
+      default:
+        return 'Unknown';
+    }
+  };
+
   return (
-    <div className={getNodeClasses()}>
-      <div className="flex items-center justify-center space-x-2">
-        {getStatusIcon()}
-        <span className="font-medium text-sm">{data.label}</span>
+    <>
+      <Handle
+        type="target"
+        position={Position.Left}
+        style={{ background: '#64748b', width: 8, height: 8 }}
+      />
+      <div className={getNodeClasses()}>
+        <div className="flex items-center justify-center space-x-2 mb-1">
+          {getStatusIcon()}
+          <span className="font-medium text-sm">{data.label}</span>
+        </div>
+        <div className="text-xs font-semibold mt-1">
+          {getStatusLabel()}
+        </div>
+        {data.type && (
+          <div className="text-xs text-gray-500 mt-1 opacity-75">{data.type}</div>
+        )}
       </div>
-      {data.type && (
-        <div className="text-xs text-gray-500 mt-1">{data.type}</div>
-      )}
-    </div>
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={{ background: '#64748b', width: 8, height: 8 }}
+      />
+    </>
   );
 };
 
@@ -122,18 +157,26 @@ export const WorkflowExecutionVisualization: React.FC<WorkflowExecutionVisualiza
         edges: execution.template_data.edges,
       });
 
-      // Create a map of task statuses by task ID
-      const taskStatusMap = new Map<string, 'completed' | 'in_progress' | 'failed' | 'pending'>();
+      // Use task_status_map if available (more accurate, from database)
+      const taskStatusMap = new Map<string, 'completed' | 'in_progress' | 'failed' | 'pending' | 'paused'>();
 
-      execution.completed_tasks.forEach(task => {
-        taskStatusMap.set(task.id, 'completed');
-      });
-      execution.current_tasks.forEach(task => {
-        taskStatusMap.set(task.id, 'in_progress');
-      });
-      execution.failed_tasks.forEach(task => {
-        taskStatusMap.set(task.id, 'failed');
-      });
+      if (execution.task_status_map) {
+        // Use the accurate task status map from the database
+        Object.entries(execution.task_status_map).forEach(([nodeId, taskInfo]) => {
+          taskStatusMap.set(nodeId, taskInfo.status as any);
+        });
+      } else {
+        // Fallback to the old way (less accurate)
+        execution.completed_tasks.forEach(task => {
+          taskStatusMap.set(task.id, 'completed');
+        });
+        execution.current_tasks.forEach(task => {
+          taskStatusMap.set(task.id, 'in_progress');
+        });
+        execution.failed_tasks.forEach(task => {
+          taskStatusMap.set(task.id, 'failed');
+        });
+      }
 
       // Create nodes from template data with real-time status
       execution.template_data.nodes.forEach((templateNode: any) => {
@@ -174,16 +217,21 @@ export const WorkflowExecutionVisualization: React.FC<WorkflowExecutionVisualiza
 
           if (sourceExists && targetExists) {
             const sourceStatus = taskStatusMap.get(sourceId);
-            const newEdge = {
+            const newEdge: Edge = {
               id: edgeId,
               source: sourceId,
               target: targetId,
               type: 'smoothstep',
               animated: sourceStatus === 'in_progress',
-              style: { stroke: '#94a3b8', strokeWidth: 2 },
+              style: {
+                stroke: '#64748b',
+                strokeWidth: 2
+              },
               markerEnd: {
-                type: 'arrowclosed' as any,
-                color: '#94a3b8',
+                type: MarkerType.ArrowClosed,
+                width: 20,
+                height: 20,
+                color: '#64748b',
               },
             };
             edges.push(newEdge);
@@ -251,6 +299,16 @@ export const WorkflowExecutionVisualization: React.FC<WorkflowExecutionVisualiza
             target: task.id,
             type: 'smoothstep',
             animated: task.status === 'in_progress',
+            style: {
+              stroke: '#64748b',
+              strokeWidth: 2
+            },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 20,
+              height: 20,
+              color: '#64748b',
+            },
           });
         }
       });
@@ -279,6 +337,16 @@ export const WorkflowExecutionVisualization: React.FC<WorkflowExecutionVisualiza
                 target: task.id || `task-${index}`,
                 type: 'smoothstep',
                 animated: task.status === 'in_progress',
+                style: {
+                  stroke: '#64748b',
+                  strokeWidth: 2
+                },
+                markerEnd: {
+                  type: MarkerType.ArrowClosed,
+                  width: 20,
+                  height: 20,
+                  color: '#64748b',
+                },
               });
             }
           });
@@ -291,6 +359,16 @@ export const WorkflowExecutionVisualization: React.FC<WorkflowExecutionVisualiza
             target: task.id || `task-${index}`,
             type: 'smoothstep',
             animated: task.status === 'in_progress',
+            style: {
+              stroke: '#64748b',
+              strokeWidth: 2
+            },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 20,
+              height: 20,
+              color: '#64748b',
+            },
           });
         }
       });

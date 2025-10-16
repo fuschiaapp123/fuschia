@@ -71,6 +71,7 @@ class GmailMonitorService:
         self.monitoring_task = None
         self.processed_messages: Set[str] = set()  # Cache of processed message IDs
         self.config = MonitoringConfig()
+        self.workflow_orchestrator = None  # Will be initialized when needed
 
     async def initialize(self):
         """Initialize the monitoring service"""
@@ -83,6 +84,18 @@ class GmailMonitorService:
 
             # Initialize intent agent
             self.intent_agent = create_intent_agent()
+
+            # Initialize workflow orchestrator
+            from app.services.workflow_orchestrator import WorkflowOrchestrator
+            from openai import OpenAI
+            import os as os_module
+
+            try:
+                llm_client = OpenAI(api_key=os_module.environ.get("OPENAI_API_KEY"))
+            except Exception:
+                llm_client = None
+
+            self.workflow_orchestrator = WorkflowOrchestrator(llm_client=llm_client)
 
             self.logger.info("Gmail Monitor Service initialized successfully")
 
@@ -406,8 +419,86 @@ class GmailMonitorService:
             return None
 
     async def _trigger_workflow_from_intent(self, message: EmailMessage, intent_result: Dict[str, Any]):
-        """Trigger a workflow based on the classified intent"""
+        """Trigger a workflow based on the classified intent
+
+        If intent is WORKFLOW_RESUME, resumes a paused workflow execution.
+        Otherwise, creates a new workflow execution.
+        """
         try:
+            detected_intent = intent_result.get('detected_intent')
+            workflow_execution_info = intent_result.get('workflow_execution', {})
+            execution_type = workflow_execution_info.get('execution_type', 'NEW')
+
+            # Check if this is a workflow resume request
+            self.logger.info("Workflow execution info", info=workflow_execution_info)
+            if detected_intent == 'WORKFLOW_RESUME' and execution_type == 'RESUME':
+                execution_id = workflow_execution_info.get('execution_id')
+                self.logger.info("Resuming paused workflow", message_id=message.message_id,
+                               execution_id=execution_id)
+                if not execution_id:
+                    self.logger.warning("No execution ID found for workflow resume",
+                                      message_id=message.message_id)
+                    return
+                self.logger.info("Resuming workflow execution", execution_id=execution_id)
+                # Ensure workflow orchestrator is initialized
+                if not self.workflow_orchestrator:
+                    from app.services.workflow_orchestrator import WorkflowOrchestrator
+                    from openai import OpenAI
+                    import os as os_module
+
+                    try:
+                        llm_client = OpenAI(api_key=os_module.environ.get("OPENAI_API_KEY"))
+                    except Exception:
+                        llm_client = None
+                    self.logger.info("Initializing Workflow Orchestrator for resuming workflow")
+                    self.workflow_orchestrator = WorkflowOrchestrator(llm_client=llm_client)
+
+                # Update execution context with email response information
+                execution = await self.workflow_execution_service.get_execution(execution_id)
+                self.logger.info("Fetched workflow execution for resume", execution_id=execution_id,
+                               execution_context=execution.execution_context if execution else None)
+                if execution:
+                    # Add email response to execution context
+                    execution.execution_context = execution.execution_context or {}
+                    execution.execution_context['email_response'] = {
+                        "message_id": message.message_id,
+                        "subject": message.subject,
+                        "sender": message.sender,
+                        "body": message.body_text or message.snippet,
+                        "received_time": message.received_time.isoformat()
+                    }
+                    execution.execution_context['resume_trigger'] = 'email_monitor'
+                    self.logger.info("Updated execution context for resume", execution_id=execution_id,
+                                   execution_context=execution.execution_context)
+                    # Update execution context in database
+                    async with AsyncSessionLocal() as session:
+                        from app.db.postgres import WorkflowExecutionTable
+                        result = await session.execute(
+                            select(WorkflowExecutionTable).where(
+                                WorkflowExecutionTable.id == execution_id
+                            )
+                        )
+                        db_execution = result.scalar_one_or_none()
+                        if db_execution:
+                            db_execution.execution_context = execution.execution_context
+                            await session.commit()
+                    self.logger.info("Execution context updated in database", execution_id=execution_id)
+                # Resume the paused workflow
+                success = await self.workflow_orchestrator.resume_execution(execution_id)
+                self.logger.info("Workflow resume attempted", execution_id=execution_id, success=success)
+                if success:
+                    self.logger.info("Paused workflow resumed from email",
+                                   message_id=message.message_id,
+                                   execution_id=execution_id,
+                                   workflow_name=workflow_execution_info.get('workflow_template_name'))
+                else:
+                    self.logger.error("Failed to resume workflow from email",
+                                    message_id=message.message_id,
+                                    execution_id=execution_id)
+
+                return
+
+            # Otherwise, create a new workflow execution
             workflow_template_id = intent_result.get('workflow_template_id')
             if not workflow_template_id:
                 self.logger.warning("No workflow template ID in intent result",
@@ -423,10 +514,11 @@ class GmailMonitorService:
                 "email_recipient": message.recipient,
                 "email_received_time": message.received_time.isoformat(),
                 "intent_classification": intent_result,
-                "email_content_snippet": message.snippet
+                "email_content_snippet": message.snippet,
+                "original_message": self._prepare_email_content(message)
             }
 
-            # Create workflow execution
+            # Create new workflow execution
             execution = await self.workflow_execution_service.create_execution(
                 workflow_template_id=workflow_template_id,
                 initiated_by="gmail_monitor",
@@ -434,11 +526,11 @@ class GmailMonitorService:
                 priority=2  # Email-triggered workflows get higher priority
             )
 
-            self.logger.info("Workflow triggered from email",
+            self.logger.info("New workflow triggered from email",
                            message_id=message.message_id,
                            workflow_template_id=workflow_template_id,
                            execution_id=execution.id,
-                           intent=intent_result.get('detected_intent'))
+                           intent=detected_intent)
 
         except Exception as e:
             self.logger.error("Error triggering workflow from email",
