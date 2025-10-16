@@ -10,6 +10,13 @@ export interface WorkflowExecution {
   current_tasks: any[];
   completed_tasks: any[];
   failed_tasks: any[];
+  task_status_map?: Record<string, {
+    status: string;
+    name: string;
+    description?: string;
+    started_at?: string;
+    completed_at?: string;
+  }>;
   template_data?: {
     nodes?: any[];
     edges?: any[];

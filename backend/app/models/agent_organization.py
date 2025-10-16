@@ -155,31 +155,137 @@ class WorkflowExecution(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Execution ID")
     workflow_template_id: str = Field(..., description="Source workflow template ID")
     organization_id: str = Field(..., description="Agent organization ID")
-    
+
     # Execution state
     status: ExecutionStatus = Field(default=ExecutionStatus.PENDING, description="Execution status")
     current_tasks: List[str] = Field(default_factory=list, description="Currently executing task IDs")
     completed_tasks: List[str] = Field(default_factory=list, description="Completed task IDs")
     failed_tasks: List[str] = Field(default_factory=list, description="Failed task IDs")
-    
+
     # Execution data
     tasks: List[WorkflowTask] = Field(..., description="All workflow tasks")
     execution_context: Dict[str, Any] = Field(default_factory=dict, description="Global execution context")
     use_memory_enhancement: bool = Field(default=False, description="Whether to use memory-enhanced execution")
-    
+
     # Human interaction
     human_approvals_pending: List[str] = Field(default_factory=list, description="Task IDs pending human approval")
     human_feedback: List[Dict[str, Any]] = Field(default_factory=list, description="Human feedback history")
-    
+
     # Timing and metadata
     started_at: datetime = Field(default_factory=datetime.utcnow)
     estimated_completion: Optional[datetime] = Field(None, description="Estimated completion time")
     actual_completion: Optional[datetime] = Field(None, description="Actual completion time")
     initiated_by: str = Field(..., description="User who initiated execution")
-    
+
     # Performance tracking
     agent_actions: List[Dict[str, Any]] = Field(default_factory=list, description="All agent actions taken")
     error_log: List[Dict[str, Any]] = Field(default_factory=list, description="Execution errors")
+
+    def get_task_by_id(self, task_id: str) -> Optional['WorkflowTask']:
+        """Get a task by its ID"""
+        return next((task for task in self.tasks if task.id == task_id), None)
+
+    def get_tasks_by_status(self, status: TaskStatus) -> List['WorkflowTask']:
+        """Get all tasks with a specific status"""
+        return [task for task in self.tasks if task.status == status]
+
+    def get_pending_tasks(self) -> List['WorkflowTask']:
+        """Get all pending tasks"""
+        return self.get_tasks_by_status(TaskStatus.PENDING)
+
+    def get_ready_tasks(self) -> List['WorkflowTask']:
+        """Get tasks that are ready to execute or continue
+
+        Returns tasks that are:
+        1. PENDING with all dependencies completed
+        2. IN_PROGRESS (can continue execution)
+        3. PAUSED (can be resumed)
+        """
+        ready_tasks = []
+
+        # Get tasks that can be executed or resumed
+        executable_statuses = [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.PAUSED]
+
+        for task in self.tasks:
+            # Skip if not in an executable status
+            if task.status not in executable_statuses:
+                continue
+
+            # For IN_PROGRESS and PAUSED tasks, they're always ready to continue
+            if task.status in [TaskStatus.IN_PROGRESS, TaskStatus.PAUSED]:
+                ready_tasks.append(task)
+                continue
+
+            # For PENDING tasks, check if dependencies are satisfied
+            if task.status == TaskStatus.PENDING:
+                if not task.dependencies:
+                    # No dependencies, task is ready
+                    ready_tasks.append(task)
+                else:
+                    # Check if all dependencies are completed
+                    all_deps_completed = all(
+                        dep_task and dep_task.status == TaskStatus.COMPLETED
+                        for dep_id in task.dependencies
+                        if (dep_task := self.get_task_by_id(dep_id))
+                    )
+                    if all_deps_completed:
+                        ready_tasks.append(task)
+
+        return ready_tasks
+
+    def update_task_status(self, task_id: str, new_status: TaskStatus) -> bool:
+        """Update task status and sync with execution-level tracking lists"""
+        task = self.get_task_by_id(task_id)
+        if not task:
+            return False
+
+        old_status = task.status
+        task.status = new_status
+
+        # Remove from old status lists
+        if task_id in self.current_tasks and old_status == TaskStatus.IN_PROGRESS:
+            self.current_tasks.remove(task_id)
+        if task_id in self.completed_tasks and old_status == TaskStatus.COMPLETED:
+            self.completed_tasks.remove(task_id)
+        if task_id in self.failed_tasks and old_status == TaskStatus.FAILED:
+            self.failed_tasks.remove(task_id)
+
+        # Add to new status list
+        if new_status == TaskStatus.IN_PROGRESS and task_id not in self.current_tasks:
+            self.current_tasks.append(task_id)
+        elif new_status == TaskStatus.COMPLETED and task_id not in self.completed_tasks:
+            self.completed_tasks.append(task_id)
+        elif new_status == TaskStatus.FAILED and task_id not in self.failed_tasks:
+            self.failed_tasks.append(task_id)
+
+        return True
+
+    def sync_task_lists(self):
+        """Synchronize execution-level task lists with actual task statuses"""
+        self.current_tasks = [t.id for t in self.tasks if t.status == TaskStatus.IN_PROGRESS]
+        self.completed_tasks = [t.id for t in self.tasks if t.status == TaskStatus.COMPLETED]
+        self.failed_tasks = [t.id for t in self.tasks if t.status == TaskStatus.FAILED]
+
+    def get_execution_progress(self) -> Dict[str, Any]:
+        """Get execution progress summary based on task statuses"""
+        total_tasks = len(self.tasks)
+        completed = len([t for t in self.tasks if t.status == TaskStatus.COMPLETED])
+        failed = len([t for t in self.tasks if t.status == TaskStatus.FAILED])
+        in_progress = len([t for t in self.tasks if t.status == TaskStatus.IN_PROGRESS])
+        pending = len([t for t in self.tasks if t.status == TaskStatus.PENDING])
+        paused = len([t for t in self.tasks if t.status == TaskStatus.PAUSED])
+        waiting_approval = len([t for t in self.tasks if t.status == TaskStatus.WAITING_APPROVAL])
+
+        return {
+            "total_tasks": total_tasks,
+            "completed": completed,
+            "failed": failed,
+            "in_progress": in_progress,
+            "pending": pending,
+            "paused": paused,
+            "waiting_approval": waiting_approval,
+            "completion_percentage": (completed / total_tasks * 100) if total_tasks > 0 else 0
+        }
 
 
 class HumanInteractionRequest(BaseModel):
