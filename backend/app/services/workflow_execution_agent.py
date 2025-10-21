@@ -318,6 +318,14 @@ class WorkflowExecutionAgent:
         task.started_at = datetime.utcnow()
         task.assigned_agent_id = self.agent_node.id
 
+        # Search knowledge graph memory before task execution (if enabled)
+        if workflow_execution.use_memory_enhancement:
+            execution_context = await self._search_and_enhance_context(
+                task,
+                execution_context,
+                workflow_execution
+            )
+
         try:
             # Condition tasks always use simple strategy regardless of agent configuration
             if task_type == 'condition':
@@ -2301,10 +2309,162 @@ Available actions: {', '.join(self.available_tools.keys())}, complete_task, requ
                 'success': False,
                 'error': 'LLM client not available for planning'
             }
-        
+
         # Implementation would use LLM to create execution plan
         return {
             'success': True,
             'plan': ['Step 1: Analyze task', 'Step 2: Execute action', 'Step 3: Validate result'],
             'confidence': 0.8
         }
+
+    async def _search_and_enhance_context(
+        self,
+        task: WorkflowTask,
+        execution_context: Dict[str, Any],
+        workflow_execution: WorkflowExecution
+    ) -> Dict[str, Any]:
+        """Search knowledge graph memory and enhance context before LLM call
+
+        This method is called before task execution to retrieve relevant knowledge
+        from the Graphiti temporal knowledge graph and add it to the execution context.
+        """
+        try:
+            # Import Graphiti memory service
+            from app.services.graphiti_enhanced_memory_service import graphiti_enhanced_memory_service
+
+            # Initialize if needed
+            await graphiti_enhanced_memory_service.initialize()
+
+            # Check if client is available
+            if not graphiti_enhanced_memory_service._client:
+                self.logger.warning(
+                    "Graphiti memory client not available - continuing without memory enhancement",
+                    task_id=task.id
+                )
+                return execution_context
+
+            # Build search query from task information
+            query_parts = [task.name]
+            if task.description:
+                query_parts.append(task.description)
+            if task.objective:
+                query_parts.append(task.objective)
+
+            # Add relevant context
+            for key, value in execution_context.items():
+                if isinstance(value, str) and len(value) < 200 and key not in ['graphiti_memory']:
+                    query_parts.append(f"{key}: {value}")
+
+            search_query = " ".join(query_parts)
+
+            self.logger.info(
+                "Searching knowledge graph memory before task execution",
+                task_id=task.id,
+                task_name=task.name,
+                query_preview=search_query[:100]
+            )
+
+            # Search memory
+            memory_result = await graphiti_enhanced_memory_service.search_memory(
+                query=search_query,
+                workflow_id=workflow_execution.workflow_template_id,
+                agent_id=self.agent_node.id,
+                time_range_hours=168,  # Search last 7 days
+                limit=15
+            )
+
+            # Check if we found any results
+            total_results = (
+                len(memory_result.semantic_edges) +
+                len(memory_result.entity_nodes) +
+                len(memory_result.community_nodes)
+            )
+
+            if total_results == 0:
+                self.logger.info(
+                    "No relevant knowledge found in memory graph",
+                    task_id=task.id
+                )
+                return execution_context
+
+            # Enhance context with memory results
+            enhanced_context = execution_context.copy()
+
+            # Build memory context
+            memory_context = {
+                "semantic_facts": [],
+                "known_entities": [],
+                "knowledge_communities": [],
+                "memory_summary": ""
+            }
+
+            # Process semantic edges (relationships/facts)
+            for edge in memory_result.semantic_edges[:10]:
+                fact_info = {
+                    "fact": edge.get("fact", ""),
+                    "created_at": edge.get("created_at"),
+                    "source": edge.get("source_uuid", ""),
+                    "target": edge.get("target_uuid", "")
+                }
+                memory_context["semantic_facts"].append(fact_info)
+
+            # Process entity nodes
+            for entity in memory_result.entity_nodes[:10]:
+                entity_info = {
+                    "name": entity.get("name", ""),
+                    "type": entity.get("entity_type", ""),
+                    "summary": entity.get("summary", "")
+                }
+                memory_context["known_entities"].append(entity_info)
+
+            # Process community nodes
+            for community in memory_result.community_nodes[:5]:
+                community_info = {
+                    "name": community.get("name", ""),
+                    "summary": community.get("summary", "")
+                }
+                memory_context["knowledge_communities"].append(community_info)
+
+            # Create summary for LLM
+            memory_context["memory_summary"] = (
+                f"Knowledge Graph Memory Context:\n"
+                f"- Found {len(memory_result.semantic_edges)} relevant facts/relationships\n"
+                f"- Identified {len(memory_result.entity_nodes)} known entities\n"
+                f"- Located {len(memory_result.community_nodes)} related knowledge communities\n"
+                f"This information comes from previous workflow executions and agent interactions.\n"
+                f"Use this context to inform your task execution and avoid repeating work."
+            )
+
+            # Add to execution context
+            enhanced_context["graphiti_memory"] = memory_context
+
+            self.logger.info(
+                "Knowledge graph memory search completed - context enhanced",
+                task_id=task.id,
+                facts_found=len(memory_result.semantic_edges),
+                entities_found=len(memory_result.entity_nodes),
+                communities_found=len(memory_result.community_nodes)
+            )
+
+            # Record this memory search as an agent thought
+            try:
+                await graphiti_enhanced_memory_service.record_agent_thought(
+                    workflow_id=workflow_execution.workflow_template_id,
+                    execution_id=workflow_execution.id,
+                    agent_id=self.agent_node.id,
+                    thought=f"Searched knowledge graph for task '{task.name}' and found {total_results} relevant memory items",
+                    context={"task_id": task.id, "memory_stats": memory_result.search_metadata}
+                )
+            except Exception as e:
+                self.logger.warning("Failed to record memory search thought", error=str(e))
+
+            return enhanced_context
+
+        except Exception as e:
+            self.logger.error(
+                "Failed to search knowledge graph memory",
+                task_id=task.id,
+                error=str(e)
+            )
+            # Return original context on error - graceful degradation
+            return execution_context
