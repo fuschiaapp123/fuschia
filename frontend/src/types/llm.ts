@@ -49,6 +49,10 @@ export interface ChatRequest {
   user_role?: string;
   current_module?: string;
   current_tab?: string;
+  // Debug mode parameters
+  debug_mode?: boolean;
+  debug_workflow_template_id?: string | null;
+  debug_agent_template_id?: string | null;
 }
 
 export interface ChatResponse {

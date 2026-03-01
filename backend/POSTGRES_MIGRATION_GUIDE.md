@@ -38,9 +38,9 @@ pip install psycopg2-binary==2.9.9 asyncpg==0.29.0
 **Setup PostgreSQL Database:**
 ```sql
 -- Connect to PostgreSQL as superuser
-CREATE DATABASE fuschia_db;
-CREATE USER fuschia_user WITH PASSWORD 'fuschia_password';
-GRANT ALL PRIVILEGES ON DATABASE fuschia_db TO fuschia_user;
+CREATE DATABASE fuchsia_db;
+CREATE USER fuchsia_user WITH PASSWORD 'fuchsia_password';
+GRANT ALL PRIVILEGES ON DATABASE fuchsia_db TO fuchsia_user;
 ```
 
 ### 2. Environment Configuration
@@ -48,19 +48,19 @@ GRANT ALL PRIVILEGES ON DATABASE fuschia_db TO fuschia_user;
 **Update `.env` file:**
 ```env
 # Add PostgreSQL configuration
-DATABASE_URL=postgresql+asyncpg://fuschia_user:fuschia_password@localhost:5432/fuschia_db
+DATABASE_URL=postgresql+asyncpg://fuchsia_user:fuchsia_password@localhost:5432/fuchsia_db
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_DB=fuschia_db
-POSTGRES_USER=fuschia_user
-POSTGRES_PASSWORD=fuschia_password
+POSTGRES_DB=fuchsia_db
+POSTGRES_USER=fuchsia_user
+POSTGRES_PASSWORD=fuchsia_password
 ```
 
 ### 3. Database Migration
 
 **Run the migration script:**
 ```bash
-cd /Users/sanjay/Lab/Fuschia-alfa/backend
+cd /Users/sanjay/Lab/Fuchsia-alfa/backend
 python migrate_users_to_postgres.py
 ```
 
@@ -276,12 +276,12 @@ WARNING: Unknown role mapped to end_user
 
 **Backup:**
 ```bash
-pg_dump -U fuschia_user -h localhost fuschia_db > fuschia_backup.sql
+pg_dump -U fuchsia_user -h localhost fuchsia_db > fuchsia_backup.sql
 ```
 
 **Restore:**
 ```bash
-psql -U fuschia_user -h localhost fuschia_db < fuschia_backup.sql
+psql -U fuchsia_user -h localhost fuchsia_db < fuchsia_backup.sql
 ```
 
 **Monitor Performance:**

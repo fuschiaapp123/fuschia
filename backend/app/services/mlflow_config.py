@@ -58,10 +58,10 @@ class MLflowConfig:
             # Set default experiment for autolog traces
             mlflow.set_experiment(cls.INTENT_CLASSIFICATION_EXPERIMENT)
             
-            # Enable MLflow autolog with tracing after setting experiment
+            # Enable MLflow autolog and tracing after setting experiment
             cls._enable_autolog_and_tracing()
-            
-            logger.info("MLflow configured successfully with autolog and tracing", tracking_uri=tracking_uri)
+
+            logger.info("MLflow configured successfully with autolog and tracing enabled", tracking_uri=tracking_uri)
             
         except Exception as e:
             logger.error("Failed to setup MLflow", error=str(e))
@@ -72,51 +72,54 @@ class MLflowConfig:
     
     @classmethod
     def _enable_autolog_and_tracing(cls) -> None:
-        """Enable MLflow autolog and tracing for comprehensive observability"""
+        """Enable MLflow autolog and tracing"""
         try:
-            import mlflow.tracing
-            
-            # Enable tracing first
-            mlflow.tracing.enable()
-            
-            # Enable OpenAI autolog for DSPy/LLM calls with experiment context
+            # Enable MLflow tracing
             try:
-                # Ensure we're in the right experiment for autolog traces
+                import mlflow.tracing
+                mlflow.tracing.enable()
+                logger.info("MLflow tracing enabled")
+            except Exception as e:
+                logger.warning("Could not enable MLflow tracing", error=str(e))
+
+            # Enable OpenAI autolog for DSPy/LLM calls with tracing
+            try:
+                # Ensure we're in the right experiment for autolog
                 current_experiment = mlflow.get_experiment_by_name(cls.INTENT_CLASSIFICATION_EXPERIMENT)
                 if current_experiment:
                     mlflow.set_experiment(cls.INTENT_CLASSIFICATION_EXPERIMENT)
-                
+
                 mlflow.openai.autolog(
                     disable=False,
                     exclusive=False,
                     disable_for_unsupported_versions=False,
-                    silent=False,
-                    log_traces=True
+                    silent=True,  # Suppress warnings
+                    log_traces=True  # Enable tracing
                 )
-                logger.info("OpenAI autolog enabled for experiment", experiment=cls.INTENT_CLASSIFICATION_EXPERIMENT)
+                logger.info("OpenAI autolog enabled with tracing", experiment=cls.INTENT_CLASSIFICATION_EXPERIMENT)
             except Exception as e:
                 logger.warning("OpenAI autolog not available", error=str(e))
-            
-            # Enable general autolog for other ML libraries  
+
+            # Enable general autolog for other ML libraries with tracing
             try:
                 mlflow.autolog(
                     log_input_examples=True,
                     log_model_signatures=True,
                     log_models=False,  # Don't log models to save space
                     log_datasets=False,
-                    log_traces=True,  # Add tracing to general autolog too
+                    log_traces=True,  # Enable tracing
                     disable=False,
                     exclusive=False,
-                    silent=False
+                    silent=True  # Suppress warnings
                 )
-                logger.info("General autolog enabled")
+                logger.info("General autolog enabled with tracing")
             except Exception as e:
                 logger.warning("General autolog failed", error=str(e))
-            
+
             logger.info("MLflow autolog and tracing configuration completed")
-            
+
         except Exception as e:
-            logger.warning("Failed to enable MLflow autolog/tracing", error=str(e))
+            logger.warning("Failed to enable MLflow autolog", error=str(e))
             logger.info("Continuing without autolog - manual tracking will still work")
     
     @classmethod

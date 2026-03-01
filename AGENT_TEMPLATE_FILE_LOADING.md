@@ -174,7 +174,7 @@ const loadAgentTemplate = useCallback((template: AgentTemplate) => {
 ### 🧪 **Testing**
 
 A test agent template file has been created at:
-`/Users/sanjay/Lab/Fuschia-alfa/test_agent_template_file_upload.json`
+`/Users/sanjay/Lab/Fuchsia-alfa/test_agent_template_file_upload.json`
 
 **Test Steps:**
 1. Open Agent Designer

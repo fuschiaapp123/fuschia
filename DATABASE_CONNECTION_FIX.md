@@ -14,7 +14,7 @@ The "Database was unavailable" error was occurring because:
 
 ### **Backend Changes**
 
-**Added missing endpoint in `/Users/sanjay/Lab/Fuschia-alfa/backend/app/api/endpoints/workflows.py`:**
+**Added missing endpoint in `/Users/sanjay/Lab/Fuchsia-alfa/backend/app/api/endpoints/workflows.py`:**
 
 ```python
 @router.get("/test")
@@ -79,16 +79,16 @@ async def test_connection():
 ## 📋 **Files Modified**
 
 ### Backend:
-- `/Users/sanjay/Lab/Fuschia-alfa/backend/app/api/endpoints/workflows.py`
+- `/Users/sanjay/Lab/Fuchsia-alfa/backend/app/api/endpoints/workflows.py`
   - Added `GET /test` endpoint
 
 ### Frontend:
-- `/Users/sanjay/Lab/Fuschia-alfa/frontend/src/services/agentService.ts`
+- `/Users/sanjay/Lab/Fuchsia-alfa/frontend/src/services/agentService.ts`
   - Added `baseUrl` property
   - Fixed `testConnection()` endpoint
   - Fixed `saveAgentTemplateToDatabase()` URL
 
-- `/Users/sanjay/Lab/Fuschia-alfa/frontend/src/services/workflowService.ts`
+- `/Users/sanjay/Lab/Fuchsia-alfa/frontend/src/services/workflowService.ts`
   - Fixed `testConnection()` endpoint
 
 ## 🚀 **Expected Outcome**

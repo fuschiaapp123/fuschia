@@ -1,4 +1,4 @@
-🔍 Database Inspector for Fuschia Platform
+🔍 Database Inspector for Fuchsia Platform
 ========================================
 📡 Checking if backend is running...
 ✅ Backend is running
@@ -8,7 +8,7 @@
 {
   "status": "success",
   "database_type": "SQLite",
-  "database_url": "sqlite+aiosqlite:///./fuschia_users.db",
+  "database_url": "sqlite+aiosqlite:///./fuchsia_users.db",
   "tables": {
     "users": {
       "row_count": 6,
@@ -25,8 +25,8 @@
       "sample_data": [
         {
           "id": "9875e3b1-840b-4bac-944b-4041668df668",
-          "email": "admin@fuschia.com",
-          "full_name": "Fuschia Admin",
+          "email": "admin@fuchsia.com",
+          "full_name": "Fuchsia Admin",
           "role": "admin",
           "is_active": "1",
           "hashed_password": "$2b$12$9h/jceY.9NCJxxc3i/7Z4uhz3jdgty3uuW/cYIlkr6APrrLtKh4ii",
@@ -45,7 +45,7 @@
         },
         {
           "id": "809e5f4e-4591-4585-89f2-05fe9b3fff5b",
-          "email": "testuser1@fuschia.io",
+          "email": "testuser1@fuchsia.io",
           "full_name": "Test User One",
           "role": "end_user",
           "is_active": "1",
@@ -65,8 +65,8 @@
         },
         {
           "id": "0bce379e-a5db-4b7b-be3f-12b69b76f493",
-          "email": "admin@fuschia.io",
-          "full_name": "Fuschia Admin",
+          "email": "admin@fuchsia.io",
+          "full_name": "Fuchsia Admin",
           "role": "admin",
           "is_active": "1",
           "hashed_password": "$2b$12$dGROb9thlWijwOPPpf6/m.LGNN9QGGMMjCxoap05dVzXnE8CQooVy",
@@ -272,10 +272,10 @@
           "id": "6aa5c4f4-7246-4647-9207-69c1fcbaba4a",
           "name": "Process Design",
           "description": "Design a workflow as connected flow of steps, using the process designer canvas.",
-          "category": "Fuschia",
+          "category": "Fuchsia",
           "complexity": "simple",
           "estimated_time": "15-30 minutes",
-          "tags": "[\"Fuschia\", \"Custom\", \"Named\"]",
+          "tags": "[\"Fuchsia\", \"Custom\", \"Named\"]",
           "preview_steps": "[\"Process design request\", \"Create or update workflow\", \"Return confirmation\"]",
           "usage_count": "0",
           "status": "active",
@@ -885,8 +885,8 @@
   "data": [
     {
       "id": "9875e3b1-840b-4bac-944b-4041668df668",
-      "email": "admin@fuschia.com",
-      "full_name": "Fuschia Admin",
+      "email": "admin@fuchsia.com",
+      "full_name": "Fuchsia Admin",
       "role": "admin",
       "is_active": "1",
       "hashed_password": "$2b$12$9h/jceY.9NCJxxc3i/7Z4uhz3jdgty3uuW/cYIlkr6APrrLtKh4ii",
@@ -905,7 +905,7 @@
     },
     {
       "id": "809e5f4e-4591-4585-89f2-05fe9b3fff5b",
-      "email": "testuser1@fuschia.io",
+      "email": "testuser1@fuchsia.io",
       "full_name": "Test User One",
       "role": "end_user",
       "is_active": "1",
@@ -925,8 +925,8 @@
     },
     {
       "id": "0bce379e-a5db-4b7b-be3f-12b69b76f493",
-      "email": "admin@fuschia.io",
-      "full_name": "Fuschia Admin",
+      "email": "admin@fuchsia.io",
+      "full_name": "Fuchsia Admin",
       "role": "admin",
       "is_active": "1",
       "hashed_password": "$2b$12$dGROb9thlWijwOPPpf6/m.LGNN9QGGMMjCxoap05dVzXnE8CQooVy",

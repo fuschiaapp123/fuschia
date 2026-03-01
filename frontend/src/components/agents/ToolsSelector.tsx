@@ -43,6 +43,13 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
   const [availableTools, setAvailableTools] = useState<ToolFunction[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Debug logging for props
+  console.log('🔧 ToolsSelector: Received props:', {
+    agentId,
+    selectedTools,
+    selectedToolsCount: selectedTools.length
+  });
+
   // Helper function to check if a tool is selected using flexible matching
   const isToolSelected = (tool: ToolFunction, selectedTools: string[]): boolean => {
     return selectedTools.some(toolId => 
@@ -77,6 +84,13 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
 
       // Combine all types of tools
       const allTools = [...registryResponse.data, ...systemResponse.data, ...mcpResponse.data];
+      console.log('🔧 ToolsSelector: Available tools fetched:', {
+        registryCount: registryResponse.data.length,
+        systemCount: systemResponse.data.length,
+        mcpCount: mcpResponse.data.length,
+        totalCount: allTools.length,
+        toolNames: allTools.map(t => t.name || t.id)
+      });
       setAvailableTools(allTools);
     } catch (error) {
       console.error('Failed to fetch tools:', error);
@@ -196,7 +210,7 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
               e.target.value = ""; // Reset dropdown
             }
           }}
-          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
         >
           <option value="">Select a tool to add...</option>
           
@@ -237,14 +251,19 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
 
       {/* Selected Tools Summary */}
       {selectedTools.length > 0 && (
-        <div className="bg-fuschia-50 border border-fuschia-200 rounded-md p-3">
-          <h4 className="text-sm font-medium text-fuschia-800 mb-2">Selected Tools:</h4>
+        <div className="bg-fuchsia-50 border border-fuchsia-200 rounded-md p-3">
+          <h4 className="text-sm font-medium text-fuchsia-800 mb-2">Selected Tools:</h4>
+          {console.log('🔧 ToolsSelector: About to render selected tools:', {
+            selectedTools,
+            availableToolsCount: availableTools.length,
+            availableToolNames: availableTools.slice(0, 5).map(t => t.name)
+          })}
           <div className="flex flex-wrap gap-1">
             {selectedTools.map(toolId => {
               // Try to find tool by multiple matching strategies
-              const tool = availableTools.find(t => 
-                t.id === toolId || 
-                t.name === toolId || 
+              const tool = availableTools.find(t =>
+                t.id === toolId ||
+                t.name === toolId ||
                 t.id === `system_${toolId}` ||
                 t.name === toolId.replace('_tool', '') ||
                 toolId === `${t.name}_tool` ||
@@ -252,34 +271,56 @@ export const ToolsSelector: React.FC<ToolsSelectorProps> = ({
               );
               const isSystemTool = tool?.tool_type === 'system';
               const isMCPTool = tool?.tool_type === 'mcp';
-              return tool ? (
+              const isUnknownTool = !tool;
+
+              // Display tool name - use found tool's name or the toolId itself
+              const displayName = tool?.name || toolId;
+
+              return (
                 <span
                   key={toolId}
                   className={`inline-flex items-center px-2 py-1 text-xs rounded ${
-                    isSystemTool
+                    isUnknownTool
+                      ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
+                      : isSystemTool
                       ? 'bg-blue-100 text-blue-700'
                       : isMCPTool
                       ? 'bg-green-100 text-green-700'
-                      : 'bg-fuschia-100 text-fuschia-700'
+                      : 'bg-fuchsia-100 text-fuchsia-700'
                   }`}
+                  title={isUnknownTool ? `Tool "${toolId}" not found in registry` : tool?.description || ''}
                 >
-                  {isSystemTool ? '🔧 ' : isMCPTool ? '🔌 ' : ''}{tool.name}
+                  {isUnknownTool ? '⚠️ ' : isSystemTool ? '🔧 ' : isMCPTool ? '🔌 ' : ''}{displayName}
                   <button
                     onClick={() => handleToolToggle(toolId)}
                     className={`ml-1 hover:opacity-75 ${
-                      isSystemTool
+                      isUnknownTool
+                        ? 'text-yellow-500'
+                        : isSystemTool
                         ? 'text-blue-500'
                         : isMCPTool
                         ? 'text-green-500'
-                        : 'text-fuschia-500'
+                        : 'text-fuchsia-500'
                     }`}
                   >
                     <X className="w-3 h-3" />
                   </button>
                 </span>
-              ) : null;
+              );
             })}
           </div>
+          {selectedTools.some(toolId => !availableTools.find(t =>
+            t.id === toolId ||
+            t.name === toolId ||
+            t.id === `system_${toolId}` ||
+            t.name === toolId.replace('_tool', '') ||
+            toolId === `${t.name}_tool` ||
+            toolId === `system_${t.name}`
+          )) && (
+            <p className="text-xs text-yellow-600 mt-2">
+              ⚠️ Some tools are not found in the registry. They may have been removed or renamed.
+            </p>
+          )}
         </div>
       )}
 

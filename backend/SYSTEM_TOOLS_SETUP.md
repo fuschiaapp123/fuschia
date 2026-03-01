@@ -27,7 +27,7 @@ Create a `.env` file or set these environment variables:
 AWS_ACCESS_KEY_ID=your_aws_access_key
 AWS_SECRET_ACCESS_KEY=your_aws_secret_key
 AWS_REGION=us-east-1
-KNOWLEDGE_S3_BUCKET=fuschia-knowledge-base
+KNOWLEDGE_S3_BUCKET=fuchsia-knowledge-base
 KNOWLEDGE_S3_PREFIX=documents/
 
 # OpenAI for Embeddings (RAG)
@@ -44,7 +44,7 @@ MCP_CONTEXT_ENDPOINT=http://localhost:8003/mcp
 ### 1. Create S3 Bucket
 
 ```bash
-aws s3 mb s3://fuschia-knowledge-base
+aws s3 mb s3://fuchsia-knowledge-base
 ```
 
 ### 2. Upload Documents
@@ -52,7 +52,7 @@ aws s3 mb s3://fuschia-knowledge-base
 Upload your PDF, DOCX, and TXT files to the S3 bucket:
 
 ```bash
-aws s3 cp ./documents/ s3://fuschia-knowledge-base/documents/ --recursive
+aws s3 cp ./documents/ s3://fuchsia-knowledge-base/documents/ --recursive
 ```
 
 Supported file formats:
@@ -63,7 +63,7 @@ Supported file formats:
 ### 3. Directory Structure
 
 ```
-s3://fuschia-knowledge-base/
+s3://fuchsia-knowledge-base/
 └── documents/
     ├── policy-manual.pdf
     ├── procedures-guide.docx

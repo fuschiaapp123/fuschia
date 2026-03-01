@@ -29,9 +29,7 @@ class WorkflowExecutionService:
     ) -> WorkflowExecution:
         """Create a new workflow execution from a template"""
         try:
-            self.logger.info("Creating workflow execution", 
-                           template_id=workflow_template_id, 
-                           initiated_by=initiated_by)
+        
             
             async with AsyncSessionLocal() as session:
                 # Get the workflow template to extract tasks
@@ -156,9 +154,6 @@ class WorkflowExecutionService:
                 
                 await session.commit()
                 
-                self.logger.info("Workflow execution created successfully", 
-                               execution_id=execution_id, 
-                               task_count=len(tasks))
                 
                 return execution
                 
@@ -447,10 +442,7 @@ class WorkflowExecutionService:
                 
                 await session.commit()
                 
-                self.logger.debug("Updated task status", 
-                                task_id=task_id, 
-                                status=status.value,
-                                agent_id=agent_id)
+    
                 return True
                 
         except Exception as e:

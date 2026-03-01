@@ -35,6 +35,18 @@ export interface AgentTool {
   configuration: Record<string, any>;
 }
 
+// RAG Configuration types
+export interface RAGConfig {
+  enabled: boolean;
+  dataSourceType: 'local_file' | 'url' | 'none';
+  dataSourcePath: string;
+  vectorDatabase: 'faiss' | 'chroma' | 'pinecone' | 'weaviate' | 'qdrant';
+  embeddingModel: 'openai-text-embedding-3-small' | 'openai-text-embedding-3-large' | 'openai-text-embedding-ada-002' | 'huggingface-sentence-transformers' | 'cohere-embed-v3';
+  chunkSize?: number;
+  chunkOverlap?: number;
+  topK?: number;
+}
+
 // Define agent data types
 export interface AgentData {
   name: string;
@@ -48,6 +60,9 @@ export interface AgentData {
   department?: string;
   maxConcurrentTasks?: number;
   strategy?: 'simple' | 'chain_of_thought' | 'react' | 'hybrid';
+  ragConfig?: RAGConfig;
+  useMemoryEnhancement?: boolean; // Enable Graphiti temporal knowledge graph memory
+  requiresHumanApproval?: boolean; // Enable human-in-the-loop for this agent
 }
 
 // Custom agent node component
@@ -93,7 +108,7 @@ const AgentNode: React.FC<{ data: AgentData; selected: boolean }> = ({ data, sel
       className={cn(
         'px-4 py-3 rounded-lg border-2 min-w-[220px] max-w-[280px] shadow-sm relative bg-white',
         getRoleColor(),
-        selected && 'ring-2 ring-fuschia-500'
+        selected && 'ring-2 ring-fuchsia-500'
       )}
     >
       {/* Input Handle - only show if not level 0 */}
@@ -501,6 +516,12 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
   );
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    console.log('🔧 AgentDesigner: Node clicked:', {
+      nodeId: node.id,
+      nodeName: node.data?.name,
+      nodeTools: node.data?.tools,
+      nodeDataKeys: Object.keys(node.data || {})
+    });
     setSelectedAgent(node);
     setIsDrawerOpen(true);
   }, []);
@@ -653,7 +674,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
           // Close dialog and show success
           setShowSaveDialog(false);
           const operation = currentTemplateId ? 'updated' : 'created';
-          alert(`Agent template \"${savedTemplate.name}\" ${operation} successfully in database!\\nID: ${savedTemplate.id}`);
+          // alert(`Agent template \"${savedTemplate.name}\" ${operation} successfully in database!\\nID: ${savedTemplate.id}`);
           
           // Update current template ID if it was a new creation
           if (!currentTemplateId) {
@@ -770,6 +791,23 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
             // If data is already in ReactFlow format, use it
             nodeData = node.data;
           } else {
+            // Convert rag_config from backend format if present
+            let ragConfig = undefined;
+            if (node.rag_config) {
+              ragConfig = {
+                enabled: node.rag_config.enabled || false,
+                dataSourceType: node.rag_config.data_source_type || 'none',
+                dataSourcePath: node.rag_config.data_source_path || '',
+                vectorDatabase: node.rag_config.vector_database || 'faiss',
+                embeddingModel: node.rag_config.embedding_model || 'openai-text-embedding-3-small',
+                chunkSize: node.rag_config.chunk_size || 1000,
+                chunkOverlap: node.rag_config.chunk_overlap || 200,
+                topK: node.rag_config.top_k || 5,
+                similarityThreshold: node.rag_config.similarity_threshold || 0.7,
+                rerankResults: node.rag_config.rerank_results || false
+              };
+            }
+
             // Transform backend format to ReactFlow format
             nodeData = {
               name: node.name || 'Unnamed Agent',
@@ -781,7 +819,10 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
               level: node.level !== undefined ? node.level : 2,
               department: node.department || 'General',
               maxConcurrentTasks: node.max_concurrent_tasks || 3,
-              strategy: node.strategy || 'hybrid'
+              strategy: node.strategy || 'hybrid',
+              ragConfig: ragConfig,
+              useMemoryEnhancement: node.use_memory_enhancement || false,
+              requiresHumanApproval: node.requires_human_approval || false
             };
           }
 
@@ -1523,7 +1564,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
                   console.log('Add Agent button clicked');
                   addNewAgent();
                 }}
-                className="flex items-center space-x-1 px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors text-sm"
+                className="flex items-center space-x-1 px-3 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors text-sm"
                 type="button"
               >
                 <Plus className="w-4 h-4" />
@@ -1693,7 +1734,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="flex items-center space-x-3">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-fuschia-500"></div>
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-fuchsia-500"></div>
                     <span className="text-gray-600">Loading agent templates from database...</span>
                   </div>
                 </div>
@@ -1707,7 +1748,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
                       <p className="text-sm text-gray-500 mt-4">Please ensure the backend server is running and try again.</p>
                       <button
                         onClick={() => window.location.reload()}
-                        className="mt-4 px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 text-sm"
+                        className="mt-4 px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 text-sm"
                       >
                         Retry Connection
                       </button>
@@ -1739,7 +1780,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
                     return (
                       <div
                         key={template.id}
-                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer bg-white hover:border-fuschia-300"
+                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer bg-white hover:border-fuchsia-300"
                         onClick={() => {
                           console.log('Template clicked!', template);
                           loadAgentTemplate(template);
@@ -1824,7 +1865,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
                     required
                     value={saveFormData.name}
                     onChange={(e) => setSaveFormData({ ...saveFormData, name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="Enter template name"
                   />
                 </div>
@@ -1836,7 +1877,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
                   <textarea
                     value={saveFormData.description}
                     onChange={(e) => setSaveFormData({ ...saveFormData, description: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     rows={3}
                     placeholder="Describe what this agent organization does"
                   />
@@ -1849,7 +1890,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
                   <select
                     value={saveFormData.category}
                     onChange={(e) => setSaveFormData({ ...saveFormData, category: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   >
                     <option value="Custom">Custom</option>
                     <option value="customer-service">Customer Service</option>
@@ -1882,7 +1923,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
                           ...saveFormData, 
                           folder: e.target.checked ? 'download' : '' 
                         })}
-                        className="rounded border-gray-300 text-fuschia-600 focus:ring-fuschia-500"
+                        className="rounded border-gray-300 text-fuchsia-600 focus:ring-fuchsia-500"
                       />
                       <span className="text-sm text-gray-700">Also download as backup file</span>
                     </label>
@@ -1900,7 +1941,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
               </button>
               <button
                 onClick={saveAgentAsTemplate}
-                className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600"
+                className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600"
               >
                 {currentTemplateId ? 'Update Template' : 'Save Template'}
               </button>
@@ -1925,7 +1966,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
               type="text"
               value={agentMetadata.name}
               onChange={(e) => setAgentMetadata({ ...agentMetadata, name: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               placeholder="Enter agent organization name"
             />
           </div>
@@ -1935,7 +1976,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
             <select 
               value={agentMetadata.category} 
               onChange={(e) => setAgentMetadata({ ...agentMetadata, category: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             >
               <option value="Custom">Custom</option>
               <option value="customer-service">Customer Service</option>
@@ -1952,7 +1993,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
               value={agentMetadata.description} 
               onChange={(e) => setAgentMetadata({ ...agentMetadata, description: e.target.value })}
               rows={4}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               placeholder="Describe what this agent organization does and its purpose..."
             />
           </div>
@@ -1992,7 +2033,7 @@ export const AgentDesigner: React.FC<AgentDesignerProps> = ({
             </button>
             <button
               onClick={handlePropertiesSave}
-              className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
+              className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors"
             >
               Save Changes
             </button>

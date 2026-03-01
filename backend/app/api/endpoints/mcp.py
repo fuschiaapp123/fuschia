@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+import asyncio
 import uuid
 import logging
 
@@ -69,7 +70,7 @@ class MCPToolResponse(BaseModel):
     tool_name: str
     description: Optional[str]
     input_schema: Dict[str, Any]
-    fuschia_tool_id: Optional[str]
+    fuchsia_tool_id: Optional[str]
     is_active: bool
     categories: List[str]
     version: str
@@ -375,7 +376,7 @@ async def list_mcp_tools(
                 tool_name=tool['name'],
                 description=tool.get('description'),
                 input_schema=tool.get('inputSchema', {}),
-                fuschia_tool_id=None,  # Will be populated from database if exists
+                fuchsia_tool_id=None,  # Will be populated from database if exists
                 is_active=True,
                 categories=[],
                 version="1.0.0",
@@ -410,7 +411,7 @@ async def execute_mcp_tool(
             db_execution = MCPToolExecutionTable(
                 id=execution.execution_id,
                 tool_id=f"mcp_{execution_request.tool_name}",  # Temporary tool ID
-                server_id="fuschia-platform",  # Default server
+                server_id="fuchsia-platform",  # Default server
                 agent_id=execution_request.agent_id,
                 user_id=current_user.id,
                 tool_name=execution_request.tool_name,
@@ -721,8 +722,8 @@ async def register_predefined_servers(
                     "resources": True,
                     "prompts": False
                 },
-                "auto_start": True,
-                "status": "active"
+                "auto_start": False,
+                "status": "inactive"
             }
 
             # Check if Gmail server already exists
@@ -742,47 +743,16 @@ async def register_predefined_servers(
                         "resources": True,
                         "prompts": False
                     },
-                    status="active",
-                    auto_start=True,
+                    status="inactive",
+                    auto_start=False,
                     created_by=current_user.id,
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow()
                 )
                 session.add(gmail_db_server)
 
-                # Initialize Gmail server
-                await gmail_mcp_server.initialize()
-
-                # Add Gmail tools to database
-                gmail_tools = await gmail_mcp_server.list_tools()
-                for tool in gmail_tools:
-                    tool_db_entry = MCPToolTable(
-                        id=str(uuid.uuid4()),
-                        server_id="gmail-api",
-                        tool_name=tool.get("name"),
-                        description=tool.get("description"),
-                        input_schema=tool.get("inputSchema", {}),
-                        is_active=True,
-                        categories=["gmail", "email", "api"],
-                        version="1.0.0",
-                        created_at=datetime.utcnow()
-                    )
-                    session.add(tool_db_entry)
-
-                # Add Gmail resources to database
-                gmail_resources = await gmail_mcp_server.list_resources()
-                for resource in gmail_resources:
-                    resource_db_entry = MCPResourceTable(
-                        id=str(uuid.uuid4()),
-                        server_id="gmail-api",
-                        uri=resource.get("uri"),
-                        name=resource.get("name"),
-                        description=resource.get("description"),
-                        mime_type=resource.get("mimeType", "application/json"),
-                        is_active=True,
-                        created_at=datetime.utcnow()
-                    )
-                    session.add(resource_db_entry)
+                # Gmail server is registered but not initialized (disabled by default)
+                # Tools and resources will be registered when the service is manually started
 
                 await session.commit()
                 registered_servers.append(gmail_server_config)
@@ -900,16 +870,31 @@ async def get_all_mcp_tools_for_selection(
 
         for server_id, server, category_suffix, tags in known_servers:
             try:
-                # Initialize server if not running
+                # Initialize server with timeout to prevent hanging
                 if not server.is_running:
-                    await server.initialize()
+                    try:
+                        await asyncio.wait_for(server.initialize(), timeout=10.0)
+                        logger.info(f"MCP server '{server_id}' initialized successfully")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"MCP server '{server_id}' initialization timed out, loading tools anyway")
+                    except Exception as init_err:
+                        logger.warning(f"MCP server '{server_id}' initialization failed: {init_err}, loading tools anyway")
 
-                # Skip if still not running after initialization
-                if not server.is_running:
+                # Try to get tools regardless of is_running status
+                # The tools dict may have been populated even if external auth failed
+                tools = []
+                if hasattr(server, 'tools') and server.tools:
+                    # Directly access tools dict if available
+                    tools = [tool.to_dict() for tool in server.tools.values()]
+                    logger.info(f"Got {len(tools)} tools directly from {server_id}")
+                elif server.is_running:
+                    # Fall back to list_tools() if server is running
+                    tools = await server.list_tools()
+                    logger.info(f"Got {len(tools)} tools from {server_id} via list_tools()")
+
+                if not tools:
+                    logger.warning(f"No tools found for MCP server '{server_id}'")
                     continue
-
-                tools = await server.list_tools()
-                logger.info(f"Got {len(tools)} tools from {server_id}")
 
                 # Convert to format compatible with tool selector
                 for tool in tools:
@@ -920,7 +905,7 @@ async def get_all_mcp_tools_for_selection(
 
                     formatted_tool = {
                         "id": f"mcp_{server_id}_{original_tool_name}",
-                        "name": original_tool_name,  # ✅ FIX: Use original tool name
+                        "name": original_tool_name,
                         "description": tool.get('description', ''),
                         "category": category,
                         "status": "active",
@@ -938,13 +923,11 @@ async def get_all_mcp_tools_for_selection(
                 logger.warning(f"Failed to get tools from MCP server '{server_id}': {e}")
                 continue
 
-        logger.info("Retrieved MCP tools for selection",
-                   count=len(all_mcp_tools),
-                   user_id=current_user.id)
+        logger.info(f"Retrieved {len(all_mcp_tools)} MCP tools for selection for user {current_user.id}")
         return all_mcp_tools
 
     except Exception as e:
-        logger.error("Failed to get MCP tools for selection", error=str(e))
+        logger.error(f"Failed to get MCP tools for selection: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get MCP tools: {str(e)}")
 
 

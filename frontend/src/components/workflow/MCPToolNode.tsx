@@ -204,7 +204,7 @@ const MCPToolNode: React.FC<NodeProps<MCPToolNodeData>> = ({ data, id, selected 
   };
 
   return (
-    <div className={`mcp-tool-node min-w-[280px] border-2 rounded-lg shadow-lg ${getStatusColor()} ${selected ? 'ring-2 ring-fuschia-500' : ''}`}>
+    <div className={`mcp-tool-node min-w-[280px] border-2 rounded-lg shadow-lg ${getStatusColor()} ${selected ? 'ring-2 ring-fuchsia-500' : ''}`}>
       <Handle type="target" position={Position.Left} className="w-3 h-3" />
       
       {/* Node Header */}

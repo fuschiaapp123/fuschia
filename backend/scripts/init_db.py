@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Database initialization script for Fuschia
+Database initialization script for Fuchsia
 Creates sample data for development and testing
 """
 
@@ -26,28 +26,28 @@ async def create_sample_users():
     sample_users = [
         {
             "username": "admin",
-            "email": "admin@fuschia.com",
+            "email": "admin@fuchsia.com",
             "password": "admin123",
             "role": UserRole.ADMIN,
             "full_name": "System Administrator"
         },
         {
             "username": "manager",
-            "email": "manager@fuschia.io",
+            "email": "manager@fuchsia.io",
             "password": "manager123",
             "role": UserRole.MANAGER,
             "full_name": "Process Manager"
         },
         {
             "username": "analyst",
-            "email": "analyst@fuschia.io",
+            "email": "analyst@fuchsia.io",
             "password": "analyst123",
             "role": UserRole.ANALYST,
             "full_name": "Business Analyst"
         },
         {
             "username": "user",
-            "email": "user@fuschia.io",
+            "email": "user@fuchsia.io",
             "password": "userpassword123",
             "role": UserRole.USER,
             "full_name": "End User"
@@ -210,7 +210,7 @@ async def create_constraints():
 
 async def main():
     """Main initialization function"""
-    print("Starting Fuschia database initialization...")
+    print("Starting Fuchsia database initialization...")
 
     try:
         # Initialize PostgreSQL database
@@ -239,10 +239,10 @@ async def main():
         print(f"Created {len(users)} users and {len(nodes)} knowledge nodes")
 
         print("\nSample user credentials:")
-        print("Admin: admin@fuschia.com / admin123")
-        print("Manager: manager@fuschia.io / manager123")
-        print("Analyst: analyst@fuschia.io / analyst123")
-        print("User: user@fuschia.io / user123")
+        print("Admin: admin@fuchsia.com / admin123")
+        print("Manager: manager@fuchsia.io / manager123")
+        print("Analyst: analyst@fuchsia.io / analyst123")
+        print("User: user@fuchsia.io / user123")
 
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")

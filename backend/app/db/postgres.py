@@ -13,7 +13,7 @@ logger = structlog.get_logger()
 # Database URL
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "sqlite+aiosqlite:///./fuschia_users.db"
+    "sqlite+aiosqlite:///./fuchsia_users.db"
 )
 
 # Create async engine with appropriate settings for different databases
@@ -319,7 +319,7 @@ class MCPToolTable(Base):
     tool_name = Column(String(255), nullable=False, index=True)
     description = Column(String(1000), nullable=True)
     input_schema = Column(JSON, nullable=False, default=dict)  # JSON Schema for tool inputs
-    fuschia_tool_id = Column(String, nullable=True)  # Corresponding Fuschia tool ID if applicable
+    fuchsia_tool_id = Column(String, nullable=True)  # Corresponding Fuchsia tool ID if applicable
     is_active = Column(Boolean, nullable=False, default=True)
     categories = Column(JSON, nullable=False, default=list)  # Tool categories
     version = Column(String(50), nullable=False, default="1.0.0")
@@ -375,28 +375,73 @@ class MCPToolExecutionTable(Base):
 class MCPClientConnectionTable(Base):
     """Table for tracking MCP client connections"""
     __tablename__ = "mcp_client_connections"
-    
+
     id = Column(String, primary_key=True, index=True)
     client_name = Column(String(255), nullable=False)
     client_version = Column(String(50), nullable=False)
     server_id = Column(String, ForeignKey("mcp_servers.id"), nullable=False, index=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
-    
+
     # Connection details
     status = Column(String, nullable=False, default="disconnected", index=True)  # connected, disconnected, error
     capabilities = Column(JSON, nullable=False, default=dict)  # Client capabilities
     protocol_version = Column(String(20), nullable=False, default="2024-11-05")
-    
+
     # Statistics
     messages_sent = Column(Integer, nullable=False, default=0)
     messages_received = Column(Integer, nullable=False, default=0)
     last_activity = Column(DateTime, nullable=True, index=True)
-    
+
     # Connection timing
     connected_at = Column(DateTime, nullable=True)
     disconnected_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class DSPyEvaluationConfigTable(Base):
+    """Table for storing DSPy evaluation configurations"""
+    __tablename__ = "dspy_evaluation_configs"
+
+    id = Column(String, primary_key=True, index=True)
+    task_id = Column(String, nullable=False, index=True)  # Workflow task ID
+
+    # Examples stored as JSON array
+    examples = Column(JSON, nullable=False, default=list)  # List of DSPyExample objects
+
+    # Metrics and configuration
+    metrics = Column(JSON, nullable=False, default=list)  # List of metric names
+    optimization_strategy = Column(String, nullable=True)  # Optimization strategy name
+    optimization_params = Column(JSON, nullable=False, default=dict)  # Strategy parameters
+    train_test_split = Column(JSON, nullable=False, default=0.8)  # Train/test split ratio
+
+    # Metadata
+    created_by = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class DSPyEvaluationResultTable(Base):
+    """Table for storing DSPy evaluation results"""
+    __tablename__ = "dspy_evaluation_results"
+
+    id = Column(String, primary_key=True, index=True)
+    evaluation_config_id = Column(String, ForeignKey("dspy_evaluation_configs.id"), nullable=False, index=True)
+    task_id = Column(String, nullable=False, index=True)
+
+    # Results
+    status = Column(String, nullable=False, default="completed", index=True)  # completed, failed, started
+    metric_scores = Column(JSON, nullable=False, default=dict)  # Map of metric name -> score
+    optimized_prompt = Column(String, nullable=True)  # Optimized prompt if available
+    optimization_history = Column(JSON, nullable=False, default=list)  # History of optimization steps
+
+    # Metadata
+    model_used = Column(String, nullable=False)
+    dspy_version = Column(String, nullable=False)
+    execution_time_seconds = Column(JSON, nullable=False, default=0)  # Float stored as JSON
+    error_message = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 # Database dependency  

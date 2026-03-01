@@ -120,10 +120,10 @@ const payload = {
 ## 📋 **Files Modified**
 
 ### Backend:
-- `/Users/sanjay/Lab/Fuschia-alfa/backend/app/api/endpoints/workflows.py`
+- `/Users/sanjay/Lab/Fuchsia-alfa/backend/app/api/endpoints/workflows.py`
 
 ### Frontend:
-- `/Users/sanjay/Lab/Fuschia-alfa/frontend/src/services/agentService.ts`
+- `/Users/sanjay/Lab/Fuchsia-alfa/frontend/src/services/agentService.ts`
 
 ## 🎯 **Key Technical Details**
 

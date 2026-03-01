@@ -29,7 +29,7 @@ interface MCPTool {
   tool_name: string;
   description?: string;
   input_schema: any;
-  fuschia_tool_id?: string;
+  fuchsia_tool_id?: string;
   is_active: boolean;
   categories: string[];
   version: string;

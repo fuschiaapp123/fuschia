@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
 from typing import List
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.auth import get_current_user
@@ -301,3 +301,86 @@ async def get_my_agent_organizations(
         # If there's an error, log it and return empty list
         print(f"Error fetching agent organizations: {e}")
         return []
+
+
+@router.delete("/workflow-executions/{execution_id}")
+async def delete_workflow_execution(
+    execution_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a workflow execution and its associated tasks"""
+    try:
+        # First check if the execution exists
+        query = select(WorkflowExecutionTable).where(WorkflowExecutionTable.id == execution_id)
+        result = await db.execute(query)
+        execution = result.scalar_one_or_none()
+
+        if not execution:
+            raise HTTPException(status_code=404, detail="Workflow execution not found")
+
+        # Check if user has permission (admin or owner)
+        if current_user.role not in ['admin', 'process_owner'] and execution.initiated_by != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this execution")
+
+        # Delete associated tasks first
+        await db.execute(
+            delete(WorkflowTaskTable).where(WorkflowTaskTable.execution_id == execution_id)
+        )
+
+        # Delete the execution
+        await db.execute(
+            delete(WorkflowExecutionTable).where(WorkflowExecutionTable.id == execution_id)
+        )
+
+        await db.commit()
+
+        return {"status": "success", "message": f"Workflow execution {execution_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        print(f"Error deleting workflow execution: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to delete workflow execution: {str(e)}")
+
+
+@router.delete("/agent-organizations/{organization_id}")
+async def delete_agent_organization(
+    organization_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete an agent organization"""
+    try:
+        from app.db.postgres import AgentOrganizationTable
+
+        # First check if the organization exists
+        query = select(AgentOrganizationTable).where(AgentOrganizationTable.id == organization_id)
+        result = await db.execute(query)
+        organization = result.scalar_one_or_none()
+
+        if not organization:
+            raise HTTPException(status_code=404, detail="Agent organization not found")
+
+        # Check if user has permission (admin or owner)
+        if current_user.role not in ['admin', 'process_owner'] and organization.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this organization")
+
+        # Delete the organization
+        await db.execute(
+            delete(AgentOrganizationTable).where(AgentOrganizationTable.id == organization_id)
+        )
+
+        await db.commit()
+
+        return {"status": "success", "message": f"Agent organization {organization_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        print(f"Error deleting agent organization: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to delete agent organization: {str(e)}")

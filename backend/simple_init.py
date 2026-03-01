@@ -18,25 +18,25 @@ async def create_users():
 
     sample_users = [
         {
-            "email": "admin@fuschia.com",
+            "email": "admin@fuchsia.com",
             "password": "admin123",
             "role": UserRole.ADMIN,
             "full_name": "System Administrator"
         },
         {
-            "email": "manager@fuschia.io",
+            "email": "manager@fuchsia.io",
             "password": "manager123",
             "role": UserRole.MANAGER,
             "full_name": "Process Manager"
         },
         {
-            "email": "analyst@fuschia.io",
+            "email": "analyst@fuchsia.io",
             "password": "analyst123",
             "role": UserRole.ANALYST,
             "full_name": "Business Analyst"
         },
         {
-            "email": "user@fuschia.io",
+            "email": "user@fuchsia.io",
             "password": "userpassword123",
             "role": UserRole.USER,
             "full_name": "End User"
@@ -59,7 +59,7 @@ async def create_users():
 
 
 async def main():
-    print("Starting simple Fuschia database initialization...")
+    print("Starting simple Fuchsia database initialization...")
 
     # Initialize database tables
     print("Initializing PostgreSQL database...")
@@ -74,10 +74,10 @@ async def main():
         print("\n✅ Database initialization completed successfully!")
         print(f"Created {len(users)} users")
         print("\nSample user credentials:")
-        print("Admin: admin@fuschia.com / admin123")
-        print("Manager: manager@fuschia.io / manager123")
-        print("Analyst: analyst@fuschia.io / analyst123")
-        print("User: user@fuschia.io / userpassword123")
+        print("Admin: admin@fuchsia.com / admin123")
+        print("Manager: manager@fuchsia.io / manager123")
+        print("Analyst: analyst@fuchsia.io / analyst123")
+        print("User: user@fuchsia.io / userpassword123")
     else:
         print("❌ No users were created")
 

@@ -27,7 +27,7 @@ The system now uses a robust fallback approach:
 
 ### 1. Update Dependencies
 ```bash
-cd /Users/sanjay/Lab/Fuschia-alfa/backend
+cd /Users/sanjay/Lab/Fuchsia-alfa/backend
 pip install -r requirements.txt
 ```
 

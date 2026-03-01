@@ -825,6 +825,35 @@ class GmailMCPServer:
             "resources_count": len(self.resources)
         }
 
+    async def cleanup(self):
+        """Cleanup and shutdown the Gmail MCP server"""
+        try:
+            logger.info(f"Shutting down Gmail MCP Server: {self.server_id}")
+
+            # Set running flag to false
+            self.is_running = False
+
+            # Clear tools and resources
+            self.tools.clear()
+            self.resources.clear()
+
+            # Close Gmail service connection if it exists
+            if self.service:
+                # Gmail API service doesn't need explicit closing,
+                # but we'll clear the reference
+                self.service = None
+
+            # Clear credentials
+            self.creds = None
+
+            logger.info("Gmail MCP Server shutdown completed")
+
+        except Exception as e:
+            logger.error(f"Error during Gmail MCP Server cleanup: {e}")
+            # Still set running to false even if cleanup fails
+            self.is_running = False
+            raise
+
 
 # Singleton instance
 gmail_mcp_server = GmailMCPServer()

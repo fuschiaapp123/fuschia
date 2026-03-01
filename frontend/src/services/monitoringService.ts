@@ -142,6 +142,44 @@ class MonitoringService {
     }
   }
 
+  async deleteWorkflowExecution(executionId: string): Promise<{ status: string; message: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/monitoring/workflow-executions/${executionId}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(error.detail || `Failed to delete workflow execution: ${response.statusText}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('Error deleting workflow execution:', error);
+      throw error;
+    }
+  }
+
+  async deleteAgentOrganization(organizationId: string): Promise<{ status: string; message: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/monitoring/agent-organizations/${organizationId}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(error.detail || `Failed to delete agent organization: ${response.statusText}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('Error deleting agent organization:', error);
+      throw error;
+    }
+  }
+
   // Mock data methods (for development)
   private getMockWorkflowExecutions(): WorkflowExecution[] {
     const currentUser = this.getCurrentUserFromStorage();

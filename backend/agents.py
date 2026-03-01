@@ -1,5 +1,5 @@
 """
-Fuschia Multi-Agent System
+Fuchsia Multi-Agent System
 LangGraph-based orchestration for intelligent business process automation
 """
 

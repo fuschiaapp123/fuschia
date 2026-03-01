@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         extra="allow"
     )
     
-    PROJECT_NAME: str = "Fuschia API"
+    PROJECT_NAME: str = "Fuchsia API"
     VERSION: str = "0.1.0"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True

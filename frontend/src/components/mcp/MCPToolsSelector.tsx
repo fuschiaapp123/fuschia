@@ -225,7 +225,7 @@ const MCPToolsSelector: React.FC<MCPToolsSelectorProps> = ({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader className="w-6 h-6 animate-spin text-fuschia-500" />
+        <Loader className="w-6 h-6 animate-spin text-fuchsia-500" />
         <span className="ml-2 text-gray-600">Loading MCP servers...</span>
       </div>
     );
@@ -269,7 +269,7 @@ const MCPToolsSelector: React.FC<MCPToolsSelectorProps> = ({
           </button>
           <button
             onClick={() => setShowServerConfig(true)}
-            className="flex items-center space-x-1 px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors text-sm"
+            className="flex items-center space-x-1 px-3 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors text-sm"
           >
             <Plus className="w-4 h-4" />
             <span>Add Server</span>
@@ -349,7 +349,7 @@ const MCPToolsSelector: React.FC<MCPToolsSelectorProps> = ({
               </button>
               <button
                 onClick={handleCreateServer}
-                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-fuschia-600 rounded-md hover:bg-fuschia-700 transition-colors"
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-fuchsia-600 rounded-md hover:bg-fuchsia-700 transition-colors"
               >
                 Create Server
               </button>
@@ -368,7 +368,7 @@ const MCPToolsSelector: React.FC<MCPToolsSelectorProps> = ({
           </p>
           <button
             onClick={loadDefaultServers}
-            className="bg-fuschia-500 text-white px-4 py-2 rounded-md hover:bg-fuschia-600 transition-colors text-sm"
+            className="bg-fuchsia-500 text-white px-4 py-2 rounded-md hover:bg-fuchsia-600 transition-colors text-sm"
           >
             Load Default Servers
           </button>
@@ -514,7 +514,7 @@ const MCPToolsSelector: React.FC<MCPToolsSelectorProps> = ({
                               type="checkbox"
                               checked={selectedTools.includes(tool.tool_name)}
                               onChange={(e) => handleToolSelection(tool.tool_name, e.target.checked)}
-                              className="rounded border-gray-300 text-fuschia-600 focus:ring-fuschia-500"
+                              className="rounded border-gray-300 text-fuchsia-600 focus:ring-fuchsia-500"
                             />
                             <div className="flex items-center space-x-2 flex-1">
                               <Tool className="w-4 h-4 text-gray-500" />
@@ -543,21 +543,21 @@ const MCPToolsSelector: React.FC<MCPToolsSelectorProps> = ({
 
       {/* Selected Tools Summary */}
       {selectedTools.length > 0 && (
-        <div className="bg-fuschia-50 border border-fuschia-200 rounded-lg p-4">
-          <h4 className="font-medium text-fuschia-900 mb-2">
+        <div className="bg-fuchsia-50 border border-fuchsia-200 rounded-lg p-4">
+          <h4 className="font-medium text-fuchsia-900 mb-2">
             Selected Tools ({selectedTools.length})
           </h4>
           <div className="flex flex-wrap gap-2">
             {selectedTools.map((toolName) => (
               <span
                 key={toolName}
-                className="inline-flex items-center space-x-1 px-2 py-1 bg-fuschia-100 text-fuschia-800 rounded text-sm"
+                className="inline-flex items-center space-x-1 px-2 py-1 bg-fuchsia-100 text-fuchsia-800 rounded text-sm"
               >
                 <Tool className="w-3 h-3" />
                 <span>{toolName}</span>
                 <button
                   onClick={() => handleToolSelection(toolName, false)}
-                  className="text-fuschia-600 hover:text-fuschia-800"
+                  className="text-fuchsia-600 hover:text-fuchsia-800"
                 >
                   ×
                 </button>

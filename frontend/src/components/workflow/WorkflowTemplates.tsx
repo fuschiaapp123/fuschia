@@ -116,7 +116,7 @@ const WorkflowTemplateCard: React.FC<WorkflowTemplateCardProps> = ({ template, o
       <div className="flex space-x-2">
         <button
           onClick={() => onUse(template)}
-          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors text-sm"
+          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors text-sm"
         >
           <Play className="w-4 h-4" />
           <span>Use Template</span>
@@ -358,7 +358,7 @@ export const WorkflowTemplates: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center justify-center py-12">
-          <Loader className="w-8 h-8 animate-spin text-fuschia-500" />
+          <Loader className="w-8 h-8 animate-spin text-fuchsia-500" />
           <span className="ml-2 text-gray-600">Loading templates...</span>
         </div>
       </div>
@@ -379,7 +379,7 @@ export const WorkflowTemplates: React.FC = () => {
             <p className="text-red-600 mb-2">{error}</p>
             <button 
               onClick={() => window.location.reload()} 
-              className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
+              className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors"
             >
               Retry
             </button>

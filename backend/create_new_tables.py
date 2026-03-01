@@ -6,7 +6,7 @@ import asyncio
 import sys
 
 # Add the backend directory to the Python path
-sys.path.append('/Users/sanjay/Lab/Fuschia-alfa/backend')
+sys.path.append('/Users/sanjay/Lab/Fuchsia-alfa/backend')
 
 async def create_new_tables():
     """Create the new database tables"""

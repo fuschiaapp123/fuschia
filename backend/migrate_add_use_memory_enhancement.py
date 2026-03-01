@@ -96,7 +96,7 @@ async def add_use_memory_enhancement_column():
 async def main():
     """Main function"""
     print("=" * 60)
-    print("Fuschia Memory Enhancement Column Migration")
+    print("Fuchsia Memory Enhancement Column Migration")
     print("=" * 60)
     
     success = await add_use_memory_enhancement_column()

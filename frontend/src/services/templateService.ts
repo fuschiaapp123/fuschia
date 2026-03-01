@@ -49,9 +49,9 @@ export interface TemplateSettings {
 }
 
 class TemplateService {
-  private readonly storageKey = 'fuschia-template-settings';
-  private readonly workflowTemplatesKey = 'fuschia-custom-workflow-templates';
-  private readonly agentTemplatesKey = 'fuschia-custom-agent-templates';
+  private readonly storageKey = 'fuchsia-template-settings';
+  private readonly workflowTemplatesKey = 'fuchsia-custom-workflow-templates';
+  private readonly agentTemplatesKey = 'fuchsia-custom-agent-templates';
 
   // Default template settings
   private defaultSettings: TemplateSettings = {

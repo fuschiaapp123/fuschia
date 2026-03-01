@@ -3,10 +3,10 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fuschia-backend"
+name = "fuchsia-backend"
 version = "0.1.0"
-description = "Fuschia Intelligent Automation Platform Backend"
-authors = [{name = "Fuschia Team", email = "team@fuschia.io"}]
+description = "Fuchsia Intelligent Automation Platform Backend"
+authors = [{name = "Fuchsia Team", email = "team@fuchsia.io"}]
 license = {text = "MIT"}
 requires-python = ">=3.9"
 dependencies = [
@@ -26,6 +26,8 @@ dependencies = [
     "celery==5.3.4",
     "prometheus-client==0.19.0",
     "structlog==23.2.0",
+    "beautifulsoup4>=4.12.0",
+    "pypdf>=3.17.0",
 ]
 
 [project.optional-dependencies]

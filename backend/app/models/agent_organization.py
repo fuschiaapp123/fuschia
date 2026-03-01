@@ -4,6 +4,8 @@ from enum import Enum
 from datetime import datetime
 import uuid
 
+from app.models.rag_config import RAGConfig
+
 
 class AgentStrategy(str, Enum):
     """Agent reasoning strategies"""
@@ -94,6 +96,12 @@ class AgentNode(BaseModel):
     department: Optional[str] = Field(default=None, description="Agent department")
     level: int = Field(default=2, description="Agent level (0=coordinator, 1=supervisor, 2=specialist)")
     status: str = Field(default="active", description="Agent status")
+
+    # RAG (Retrieval-Augmented Generation) configuration
+    rag_config: Optional[RAGConfig] = Field(default=None, description="RAG configuration for knowledge retrieval")
+
+    # Memory enhancement configuration
+    use_memory_enhancement: bool = Field(default=False, description="Enable Graphiti temporal knowledge graph memory for this agent")
 
 
 class AgentConnection(BaseModel):

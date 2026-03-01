@@ -121,7 +121,7 @@ class GraphitiEnhancedMemoryService:
         context: Dict[str, Any]
     ) -> str:
         """Record workflow initiation episode"""
-        
+        self.logger.debug("Recording workflow start episode", workflow_id=workflow_id, execution_id=execution_id)   
         episode_id = str(uuid.uuid4())
         content = f"Workflow '{workflow_name}' started by {initiated_by}. Context: {context}"
         
@@ -149,21 +149,64 @@ class GraphitiEnhancedMemoryService:
     async def record_task_execution(
         self,
         workflow_id: str,
-        execution_id: str, 
+        execution_id: str,
         task_id: str,
         agent_id: str,
         task_name: str,
         task_description: str,
         execution_result: Dict[str, Any]
     ) -> str:
-        """Record task execution episode"""
-        
+        """Record task execution episode
+
+        The content focuses on the user query and generated response to build
+        meaningful knowledge graph nodes and entities from conversational data.
+        """
+        self.logger.debug("Recording task execution episode", task_id=task_id, agent_id=agent_id, execution_result=execution_result)
         episode_id = str(uuid.uuid4())
         success = execution_result.get("success", False)
-        status = "completed successfully" if success else "failed"
-        
-        content = f"Task '{task_name}' {status}. Agent: {agent_id}. Description: {task_description}. Result: {execution_result.get('execution_result', 'No result')}"
-        
+
+        # Extract user request from execution result
+        # It may be in various places depending on how the task was executed
+        results = execution_result.get("results", {})
+        if isinstance(results, dict):
+            user_request = (
+                results.get("user_request") or
+                results.get("original_message") or
+                results.get("query") or
+                execution_result.get("user_request") or
+                execution_result.get("original_message") or
+                task_description  # Fallback to task description
+            )
+            # Extract the response/answer
+            response = (
+                execution_result.get("response") or
+                execution_result.get("answer") or
+                execution_result.get("output") or
+                execution_result.get("result") or
+                ""
+            )
+            # Extract reasoning if available
+            reasoning = execution_result.get("reasoning") or results.get("chain_of_thought") or ""
+        else:
+            user_request = task_description
+            response = str(results) if results else ""
+            reasoning = ""
+
+        # Build content focused on user query and response for knowledge graph
+        content_parts = []
+        if user_request:
+            content_parts.append(f"User Query: {user_request}")
+        if response:
+            content_parts.append(f"Response: {response}")
+        if reasoning:
+            content_parts.append(f"Reasoning: {reasoning}")
+
+        # Fallback if no meaningful content extracted
+        if not content_parts:
+            content_parts.append(f"Task '{task_name}' executed by agent {agent_id}")
+
+        content = "\n\n".join(content_parts)
+        self.logger.debug("Constructed task execution content for episode", content=content[:200])
         episode = WorkflowEpisode(
             episode_id=episode_id,
             workflow_id=workflow_id,
@@ -175,15 +218,24 @@ class GraphitiEnhancedMemoryService:
             metadata={
                 "task_name": task_name,
                 "task_description": task_description,
-                "execution_result": execution_result,
+                "user_request": user_request,
+                "response": response[:1000] if response else None,  # Truncate for metadata
+                "reasoning": reasoning[:500] if reasoning else None,
                 "success": success,
                 "timestamp": datetime.utcnow().isoformat()
             },
             timestamp=datetime.utcnow()
         )
-        
+
         await self._record_episode(episode)
-        self.logger.info("Recorded task execution episode", task_id=task_id, agent_id=agent_id, success=success)
+        self.logger.info(
+            "Recorded task execution episode",
+            task_id=task_id,
+            agent_id=agent_id,
+            success=success,
+            has_user_request=bool(user_request),
+            has_response=bool(response)
+        )
         return episode_id
     
     async def record_agent_thought(
@@ -195,7 +247,7 @@ class GraphitiEnhancedMemoryService:
         context: Dict[str, Any]
     ) -> str:
         """Record agent thought/reasoning episode"""
-        
+        self.logger.debug("Recording agent thought episode", agent_id=agent_id)
         episode_id = str(uuid.uuid4())
         content = f"Agent {agent_id} thought: {thought}"
         
@@ -229,7 +281,7 @@ class GraphitiEnhancedMemoryService:
         response: Optional[str] = None
     ) -> str:
         """Record user interaction episode"""
-        
+        self.logger.debug("Recording user interaction episode", user_id=user_id, interaction_type=interaction_type) 
         episode_id = str(uuid.uuid4())
         interaction_content = f"User {user_id} {interaction_type}: {content}"
         if response:
@@ -265,7 +317,7 @@ class GraphitiEnhancedMemoryService:
         summary: Dict[str, Any]
     ) -> str:
         """Record workflow completion episode"""
-        
+        self.logger.debug("Recording workflow completion episode", workflow_id=workflow_id, status=status)  
         episode_id = str(uuid.uuid4())
         content = f"Workflow {workflow_id} completed with status: {status}. Summary: {summary}"
         
@@ -306,6 +358,7 @@ class GraphitiEnhancedMemoryService:
         try:
             # Add episode to Graphiti
             # Prepare episode body with metadata embedded
+            self.logger.debug("Recording episode", episode_id=episode.episode_id, episode_content=episode.content)
             episode_body_with_metadata = f"""
 {episode.content}
 
@@ -321,7 +374,7 @@ Metadata:
             
             episode_result = await self._client.add_episode(
                 name=f"{episode.episode_type}_{episode.episode_id[:8]}",
-                episode_body=episode_body_with_metadata,
+                episode_body=episode.content,
                 reference_time=episode.timestamp,
                 source_description=f"{episode.episode_type} from workflow {episode.workflow_id} (execution: {episode.execution_id})",
                 source=EpisodeType.message,  # Use message type for workflow episodes
@@ -341,22 +394,20 @@ Metadata:
         except Exception as e:
             error_msg = str(e)
             if "vector.similarity.cosine" in error_msg:
-                self.logger.warning(
+                self.logger.debug(
                     "Neo4j vector functions not available - episode recording disabled. "
                     "See NEO4J_SETUP.md for proper configuration.",
-                    episode_id=episode.episode_id,
-                    error=error_msg
+                    episode_id=episode.episode_id
                 )
                 # Disable future attempts by clearing the client
                 self._client = None
                 return
             elif "Setting labels or properties dynamically is not supported" in error_msg:
-                self.logger.warning(
+                self.logger.debug(
                     "Neo4j Cypher compatibility issue detected - episode recording disabled. "
                     "Graphiti may require Neo4j Enterprise Edition or different version. "
                     "Service continues with graceful degradation.",
-                    episode_id=episode.episode_id,
-                    error=error_msg
+                    episode_id=episode.episode_id
                 )
                 # Disable future attempts by clearing the client
                 self._client = None
@@ -395,31 +446,45 @@ Metadata:
         
         try:
             # Build search criteria
+            # Note: Graphiti search() only accepts 'query' and 'num_results' parameters
             search_kwargs = {
                 "query": query,
                 "num_results": limit
             }
-            
-            # Add temporal constraints
-            if time_range_hours:
-                end_time = datetime.utcnow()
-                start_time = datetime.utcnow() - timedelta(hours=time_range_hours)
-                search_kwargs["start_time"] = start_time
-                search_kwargs["end_time"] = end_time
-            
-            # Perform search using Graphiti (no duplicate query parameter)
+
+            # Note: Temporal filtering (start_time, end_time) is not supported by Graphiti's search() method
+            # If time_range_hours is specified, we'll filter results after retrieval
+            filter_by_time = time_range_hours is not None
+            time_cutoff = datetime.utcnow() - timedelta(hours=time_range_hours) if filter_by_time else None
+
+            # Perform search using Graphiti
             search_results = await self._client.search(**search_kwargs)
-            
+
+            # Apply post-retrieval time filtering if specified
+            if filter_by_time and time_cutoff:
+                filtered_results = []
+                for edge in search_results:
+                    edge_time = getattr(edge, 'created_at', None)
+                    if edge_time is None or edge_time >= time_cutoff:
+                        filtered_results.append(edge)
+                search_results = filtered_results
+                self.logger.debug(
+                    "Applied time filter to search results",
+                    original_count=len(search_results) + (len(search_results) - len(filtered_results)),
+                    filtered_count=len(search_results),
+                    time_cutoff=time_cutoff.isoformat()
+                )
+
             # search_results is a list of EntityEdge objects
             semantic_edges = []
             entity_nodes = []
-            
+
             for edge in search_results:
                 # Process EntityEdge objects
                 semantic_edges.append({
                     "edge_id": edge.uuid,
                     "source_uuid": getattr(edge, 'source_node_uuid', None),
-                    "target_uuid": getattr(edge, 'target_node_uuid', None), 
+                    "target_uuid": getattr(edge, 'target_node_uuid', None),
                     "fact": getattr(edge, 'fact', ''),
                     "created_at": edge.created_at.isoformat() if edge.created_at else None,
                     "group_id": getattr(edge, 'group_id', None)

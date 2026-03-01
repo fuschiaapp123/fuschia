@@ -2,7 +2,7 @@
 
 ## Files to be Removed
 
-Due to bash environment issues, the following files should be manually removed from the `/Users/sanjay/Lab/Fuschia-alfa/backend/` directory:
+Due to bash environment issues, the following files should be manually removed from the `/Users/sanjay/Lab/Fuchsia-alfa/backend/` directory:
 
 ### Test Files (15 files):
 - test_api_connectivity.py
@@ -47,7 +47,7 @@ Due to bash environment issues, the following files should be manually removed f
 To remove these files manually, run the following commands:
 
 ```bash
-cd /Users/sanjay/Lab/Fuschia-alfa/backend
+cd /Users/sanjay/Lab/Fuchsia-alfa/backend
 
 # Remove test files
 rm -f test_api_connectivity.py test_cypher_endpoint.py test_import.py

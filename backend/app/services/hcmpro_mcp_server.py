@@ -71,7 +71,8 @@ class HCMProMCPServer:
         self.admin_email = os.environ.get("HCMPRO_ADMIN_EMAIL", "admin@acme.com")
         self.admin_password = os.environ.get("HCMPRO_ADMIN_PASSWORD", "admin123")
         self.jwt_token: Optional[str] = None
-        self.client = httpx.AsyncClient()
+        # Use short timeout to avoid hanging when HCM Pro service is unavailable
+        self.client = httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0))
 
     async def initialize(self) -> None:
         """Initialize the HCM Pro MCP server with available operations"""
@@ -497,6 +498,15 @@ class HCMProMCPServer:
         """Execute the actual HCM Pro API operation"""
         operation_type = tool.operation_type
 
+        # Unwrap nested args/kwargs structure if present
+        # Arguments may come in as {"args": {}, "kwargs": {"id": "123", ...}}
+        if "kwargs" in arguments and isinstance(arguments.get("kwargs"), dict):
+            unwrapped = arguments.get("kwargs", {})
+            if "args" in arguments and isinstance(arguments.get("args"), dict):
+                unwrapped = {**arguments.get("args", {}), **unwrapped}
+            arguments = unwrapped
+            logger.info(f"Unwrapped HCM Pro arguments to: {arguments}")
+
         if operation_type == "list_job_offers":
             return await self._list_job_offers(arguments)
 
@@ -892,6 +902,34 @@ class HCMProMCPServer:
             "resources_count": len(self.resources),
             "base_url": self.base_url
         }
+
+    async def cleanup(self):
+        """Cleanup and shutdown the HCM Pro MCP server"""
+        try:
+            logger.info(f"Shutting down HCM Pro MCP Server: {self.server_id}")
+
+            # Set running flag to false
+            self.is_running = False
+
+            # Clear tools and resources
+            self.tools.clear()
+            self.resources.clear()
+
+            # Close HTTP client connection
+            if self.client:
+                await self.client.aclose()
+
+            # Clear authentication
+            self.auth_token = None
+            self.auth_expires_at = None
+
+            logger.info("HCM Pro MCP Server shutdown completed")
+
+        except Exception as e:
+            logger.error(f"Error during HCM Pro MCP Server cleanup: {e}")
+            # Still set running to false even if cleanup fails
+            self.is_running = False
+            raise
 
     async def __aenter__(self) -> "HCMProMCPServer":
         return self

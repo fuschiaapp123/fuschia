@@ -3,7 +3,7 @@ version: '3.8'
 services:
   neo4j:
     image: neo4j:5.15-community
-    container_name: fuschia-neo4j
+    container_name: fuchsia-neo4j
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -19,7 +19,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: fuschia-redis
+    container_name: fuchsia-redis
     ports:
       - "6379:6379"
     volumes:
@@ -30,7 +30,7 @@ services:
     build: 
       context: ./backend
       dockerfile: Dockerfile
-    container_name: fuschia-backend
+    container_name: fuchsia-backend
     ports:
       - "8000:8000"
     environment:
@@ -50,7 +50,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: fuschia-frontend
+    container_name: fuchsia-frontend
     ports:
       - "3000:3000"
     environment:

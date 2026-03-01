@@ -1,6 +1,6 @@
-# Contributing to Fuschia
+# Contributing to Fuchsia
 
-Thank you for your interest in contributing to Fuschia! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing to Fuchsia! This document provides guidelines and instructions for contributing to the project.
 
 ## 🎯 Getting Started
 
@@ -11,7 +11,7 @@ Thank you for your interest in contributing to Fuschia! This document provides g
 
 ### Development Setup
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/your-username/fuschia-alfa.git`
+2. Clone your fork: `git clone https://github.com/your-username/fuchsia-alfa.git`
 3. Run the setup script: `./setup.sh`
 4. Create a feature branch: `git checkout -b feature/your-feature-name`
 
@@ -317,7 +317,7 @@ Follow Semantic Versioning (SemVer):
 - **GitHub Discussions**: General questions and discussions
 - **GitHub Issues**: Bug reports and feature requests
 - **Discord**: Real-time chat with the community
-- **Email**: security@fuschia.io for security issues
+- **Email**: security@fuchsia.io for security issues
 
 ### Mentorship
 New contributors can request mentorship for:
@@ -341,11 +341,11 @@ All contributors are recognized in:
 
 ## 📋 Contributor License Agreement
 
-By contributing to Fuschia, you agree that:
+By contributing to Fuchsia, you agree that:
 - Your contributions are your original work
 - You grant us rights to use your contributions
 - Your contributions are provided under the MIT license
 
 ---
 
-Thank you for contributing to Fuschia! Together, we're building the future of intelligent automation. 🚀
+Thank you for contributing to Fuchsia! Together, we're building the future of intelligent automation. 🚀

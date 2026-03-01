@@ -3,20 +3,16 @@ import {
   dspyEvaluationService,
   DSPyEvaluationConfig,
   DSPyEvaluationResult,
-  DSPyExample,
   DSPyEvaluationMetric,
   DSPyOptimizationStrategy,
   DSPyEvaluationSummary
 } from '../../services/dspyEvaluationService';
-import { 
-  Play, 
-  Plus, 
-  Trash2, 
-  Settings, 
-  TrendingUp, 
-  AlertCircle, 
-  CheckCircle,
-  Clock,
+import {
+  Play,
+  Plus,
+  Trash2,
+  Settings,
+  TrendingUp,
   Target,
   BarChart3,
   Sparkles,
@@ -37,6 +33,11 @@ interface ExampleFormData {
   context?: string;
 }
 
+interface OptimizationStatus {
+  status: string;
+  progress?: number;
+}
+
 export const DSPyEvaluationPanel: React.FC<DSPyEvaluationPanelProps> = ({
   taskId,
   taskLabel,
@@ -55,7 +56,10 @@ export const DSPyEvaluationPanel: React.FC<DSPyEvaluationPanelProps> = ({
     context: ''
   });
   const [evaluationResults, setEvaluationResults] = useState<DSPyEvaluationResult[]>([]);
-  const [optimizationStatus, setOptimizationStatus] = useState<any>(null);
+  const [optimizationStatus, setOptimizationStatus] = useState<OptimizationStatus | null>(null);
+  const [selectedMetrics, setSelectedMetrics] = useState<DSPyEvaluationMetric[]>([]);
+  const [selectedStrategy, setSelectedStrategy] = useState<DSPyOptimizationStrategy>(DSPyOptimizationStrategy.BOOTSTRAP_FEW_SHOT);
+  const [isSavingMetrics, setIsSavingMetrics] = useState(false);
 
   // Load data
   useEffect(() => {
@@ -75,6 +79,8 @@ export const DSPyEvaluationPanel: React.FC<DSPyEvaluationPanelProps> = ({
       const configs = await dspyEvaluationService.listEvaluationConfigs(taskId);
       if (configs.length > 0) {
         setConfig(configs[0]);
+        setSelectedMetrics(configs[0].metrics);
+        setSelectedStrategy(configs[0].optimization_strategy);
       }
 
       // Load results
@@ -190,6 +196,38 @@ export const DSPyEvaluationPanel: React.FC<DSPyEvaluationPanelProps> = ({
     }
   };
 
+  const toggleMetric = (metric: DSPyEvaluationMetric) => {
+    setSelectedMetrics(prev => {
+      if (prev.includes(metric)) {
+        // Don't allow removing all metrics
+        if (prev.length === 1) {
+          return prev;
+        }
+        return prev.filter(m => m !== metric);
+      } else {
+        return [...prev, metric];
+      }
+    });
+  };
+
+  const saveMetrics = async () => {
+    if (!config || selectedMetrics.length === 0) return;
+
+    setIsSavingMetrics(true);
+    try {
+      const updatedConfig = await dspyEvaluationService.updateEvaluationConfig(config.id, {
+        metrics: selectedMetrics,
+        optimization_strategy: selectedStrategy
+      });
+      setConfig(updatedConfig);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to update metrics:', error);
+    } finally {
+      setIsSavingMetrics(false);
+    }
+  };
+
   if (!isVisible) return null;
 
   return (
@@ -199,7 +237,7 @@ export const DSPyEvaluationPanel: React.FC<DSPyEvaluationPanelProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Sparkles className="h-5 w-5 text-purple-600" />
-            <h3 className="text-lg font-semibold text-gray-900">DSPy Evaluation & Optimization</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Context Refinement</h3>
           </div>
           <button
             onClick={onClose}
@@ -208,7 +246,7 @@ export const DSPyEvaluationPanel: React.FC<DSPyEvaluationPanelProps> = ({
             ✕
           </button>
         </div>
-        <p className="text-sm text-gray-600 mt-1">Task: {taskLabel}</p>
+        <p className="text-sm text-gray-600 mt-1">Agent: {taskLabel}</p>
       </div>
 
       {/* Loading State */}
@@ -251,7 +289,7 @@ export const DSPyEvaluationPanel: React.FC<DSPyEvaluationPanelProps> = ({
               ].map(({ key, label, icon: Icon }) => (
                 <button
                   key={key}
-                  onClick={() => setActiveTab(key as any)}
+                  onClick={() => setActiveTab(key as 'overview' | 'examples' | 'metrics' | 'results')}
                   className={`flex items-center space-x-2 py-3 border-b-2 text-sm font-medium transition-colors ${
                     activeTab === key
                       ? 'border-purple-500 text-purple-600'
@@ -499,44 +537,163 @@ export const DSPyEvaluationPanel: React.FC<DSPyEvaluationPanelProps> = ({
             {/* Metrics Tab */}
             {activeTab === 'metrics' && (
               <div className="space-y-4">
-                <h4 className="text-lg font-medium">Evaluation Metrics</h4>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {config.metrics.map((metric) => (
-                    <div key={metric} className="bg-gray-50 p-4 rounded-lg border">
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="h-5 w-5 text-green-500" />
-                        <span className="font-medium">{dspyEvaluationService.getMetricDisplayName(metric)}</span>
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {metric === DSPyEvaluationMetric.ACCURACY && 'Measures exact match accuracy'}
-                        {metric === DSPyEvaluationMetric.SEMANTIC_SIMILARITY && 'Measures semantic similarity of outputs'}
-                        {metric === DSPyEvaluationMetric.BLEU && 'BLEU score for text generation quality'}
-                        {metric === DSPyEvaluationMetric.ROUGE && 'ROUGE score for summarization quality'}
-                        {metric === DSPyEvaluationMetric.F1_SCORE && 'F1 score for classification tasks'}
-                        {metric === DSPyEvaluationMetric.PRECISION && 'Precision for classification tasks'}
-                        {metric === DSPyEvaluationMetric.RECALL && 'Recall for classification tasks'}
-                      </p>
-                    </div>
-                  ))}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-lg font-medium">Evaluation Configuration</h4>
+                    {(JSON.stringify(selectedMetrics) !== JSON.stringify(config.metrics) ||
+                      selectedStrategy !== config.optimization_strategy) && (
+                      <p className="text-sm text-orange-600 mt-1">Unsaved changes</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={saveMetrics}
+                    disabled={
+                      isSavingMetrics ||
+                      selectedMetrics.length === 0 ||
+                      (JSON.stringify(selectedMetrics) === JSON.stringify(config.metrics) &&
+                       selectedStrategy === config.optimization_strategy)
+                    }
+                    className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {isSavingMetrics ? 'Saving...' : 'Save Configuration'}
+                  </button>
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-lg border">
-                  <h5 className="font-medium mb-2">Optimization Strategy</h5>
-                  <div className="flex items-center space-x-2">
-                    <Settings className="h-5 w-5 text-purple-500" />
-                    <span className="font-medium">
-                      {dspyEvaluationService.getStrategyDisplayName(config.optimization_strategy)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-2">
-                    {config.optimization_strategy === DSPyOptimizationStrategy.BOOTSTRAP_FEW_SHOT && 
-                      'Uses few-shot examples to optimize prompts'}
-                    {config.optimization_strategy === DSPyOptimizationStrategy.COPRO && 
-                      'Coordinate ascent prompt optimization'}
-                    {config.optimization_strategy === DSPyOptimizationStrategy.MIPRO && 
-                      'Multi-prompt instruction optimization'}
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    Select one or more metrics to evaluate your task. The first metric will be used as the primary optimization target.
                   </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Object.values(DSPyEvaluationMetric).map((metric) => {
+                    const isSelected = selectedMetrics.includes(metric);
+                    const isOnlyMetric = selectedMetrics.length === 1 && isSelected;
+
+                    return (
+                      <div
+                        key={metric}
+                        onClick={() => !isOnlyMetric && toggleMetric(metric)}
+                        className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-purple-50 border-purple-300 shadow-sm'
+                            : 'bg-gray-50 border-gray-200 hover:border-purple-200'
+                        } ${isOnlyMetric ? 'cursor-not-allowed opacity-75' : ''}`}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0 mt-0.5">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              disabled={isOnlyMetric}
+                              className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <span className={`font-medium ${isSelected ? 'text-purple-900' : 'text-gray-900'}`}>
+                                {dspyEvaluationService.getMetricDisplayName(metric)}
+                              </span>
+                              {isSelected && selectedMetrics[0] === metric && (
+                                <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded">
+                                  Primary
+                                </span>
+                              )}
+                            </div>
+                            <p className={`text-sm mt-1 ${isSelected ? 'text-purple-700' : 'text-gray-600'}`}>
+                              {metric === DSPyEvaluationMetric.ACCURACY && 'Measures exact match accuracy'}
+                              {metric === DSPyEvaluationMetric.SEMANTIC_SIMILARITY && 'Measures semantic similarity of outputs'}
+                              {metric === DSPyEvaluationMetric.BLEU && 'BLEU score for text generation quality'}
+                              {metric === DSPyEvaluationMetric.ROUGE && 'ROUGE score for summarization quality'}
+                              {metric === DSPyEvaluationMetric.F1_SCORE && 'F1 score for classification tasks'}
+                              {metric === DSPyEvaluationMetric.PRECISION && 'Precision for classification tasks'}
+                              {metric === DSPyEvaluationMetric.RECALL && 'Recall for classification tasks'}
+                              {metric === DSPyEvaluationMetric.CUSTOM && 'Use custom metric code'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {selectedMetrics.length > 1 && (
+                  <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                    <p className="text-sm text-yellow-800">
+                      <strong>Note:</strong> The first metric will be used as the primary optimization target.
+                    </p>
+                  </div>
+                )}
+
+                {/* Optimization Strategy Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Settings className="h-5 w-5 text-purple-600" />
+                    <h5 className="font-medium text-gray-900">Optimization Strategy</h5>
+                  </div>
+
+                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-800">
+                      Choose the optimization strategy for improving your task's performance.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {Object.values(DSPyOptimizationStrategy).map((strategy) => {
+                      const isSelected = selectedStrategy === strategy;
+
+                      return (
+                        <div
+                          key={strategy}
+                          onClick={() => setSelectedStrategy(strategy)}
+                          className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                            isSelected
+                              ? 'bg-green-50 border-green-300 shadow-sm'
+                              : 'bg-gray-50 border-gray-200 hover:border-green-200'
+                          }`}
+                        >
+                          <div className="flex items-start space-x-3">
+                            <div className="flex-shrink-0 mt-0.5">
+                              <input
+                                type="radio"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="h-5 w-5 text-green-600 border-gray-300 focus:ring-green-500 cursor-pointer"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2">
+                                <span className={`font-medium ${isSelected ? 'text-green-900' : 'text-gray-900'}`}>
+                                  {dspyEvaluationService.getStrategyDisplayName(strategy)}
+                                </span>
+                                {isSelected && (
+                                  <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-sm mt-1 ${isSelected ? 'text-green-700' : 'text-gray-600'}`}>
+                                {strategy === DSPyOptimizationStrategy.BOOTSTRAP_FEW_SHOT &&
+                                  'Uses few-shot examples to bootstrap and optimize prompts iteratively'}
+                                {strategy === DSPyOptimizationStrategy.COPRO &&
+                                  'Coordinate ascent prompt optimization for systematic improvement'}
+                                {strategy === DSPyOptimizationStrategy.MIPRO &&
+                                  'Multi-prompt instruction optimization for complex tasks'}
+                                {strategy === DSPyOptimizationStrategy.ENSEMBLE &&
+                                  'Combines multiple optimization approaches for robust results'}
+                                {strategy === DSPyOptimizationStrategy.RANDOM_SEARCH &&
+                                  'Random search through the optimization space'}
+                                {strategy === DSPyOptimizationStrategy.GRID_SEARCH &&
+                                  'Systematic grid search for optimal parameters'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}

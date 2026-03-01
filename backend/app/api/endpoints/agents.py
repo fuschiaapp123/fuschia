@@ -97,7 +97,8 @@ async def create_agent_template(
         
         # Convert template nodes to AgentNode objects
         from app.models.agent_organization import AgentNode, AgentRole, AgentStrategy, AgentCapability, AgentTool, AgentConnection
-        
+        from app.models.rag_config import RAGConfig
+
         agents = []
         for node in agents_data:
             # Extract agent data from node
@@ -106,7 +107,7 @@ async def create_agent_template(
             print(f"Agent data: {agent_data}")
             print(f"Role: {agent_data.get('role')}, Level: {agent_data.get('level')}")
             agent_id = node.get('id', str(uuid.uuid4()))
-            
+
             # Map frontend role to backend enum
             role_mapping = {
                 'supervisor': AgentRole.COORDINATOR,  # Map supervisor to coordinator
@@ -115,7 +116,25 @@ async def create_agent_template(
                 'executor': AgentRole.TOOL_EXECUTOR
             }
             agent_role = role_mapping.get(agent_data.get('role', 'specialist'), AgentRole.SPECIALIST)
-            
+
+            # Convert RAG config if present (frontend sends as ragConfig)
+            rag_config = None
+            rag_config_data = agent_data.get('ragConfig') or agent_data.get('rag_config')
+            if rag_config_data and rag_config_data.get('enabled'):
+                print(f"RAG config found for agent {agent_id}: {rag_config_data}")
+                rag_config = RAGConfig(
+                    enabled=rag_config_data.get('enabled', False),
+                    data_source_type=rag_config_data.get('dataSourceType', rag_config_data.get('data_source_type', 'none')),
+                    data_source_path=rag_config_data.get('dataSourcePath', rag_config_data.get('data_source_path', '')),
+                    vector_database=rag_config_data.get('vectorDatabase', rag_config_data.get('vector_database', 'faiss')),
+                    embedding_model=rag_config_data.get('embeddingModel', rag_config_data.get('embedding_model', 'openai-text-embedding-3-small')),
+                    chunk_size=rag_config_data.get('chunkSize', rag_config_data.get('chunk_size', 1000)),
+                    chunk_overlap=rag_config_data.get('chunkOverlap', rag_config_data.get('chunk_overlap', 200)),
+                    top_k=rag_config_data.get('topK', rag_config_data.get('top_k', 5)),
+                    similarity_threshold=rag_config_data.get('similarityThreshold', rag_config_data.get('similarity_threshold', 0.7)),
+                    rerank_results=rag_config_data.get('rerankResults', rag_config_data.get('rerank_results', False))
+                )
+
             # Create AgentNode
             agent = AgentNode(
                 id=agent_id,
@@ -137,11 +156,13 @@ async def create_agent_template(
                         tool_type=tool.get('tool_type', 'general') if isinstance(tool, dict) else 'general'
                     ) for tool in agent_data.get('agentTools', [])
                 ],
-                max_concurrent_tasks=agent_data.get('maxConcurrentTasks', 3),
-                requires_human_approval=agent_data.get('requiresHumanApproval', False),
+                max_concurrent_tasks=agent_data.get('maxConcurrentTasks', agent_data.get('max_concurrent_tasks', 3)),
+                requires_human_approval=agent_data.get('requiresHumanApproval', agent_data.get('requires_human_approval', False)),
                 department=agent_data.get('department'),
                 level=int(agent_data.get('level', 2)) if agent_data.get('level') is not None else 2,
-                status=agent_data.get('status', 'active')
+                status=agent_data.get('status', 'active'),
+                rag_config=rag_config,
+                use_memory_enhancement=agent_data.get('useMemoryEnhancement', agent_data.get('use_memory_enhancement', False))
             )
             agents.append(agent)
         # Debug: Found agents in template data
@@ -567,10 +588,28 @@ async def create_agent_organization(
     try:
         # Convert request data to service format
         from app.models.agent_organization import AgentOrganizationCreate, AgentNode, AgentConnection, AgentRole, AgentStrategy, AgentCapability, AgentTool
-        
+        from app.models.rag_config import RAGConfig
+
         # Convert agents data to AgentNode objects
         agents = []
         for agent_data in org_data.agents:
+            # Convert RAG config if present
+            rag_config = None
+            rag_config_data = agent_data.get('ragConfig') or agent_data.get('rag_config')
+            if rag_config_data and rag_config_data.get('enabled'):
+                rag_config = RAGConfig(
+                    enabled=rag_config_data.get('enabled', False),
+                    data_source_type=rag_config_data.get('dataSourceType', rag_config_data.get('data_source_type', 'none')),
+                    data_source_path=rag_config_data.get('dataSourcePath', rag_config_data.get('data_source_path', '')),
+                    vector_database=rag_config_data.get('vectorDatabase', rag_config_data.get('vector_database', 'faiss')),
+                    embedding_model=rag_config_data.get('embeddingModel', rag_config_data.get('embedding_model', 'openai-text-embedding-3-small')),
+                    chunk_size=rag_config_data.get('chunkSize', rag_config_data.get('chunk_size', 1000)),
+                    chunk_overlap=rag_config_data.get('chunkOverlap', rag_config_data.get('chunk_overlap', 200)),
+                    top_k=rag_config_data.get('topK', rag_config_data.get('top_k', 5)),
+                    similarity_threshold=rag_config_data.get('similarityThreshold', rag_config_data.get('similarity_threshold', 0.7)),
+                    rerank_results=rag_config_data.get('rerankResults', rag_config_data.get('rerank_results', False))
+                )
+
             agent = AgentNode(
                 id=agent_data.get('id', str(uuid.uuid4())),
                 name=agent_data.get('name', 'Unnamed Agent'),
@@ -593,11 +632,13 @@ async def create_agent_organization(
                         configuration=tool.get('configuration', {})
                     ) for tool in agent_data.get('tools', [])
                 ],
-                max_concurrent_tasks=agent_data.get('max_concurrent_tasks', 3),
-                requires_human_approval=agent_data.get('requires_human_approval', False)
+                max_concurrent_tasks=agent_data.get('maxConcurrentTasks', agent_data.get('max_concurrent_tasks', 3)),
+                requires_human_approval=agent_data.get('requiresHumanApproval', agent_data.get('requires_human_approval', False)),
+                rag_config=rag_config,
+                use_memory_enhancement=agent_data.get('useMemoryEnhancement', agent_data.get('use_memory_enhancement', False))
             )
             agents.append(agent)
-        
+
         # Convert connections data to AgentConnection objects
         connections = []
         for conn_data in org_data.connections:

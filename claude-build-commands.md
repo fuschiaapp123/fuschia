@@ -1,11 +1,11 @@
-# Fuschia Intelligent Automation Platform - Build Commands
+# Fuchsia Intelligent Automation Platform - Build Commands
 
 ## Step 1: Project Foundation and Dependencies Setup
 
 ```xml
 <prompt>
 <role>Advanced Python and JavaScript full-stack engineer specializing in enterprise automation platforms</role>
-<content>Set up the foundational project structure for Fuschia, an intelligent automation platform. Initialize both backend (Python/FastAPI) and frontend (React/TypeScript) applications with proper project structure, package management, and essential dependencies.</content>
+<content>Set up the foundational project structure for Fuchsia, an intelligent automation platform. Initialize both backend (Python/FastAPI) and frontend (React/TypeScript) applications with proper project structure, package management, and essential dependencies.</content>
 <instructions>
 1. Create a monorepo structure with separate backend and frontend directories
 2. Initialize Python backend with FastAPI, Neo4j driver, and authentication libraries
@@ -23,7 +23,7 @@
 ```xml
 <prompt>
 <role>Senior backend engineer with expertise in FastAPI, Neo4j graph databases, and enterprise API design</role>
-<content>Build the core backend API structure with Neo4j graph database integration for the Fuschia automation platform. Implement authentication, data models, and basic CRUD operations for knowledge graph management.</content>
+<content>Build the core backend API structure with Neo4j graph database integration for the Fuchsia automation platform. Implement authentication, data models, and basic CRUD operations for knowledge graph management.</content>
 <instructions>
 1. Create FastAPI application structure with proper routing and middleware
 2. Implement Neo4j database connection and configuration management
@@ -43,12 +43,12 @@
 ```xml
 <prompt>
 <role>Senior React/TypeScript frontend engineer with expertise in enterprise UI design and data visualization</role>
-<content>Build the core frontend application structure with navigation, layout components, and UI framework matching fuschia.io design. Implement the collapsible sidebar navigation and tabbed workspace interface as specified in the PRD.</content>
+<content>Build the core frontend application structure with navigation, layout components, and UI framework matching fuchsia.io design. Implement the collapsible sidebar navigation and tabbed workspace interface as specified in the PRD.</content>
 <instructions>
 1. Create React application structure with TypeScript and proper component organization
 2. Implement the collapsible left sidebar with four main sections: Knowledge, Workflow, Agents, Settings
 3. Build the tabbed workspace interface with chat and dynamic main panel
-4. Style components to match fuschia.io website colors and design language
+4. Style components to match fuchsia.io website colors and design language
 5. Create reusable UI components following enterprise design patterns
 6. Implement responsive design for desktop application usage
 7. Set up state management for user sessions, navigation state, and application data
@@ -63,7 +63,7 @@
 ```xml
 <prompt>
 <role>Full-stack engineer specializing in data visualization, workflow design, and graph-based systems</role>
-<content>Implement the Knowledge Management and Workflow Management modules for Fuschia. Build interactive graph visualization, workflow canvas with ReactFlow, and data import/export capabilities.</content>
+<content>Implement the Knowledge Management and Workflow Management modules for Fuchsia. Build interactive graph visualization, workflow canvas with ReactFlow, and data import/export capabilities.</content>
 <instructions>
 1. Create Knowledge Management module with chat-driven data exploration interface
 2. Implement interactive Neo4j graph visualization using D3.js or similar library
@@ -84,7 +84,7 @@
 ```xml
 <prompt>
 <role>AI/ML engineer with expertise in multi-agent systems, LangGraph, and process orchestration</role>
-<content>Build the Agent Management module and Runtime Execution Environment for Fuschia. Implement multi-agent system design, LangGraph integration, and real-time process orchestration with monitoring capabilities.</content>
+<content>Build the Agent Management module and Runtime Execution Environment for Fuchsia. Implement multi-agent system design, LangGraph integration, and real-time process orchestration with monitoring capabilities.</content>
 <instructions>
 1. Create Agent Management module with ReactFlow-based organization chart for agent design
 2. Implement agent configuration system with capabilities, specializations, and performance settings
@@ -106,7 +106,7 @@
 ```xml
 <prompt>
 <role>DevOps engineer and data architect with expertise in test data generation and development environments</role>
-<content>Create comprehensive sample data, development environment setup, and testing infrastructure for the Fuschia automation platform. Generate realistic test data for knowledge graphs, workflows, and agent configurations.</content>
+<content>Create comprehensive sample data, development environment setup, and testing infrastructure for the Fuchsia automation platform. Generate realistic test data for knowledge graphs, workflows, and agent configurations.</content>
 <instructions>
 1. Create sample knowledge graph data with realistic business entities, relationships, and metadata
 2. Generate sample workflow templates covering common business processes (approvals, escalations, data processing)
@@ -127,7 +127,7 @@
 ```xml
 <prompt>
 <role>Technical documentation specialist and developer advocate with expertise in enterprise software onboarding</role>
-<content>Create comprehensive README documentation and user guides for the Fuschia automation platform. Provide complete instructions for setup, development, deployment, and usage from zero to production-ready state.</content>
+<content>Create comprehensive README documentation and user guides for the Fuchsia automation platform. Provide complete instructions for setup, development, deployment, and usage from zero to production-ready state.</content>
 <instructions>
 1. Create detailed README.md with project overview, architecture, and quick start guide
 2. Document complete installation and setup process for all dependencies (Neo4j, Python, Node.js)

@@ -7,6 +7,7 @@ import { UserProfile } from '@/components/settings/UserProfile';
 import { RoleManagement } from '@/components/settings/RoleManagement';
 import { TemplateSettingsComponent } from '@/components/settings/TemplateSettings';
 import { ToolsRegistry } from '@/components/settings/ToolsRegistry';
+import { DebugSettings } from '@/components/settings/DebugSettings';
 
 export const SettingsModule: React.FC = () => {
   const { activeTab } = useAppStore();
@@ -26,7 +27,7 @@ export const SettingsModule: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="Enter organization name"
                   />
                 </div>
@@ -34,7 +35,7 @@ export const SettingsModule: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Default Language
                   </label>
-                  <select className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500">
+                  <select className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
                     <option>English</option>
                     <option>Spanish</option>
                     <option>French</option>
@@ -62,7 +63,7 @@ export const SettingsModule: React.FC = () => {
                       <h3 className="font-medium text-gray-900">{system}</h3>
                       <p className="text-sm text-gray-500">Not connected</p>
                     </div>
-                    <button className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600">
+                    <button className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600">
                       Connect
                     </button>
                   </div>
@@ -82,6 +83,8 @@ export const SettingsModule: React.FC = () => {
         return <RoleManagement />;
       case 'profile':
         return <UserProfile />;
+      case 'debug':
+        return <DebugSettings />;
       default:
         return (
           <div className="p-6">

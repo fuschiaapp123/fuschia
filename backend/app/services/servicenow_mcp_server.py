@@ -376,27 +376,118 @@ class ServiceNowMCPServer:
     async def _execute_servicenow_operation(self, tool: ServiceNowMCPTool, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the actual ServiceNow API operation"""
         operation_type = tool.operation_type
-        
+        logger.info(f"Executing ServiceNow operation '{operation_type}' with arguments: {arguments}")
+
+        # Unwrap nested args/kwargs structure if present
+        # Arguments may come in as:
+        #   {"args": {}, "kwargs": {"table": "incident", ...}}  - kwargs as dict
+        #   {"args": ["INC0010129"], "kwargs": {}}  - args as list (positional)
+        if "kwargs" in arguments or "args" in arguments:
+            unwrapped = {}
+
+            # Handle kwargs (keyword arguments)
+            if isinstance(arguments.get("kwargs"), dict):
+                unwrapped.update(arguments["kwargs"])
+
+            # Handle args (positional arguments) - map to expected parameters
+            args_list = arguments.get("args", [])
+            if isinstance(args_list, list) and args_list:
+                # Map positional args based on operation type
+                if operation_type == "get_record":
+                    # get_record expects: table, sys_id, [fields]
+                    # But often just sys_id is passed
+                    if len(args_list) >= 1 and "sys_id" not in unwrapped:
+                        unwrapped["sys_id"] = args_list[0]
+                    if len(args_list) >= 2 and "table" not in unwrapped:
+                        unwrapped["table"] = args_list[1]
+                elif operation_type == "list_records":
+                    # list_records expects: table
+                    if len(args_list) >= 1 and "table" not in unwrapped:
+                        unwrapped["table"] = args_list[0]
+                elif operation_type == "create_record":
+                    # create_record expects: table, data
+                    if len(args_list) >= 1 and "table" not in unwrapped:
+                        unwrapped["table"] = args_list[0]
+                    if len(args_list) >= 2 and "data" not in unwrapped:
+                        unwrapped["data"] = args_list[1]
+                elif operation_type in ("update_record", "delete_record"):
+                    # expects: table, sys_id, [data]
+                    if len(args_list) >= 1 and "sys_id" not in unwrapped:
+                        unwrapped["sys_id"] = args_list[0]
+                    if len(args_list) >= 2 and "table" not in unwrapped:
+                        unwrapped["table"] = args_list[1]
+                logger.info(f"Mapped positional args {args_list} to: {unwrapped}")
+
+            # Handle args as dict (less common)
+            elif isinstance(args_list, dict) and args_list:
+                unwrapped.update(args_list)
+
+            if unwrapped:
+                arguments = unwrapped
+                logger.info(f"Unwrapped arguments to: {arguments}")
+
+        # Helper to get table name from arguments (handles both 'table' and 'table_name' keys)
+        def get_table_name() -> str:
+            return arguments.get("table") or arguments.get("table_name") or tool.table_name
+
         if operation_type == "list_tables":
             return await self._list_tables()
-        
+
         elif operation_type == "list_records":
-            table = arguments.get("table") or tool.table_name
+            table = get_table_name()
             if not table:
                 raise ValueError("Table name is required")
             return await self._list_records(table, arguments)
-        
+
         elif operation_type == "get_record":
-            return await self._get_record(arguments["table"], arguments["sys_id"], arguments.get("fields"))
-        
+            table = get_table_name()
+            record_id = arguments.get("sys_id") or arguments.get("id") or arguments.get("number") or arguments.get("incident_number")
+            # If no table specified, try to infer from record ID format
+            if not table:
+                if record_id and record_id.upper().startswith("INC"):
+                    table = "incident"
+                elif record_id and record_id.upper().startswith("CHG"):
+                    table = "change_request"
+                elif record_id and record_id.upper().startswith("PRB"):
+                    table = "problem"
+                elif record_id and record_id.upper().startswith("REQ"):
+                    table = "sc_request"
+                else:
+                    table = "incident"  # Default fallback
+                logger.info(f"No table specified for get_record, inferred/defaulted to '{table}'")
+            return await self._get_record(table, record_id, arguments.get("fields"))
+
         elif operation_type == "create_record":
-            return await self._create_record(arguments["table"], arguments["data"])
-        
+            table = get_table_name()
+            if not table:
+                # Default to 'incident' table if not specified
+                table = "incident"
+                logger.info(f"No table specified for create_record, defaulting to '{table}'")
+            # Get data - if no 'data' key, treat remaining fields as the data
+            data = arguments.get("data")
+            if not data:
+                # Extract all fields except table/table_name as the record data
+                data = {k: v for k, v in arguments.items() if k not in ("table", "table_name", "data")}
+                logger.info(f"No 'data' key found, using arguments as data: {data}")
+            return await self._create_record(table, data)
+
         elif operation_type == "update_record":
-            return await self._update_record(arguments["table"], arguments["sys_id"], arguments["data"])
-        
+            table = get_table_name()
+            if not table:
+                table = "incident"
+                logger.info(f"No table specified for update_record, defaulting to '{table}'")
+            # Get data - if no 'data' key, treat remaining fields as the data
+            data = arguments.get("data")
+            if not data:
+                data = {k: v for k, v in arguments.items() if k not in ("table", "table_name", "data", "sys_id", "id")}
+                logger.info(f"No 'data' key found, using arguments as data: {data}")
+            return await self._update_record(table, arguments.get("sys_id") or arguments.get("id"), data)
+
         elif operation_type == "delete_record":
-            return await self._delete_record(arguments["table"], arguments["sys_id"])
+            table = get_table_name()
+            if not table:
+                raise ValueError("Table name is required")
+            return await self._delete_record(table, arguments.get("sys_id") or arguments.get("id"))
         
         else:
             raise ValueError(f"Unknown operation type: {operation_type}")
@@ -418,10 +509,12 @@ class ServiceNowMCPServer:
             'sysparm_display_value': 'all'
         }
         
-        # Handle filters
+        # Handle filters (support both 'filter' and 'filters' keys)
         filters = []
         if arguments.get('filters'):
             filters.append(arguments['filters'])
+        if arguments.get('filter'):
+            filters.append(arguments['filter'])
         
         # Handle common parameters for table-specific tools
         if arguments.get('active_only'):
@@ -455,33 +548,62 @@ class ServiceNowMCPServer:
             "parameters": arguments
         }
     
-    async def _get_record(self, table: str, sys_id: str, fields: str = None) -> Dict[str, Any]:
-        """Get a specific ServiceNow record"""
+    async def _get_record(self, table: str, record_id: str, fields: str = None) -> Dict[str, Any]:
+        """Get a specific ServiceNow record by sys_id or number"""
         params = {'sysparm_display_value': 'all'}
         if fields:
             params['sysparm_fields'] = fields
-        
-        # Use ServiceNow API to get specific record
-        endpoint = f"{self.instance_url}/api/now/table/{table}/{sys_id}"
-        
+
+        # Determine if record_id is a number (INC0010129) or sys_id (32-char GUID)
+        is_number = record_id and any(record_id.upper().startswith(prefix)
+                                       for prefix in ('INC', 'CHG', 'PRB', 'REQ', 'RITM', 'TASK'))
+        logger.info(f"Getting record from table '{table}' by {'number' if is_number else 'sys_id'}: {record_id}")
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                endpoint,
-                auth=(self.username, self.password),
-                headers={"Accept": "application/json"},
-                params=params,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            record = data.get('result', {})
+            if is_number:
+                # Query by number field
+                logger.info(f"Looking up record by number: {record_id}")
+                params['sysparm_query'] = f'number={record_id}'
+                params['sysparm_limit'] = 1
+                endpoint = f"{self.instance_url}/api/now/table/{table}"
+                response = await client.get(
+                    endpoint,
+                    auth=(self.username, self.password),
+                    headers={"Accept": "application/json"},
+                    params=params,
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                data = response.json()
+                results = data.get('result', [])
+                if not results:
+                    return {
+                        "operation": "get_record",
+                        "table": table,
+                        "number": record_id,
+                        "success": False,
+                        "error": f"No record found with number {record_id}"
+                    }
+                record = results[0]
+            else:
+                # Direct lookup by sys_id
+                endpoint = f"{self.instance_url}/api/now/table/{table}/{record_id}"
+                response = await client.get(
+                    endpoint,
+                    auth=(self.username, self.password),
+                    headers={"Accept": "application/json"},
+                    params=params,
+                    timeout=30.0
+                )
+                response.raise_for_status()
+                data = response.json()
+                record = data.get('result', {})
+
             flattened_record = flatten_dict(record)
-            
+
             return {
                 "operation": "get_record",
                 "table": table,
-                "sys_id": sys_id,
+                "sys_id": flattened_record.get('sys_id', record_id),
                 "success": True,
                 "data": flattened_record
             }
@@ -489,7 +611,7 @@ class ServiceNowMCPServer:
     async def _create_record(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new ServiceNow record"""
         endpoint = f"{self.instance_url}/api/now/table/{table}"
-        
+        logger.info(f"Creating record in table {table} with data: {data}")
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 endpoint,

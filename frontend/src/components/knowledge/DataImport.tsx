@@ -613,8 +613,8 @@ export const DataImport: React.FC = () => {
       {/* Progress Steps */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
-          <div className={`flex items-center space-x-2 ${selectedSource ? 'text-fuschia-600' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedSource ? 'bg-fuschia-100' : 'bg-gray-100'}`}>
+          <div className={`flex items-center space-x-2 ${selectedSource ? 'text-fuchsia-600' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedSource ? 'bg-fuchsia-100' : 'bg-gray-100'}`}>
               <span className="text-sm font-medium">1</span>
             </div>
             <span className="font-medium">Select Data Source</span>
@@ -622,8 +622,8 @@ export const DataImport: React.FC = () => {
           
           <ChevronRight className="w-5 h-5 text-gray-400" />
           
-          <div className={`flex items-center space-x-2 ${selectedTable ? 'text-fuschia-600' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedTable ? 'bg-fuschia-100' : 'bg-gray-100'}`}>
+          <div className={`flex items-center space-x-2 ${selectedTable ? 'text-fuchsia-600' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedTable ? 'bg-fuchsia-100' : 'bg-gray-100'}`}>
               <span className="text-sm font-medium">2</span>
             </div>
             <span className="font-medium">Select Table</span>
@@ -631,8 +631,8 @@ export const DataImport: React.FC = () => {
           
           <ChevronRight className="w-5 h-5 text-gray-400" />
           
-          <div className={`flex items-center space-x-2 ${tableData.length > 0 ? 'text-fuschia-600' : 'text-gray-400'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${tableData.length > 0 ? 'bg-fuschia-100' : 'bg-gray-100'}`}>
+          <div className={`flex items-center space-x-2 ${tableData.length > 0 ? 'text-fuchsia-600' : 'text-gray-400'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${tableData.length > 0 ? 'bg-fuchsia-100' : 'bg-gray-100'}`}>
               <span className="text-sm font-medium">3</span>
             </div>
             <span className="font-medium">Browse Data</span>
@@ -671,7 +671,7 @@ export const DataImport: React.FC = () => {
                   placeholder="Search data sources..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                 />
               </div>
             </div>
@@ -691,7 +691,7 @@ export const DataImport: React.FC = () => {
                 onClick={() => handleSourceSelect(source)}
                 className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                   selectedSource?.id === source.id
-                    ? 'border-fuschia-300 bg-fuschia-50'
+                    ? 'border-fuchsia-300 bg-fuchsia-50'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -732,7 +732,7 @@ export const DataImport: React.FC = () => {
                     placeholder="Search tables..."
                     value={tableSearchTerm}
                     onChange={(e) => setTableSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   />
                 </div>
               </div>
@@ -760,7 +760,7 @@ export const DataImport: React.FC = () => {
                 <p className="text-gray-500">No tables match your search</p>
                 <button 
                   onClick={() => setTableSearchTerm('')}
-                  className="text-sm text-fuschia-600 hover:text-fuschia-700 mt-2"
+                  className="text-sm text-fuchsia-600 hover:text-fuchsia-700 mt-2"
                 >
                   Clear search
                 </button>
@@ -773,7 +773,7 @@ export const DataImport: React.FC = () => {
                 onClick={() => handleTableSelect(table)}
                 className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                   selectedTable?.name === table.name
-                    ? 'border-fuschia-300 bg-fuschia-50'
+                    ? 'border-fuchsia-300 bg-fuchsia-50'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -805,7 +805,7 @@ export const DataImport: React.FC = () => {
                 <button
                   onClick={handleImportData}
                   disabled={isImporting}
-                  className="flex items-center space-x-2 px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                  className="flex items-center space-x-2 px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                 >
                   {isImporting ? (
                     <>

@@ -13,11 +13,11 @@ def add_column_to_sqlite():
     
     # Look for database files
     possible_db_paths = [
-        'fuschia.db',
+        'fuchsia.db',
         'app.db', 
         'sqlite.db',
         'database.db',
-        '../fuschia.db',
+        '../fuchsia.db',
         '../app.db'
     ]
     

@@ -13,14 +13,14 @@ The Graphiti temporal knowledge graph memory system requires:
 
 ```bash
 docker run \
-  --name fuschia-neo4j \
+  --name fuchsia-neo4j \
   -p 7474:7474 -p 7687:7687 \
   -e NEO4J_AUTH=neo4j/password \
   -e NEO4J_PLUGINS='["apoc"]' \
   -e NEO4J_apoc_export_file_enabled=true \
   -e NEO4J_apoc_import_file_enabled=true \
   -e NEO4J_apoc_import_file_use__neo4j__config=true \
-  -v fuschia-neo4j-data:/data \
+  -v fuchsia-neo4j-data:/data \
   neo4j:5.23
 ```
 
@@ -28,14 +28,14 @@ docker run \
 
 ```bash
 docker run \
-  --name fuschia-neo4j-vector \
+  --name fuchsia-neo4j-vector \
   -p 7474:7474 -p 7687:7687 \
   -e NEO4J_AUTH=neo4j/password \
   -e NEO4J_PLUGINS='["apoc", "graph-data-science"]' \
   -e NEO4J_apoc_export_file_enabled=true \
   -e NEO4J_apoc_import_file_enabled=true \
   -e NEO4J_dbms_security_procedures_unrestricted=apoc.*,gds.* \
-  -v fuschia-neo4j-data:/data \
+  -v fuchsia-neo4j-data:/data \
   neo4j:5.23-enterprise
 ```
 
@@ -65,10 +65,10 @@ NEO4J_PASSWORD=password
 **Solution**: Ensure you're using Neo4j 5.23+ with proper plugins:
 ```bash
 # Check Neo4j version
-docker exec fuschia-neo4j neo4j version
+docker exec fuchsia-neo4j neo4j version
 
 # Check installed plugins
-docker exec fuschia-neo4j ls /var/lib/neo4j/plugins/
+docker exec fuchsia-neo4j ls /var/lib/neo4j/plugins/
 ```
 
 ### Error: "ServiceUnavailable"
@@ -79,7 +79,7 @@ docker exec fuschia-neo4j ls /var/lib/neo4j/plugins/
 docker ps | grep neo4j
 
 # Start the container
-docker start fuschia-neo4j
+docker start fuchsia-neo4j
 ```
 
 ### Error: "AuthError"
@@ -93,7 +93,7 @@ export NEO4J_PASSWORD=password
 
 ## Memory Enhancement Features
 
-With proper Neo4j setup, the Fuschia platform provides:
+With proper Neo4j setup, the Fuchsia platform provides:
 
 - ✅ **Episodic Memory**: Records all workflow conversations and agent interactions
 - ✅ **Entity Extraction**: Automatically identifies and links entities from episodes  
@@ -104,7 +104,7 @@ With proper Neo4j setup, the Fuschia platform provides:
 
 ## Graceful Degradation
 
-If Neo4j is not available, the Fuschia platform will:
+If Neo4j is not available, the Fuchsia platform will:
 - ✅ Continue to operate normally
 - ⚠️ Log warnings about disabled memory features
 - ⚠️ Skip episode recording (no errors thrown)

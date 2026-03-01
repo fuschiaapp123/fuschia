@@ -1,10 +1,10 @@
-# Fuschia Intelligent Automation Platform - Claude Build Context
+# Fuchsia Intelligent Automation Platform - Claude Build Context
 
 ## Hosted version
 
 ## Project Overview
 
-Fuschia is an enterprise intelligent automation platform that combines multi-agent AI workflows with graph-based knowledge management. It's designed as a unified, no-code SaaS platform for large and medium enterprises.
+Fuchsia is an enterprise intelligent automation platform that combines multi-agent AI workflows with graph-based knowledge management. It's designed as a unified, no-code SaaS platform for large and medium enterprises.
 
 ## Architecture
 

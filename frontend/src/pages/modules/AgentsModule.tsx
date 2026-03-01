@@ -15,17 +15,17 @@ export const AgentsModule: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Active Agents</h3>
-                <p className="text-3xl font-bold text-fuschia-600">12</p>
+                <p className="text-3xl font-bold text-fuchsia-600">12</p>
                 <p className="text-sm text-gray-500 mt-1">Currently online</p>
               </div>
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Agent Types</h3>
-                <p className="text-3xl font-bold text-fuschia-600">5</p>
+                <p className="text-3xl font-bold text-fuchsia-600">5</p>
                 <p className="text-sm text-gray-500 mt-1">Configured types</p>
               </div>
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Tasks Completed</h3>
-                <p className="text-3xl font-bold text-fuschia-600">2,891</p>
+                <p className="text-3xl font-bold text-fuchsia-600">2,891</p>
                 <p className="text-sm text-gray-500 mt-1">This month</p>
               </div>
             </div>

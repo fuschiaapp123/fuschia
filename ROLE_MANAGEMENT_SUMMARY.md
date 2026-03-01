@@ -178,6 +178,6 @@ URL: http://localhost:3001/settings (with activeTab=roles)
 - **Role Hierarchy**: Maintained to preserve security structure
 
 ## Summary
-The Role & Permissions Management feature provides a comprehensive, user-friendly interface for administrators to control access rights throughout the Fuschia platform. The implementation follows security best practices with proper access controls and provides an intuitive editing experience with clear visual feedback.
+The Role & Permissions Management feature provides a comprehensive, user-friendly interface for administrators to control access rights throughout the Fuchsia platform. The implementation follows security best practices with proper access controls and provides an intuitive editing experience with clear visual feedback.
 
 🎉 **The feature is now fully functional and accessible at the Settings → Roles & Permissions tab for administrator users!**

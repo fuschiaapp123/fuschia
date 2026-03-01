@@ -69,7 +69,7 @@ async def create_workflow_execution_tables():
 async def main():
     """Main function"""
     print("=" * 60)
-    print("Fuschia Workflow Execution Tables Migration")
+    print("Fuchsia Workflow Execution Tables Migration")
     print("=" * 60)
     
     success = await create_workflow_execution_tables()

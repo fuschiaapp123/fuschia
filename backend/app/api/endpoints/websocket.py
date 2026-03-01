@@ -152,30 +152,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     finally:
         await websocket_manager.disconnect(websocket, user_id)
 
-@router.get("/test/{user_id}")
-async def test_websocket(user_id: str):
-    """Test endpoint to send a message via WebSocket"""
-    try:
-        websocket_manager.register_execution("test-execution", user_id)
-        
-        # Send test execution update (like Human-in-the-Loop messages)
-        await websocket_manager.send_chat_message(
-            execution_id="test-execution",
-            message_content="🧪 **Test Message from API**\n\nThis is a test message to verify WebSocket connectivity and chat panel integration.\n\nIf you see this message, the WebSocket connection is working!",
-            agent_id="test-system",
-            agent_name="Test System",
-            task_id="test-task-123",
-            task_name="WebSocket Test",
-            message_type='test_message',
-            requires_response=False,
-            metadata={'test': True}
-        )
-        
-        return {"message": "Test chat message sent to WebSocket", "user_id": user_id}
-    except Exception as e:
-        logger.error("Failed to send test message", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to send test message: {str(e)}")
-
 @router.get("/connections")
 async def get_websocket_connections():
     """Debug endpoint to see active WebSocket connections"""

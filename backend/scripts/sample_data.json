@@ -157,7 +157,7 @@
         }
       ],
       "credentials": {
-        "username": "fuschia_integration",
+        "username": "fuchsia_integration",
         "password": "encrypted_password"
       }
     },

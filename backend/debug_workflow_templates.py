@@ -14,7 +14,7 @@ async def check_workflow_templates():
     print("=== Debugging Workflow Templates ===\n")
     
     # Check if SQLite database exists
-    db_path = Path("fuschia_users.db")
+    db_path = Path("fuchsia_users.db")
     if not db_path.exists():
         print(f"❌ Database file {db_path} does not exist!")
         return

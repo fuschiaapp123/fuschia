@@ -150,6 +150,45 @@ class AgentService {
       const { useAuthStore } = await import('@/store/authStore');
       const token = useAuthStore.getState().token;
 
+      // Convert node data from camelCase to snake_case for backend compatibility
+      const convertedNodes = templateData.nodes.map(node => {
+        const data = node.data || {};
+
+        // Convert RAG config from camelCase to snake_case
+        let ragConfig = undefined;
+        if (data.ragConfig) {
+          ragConfig = {
+            enabled: data.ragConfig.enabled || false,
+            data_source_type: data.ragConfig.dataSourceType || 'none',
+            data_source_path: data.ragConfig.dataSourcePath || '',
+            vector_database: data.ragConfig.vectorDatabase || 'faiss',
+            embedding_model: data.ragConfig.embeddingModel || 'openai-text-embedding-3-small',
+            chunk_size: data.ragConfig.chunkSize || 1000,
+            chunk_overlap: data.ragConfig.chunkOverlap || 200,
+            top_k: data.ragConfig.topK || 5,
+            similarity_threshold: data.ragConfig.similarityThreshold || 0.7,
+            rerank_results: data.ragConfig.rerankResults || false
+          };
+        }
+
+        return {
+          ...node,
+          data: {
+            ...data,
+            // Convert camelCase fields to snake_case for backend
+            max_concurrent_tasks: data.maxConcurrentTasks || data.max_concurrent_tasks || 5,
+            use_memory_enhancement: data.useMemoryEnhancement || data.use_memory_enhancement || false,
+            requires_human_approval: data.requiresHumanApproval || data.requires_human_approval || false,
+            rag_config: ragConfig || data.rag_config,
+            // Keep original camelCase fields for backwards compatibility
+            maxConcurrentTasks: data.maxConcurrentTasks,
+            useMemoryEnhancement: data.useMemoryEnhancement,
+            requiresHumanApproval: data.requiresHumanApproval,
+            ragConfig: data.ragConfig
+          }
+        };
+      });
+
       // Prepare payload for agent template endpoint - using agents_data and connections_data
       const payload = {
         id: templateData.id, // Include ID for upsert logic
@@ -159,11 +198,11 @@ class AgentService {
         complexity: templateData.complexity.toLowerCase(),
         estimated_time: templateData.estimatedTime,
         tags: templateData.tags,
-        preview_steps: templateData.nodes.slice(0, 5).map(node => 
+        preview_steps: templateData.nodes.slice(0, 5).map(node =>
           node.data?.name || 'Unnamed Agent'
         ),
-        // Store agent data in the correct fields for agent templates
-        agents_data: templateData.nodes,
+        // Store agent data in the correct fields for agent templates (with snake_case conversion)
+        agents_data: convertedNodes,
         connections_data: templateData.edges,
         template_metadata: {
           author: 'Current User',

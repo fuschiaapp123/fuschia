@@ -1,7 +1,7 @@
 {
-  "name": "fuschia-frontend",
+  "name": "fuchsia-frontend",
   "version": "0.1.0",
-  "description": "Fuschia Intelligent Automation Platform Frontend",
+  "description": "Fuchsia Intelligent Automation Platform Frontend",
   "main": "src/index.tsx",
   "scripts": {
     "dev": "vite",
@@ -51,6 +51,6 @@
     "workflow",
     "enterprise"
   ],
-  "author": "Fuschia Team",
+  "author": "Fuchsia Team",
   "license": "MIT"
 }

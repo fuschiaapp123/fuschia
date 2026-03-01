@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🔍 Database Inspector for Fuschia Platform"
+echo "🔍 Database Inspector for Fuchsia Platform"
 echo "========================================"
 
 BASE_URL="http://localhost:8000/api/v1"

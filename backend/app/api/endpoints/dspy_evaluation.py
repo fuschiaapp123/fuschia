@@ -12,6 +12,7 @@ functionality, including:
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.dspy_evaluation_service import dspy_evaluation_service
 from app.models.dspy_evaluation import (
@@ -23,6 +24,7 @@ from app.models.dspy_evaluation import (
 )
 from app.auth.auth import get_current_user
 from app.models.user import User
+from app.db.postgres import get_db
 
 router = APIRouter(prefix="/dspy-evaluation", tags=["DSPy Evaluation"])
 
@@ -52,13 +54,15 @@ class EvaluationResultResponse(BaseModel):
 @router.post("/configs", response_model=EvaluationConfigResponse)
 async def create_evaluation_config(
     request: CreateDSPyEvaluationConfigRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Create a new DSPy evaluation configuration for a workflow task"""
     try:
         config = await dspy_evaluation_service.create_evaluation_config(
             request=request,
-            created_by=current_user.id
+            created_by=current_user.id,
+            db=db
         )
         
         return EvaluationConfigResponse(
@@ -78,11 +82,12 @@ async def create_evaluation_config(
 @router.get("/configs/{config_id}", response_model=EvaluationConfigResponse)
 async def get_evaluation_config(
     config_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Get evaluation configuration by ID"""
     try:
-        config = await dspy_evaluation_service.get_evaluation_config(config_id)
+        config = await dspy_evaluation_service.get_evaluation_config(config_id, db)
         
         if not config:
             raise HTTPException(status_code=404, detail="Evaluation config not found")
@@ -105,13 +110,15 @@ async def get_evaluation_config(
 async def update_evaluation_config(
     config_id: str,
     request: UpdateDSPyEvaluationConfigRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Update evaluation configuration"""
     try:
         config = await dspy_evaluation_service.update_evaluation_config(
             config_id=config_id,
-            request=request
+            request=request,
+            db=db
         )
         
         return EvaluationConfigResponse(
@@ -131,11 +138,12 @@ async def update_evaluation_config(
 @router.get("/configs", response_model=List[DSPyEvaluationConfig])
 async def list_evaluation_configs(
     task_id: Optional[str] = None,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """List evaluation configurations, optionally filtered by task ID"""
     try:
-        configs = await dspy_evaluation_service.list_evaluation_configs(task_id=task_id)
+        configs = await dspy_evaluation_service.list_evaluation_configs(task_id=task_id, db=db)
         return configs
         
     except Exception as e:
@@ -150,13 +158,15 @@ async def list_evaluation_configs(
 async def add_examples(
     config_id: str,
     request: AddExamplesRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Add examples to evaluation configuration"""
     try:
         config = await dspy_evaluation_service.add_examples(
             config_id=config_id,
-            examples=request.examples
+            examples=request.examples,
+            db=db
         )
         
         return EvaluationConfigResponse(
@@ -177,13 +187,15 @@ async def add_examples(
 async def remove_example(
     config_id: str,
     example_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Remove example from evaluation configuration"""
     try:
         config = await dspy_evaluation_service.remove_example(
             config_id=config_id,
-            example_id=example_id
+            example_id=example_id,
+            db=db
         )
         
         return EvaluationConfigResponse(
@@ -205,7 +217,8 @@ async def remove_example(
 async def run_evaluation(
     request: RunDSPyEvaluationRequest,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Run DSPy evaluation (optionally with optimization)"""
     try:
@@ -213,7 +226,8 @@ async def run_evaluation(
         if request.run_optimization:
             background_tasks.add_task(
                 dspy_evaluation_service.run_evaluation,
-                request
+                request,
+                db
             )
             
             return EvaluationResultResponse(
@@ -229,7 +243,7 @@ async def run_evaluation(
             )
         else:
             # Run synchronously for quick evaluations
-            result = await dspy_evaluation_service.run_evaluation(request)
+            result = await dspy_evaluation_service.run_evaluation(request, db)
             
             return EvaluationResultResponse(
                 result=result,
@@ -249,14 +263,16 @@ async def run_evaluation(
 async def optimize_task(
     request: DSPyOptimizationRequest,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Run DSPy optimization for a task"""
     try:
         # Always run optimization in background due to long execution time
         background_tasks.add_task(
             dspy_evaluation_service.optimize_task,
-            request
+            request,
+            db
         )
         
         return EvaluationResultResponse(
@@ -284,11 +300,12 @@ async def optimize_task(
 @router.get("/results/{result_id}", response_model=EvaluationResultResponse)
 async def get_evaluation_result(
     result_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Get evaluation result by ID"""
     try:
-        result = await dspy_evaluation_service.get_evaluation_result(result_id)
+        result = await dspy_evaluation_service.get_evaluation_result(result_id, db)
         
         if not result:
             raise HTTPException(status_code=404, detail="Evaluation result not found")
@@ -312,14 +329,16 @@ async def list_evaluation_results(
     task_id: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """List evaluation results with optional filtering"""
     try:
         results = await dspy_evaluation_service.list_evaluation_results(
             task_id=task_id,
             limit=limit,
-            offset=offset
+            offset=offset,
+            db=db
         )
         
         return results
@@ -334,11 +353,12 @@ async def list_evaluation_results(
 @router.get("/tasks/{task_id}/summary", response_model=DSPyEvaluationSummary)
 async def get_task_evaluation_summary(
     task_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Get evaluation summary for a specific task"""
     try:
-        summary = await dspy_evaluation_service.get_task_evaluation_summary(task_id)
+        summary = await dspy_evaluation_service.get_task_evaluation_summary(task_id, db)
         return summary
         
     except Exception as e:
@@ -392,11 +412,12 @@ async def list_optimization_strategies():
 @router.post("/configs/{config_id}/validate")
 async def validate_evaluation_config(
     config_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Validate an evaluation configuration"""
     try:
-        config = await dspy_evaluation_service.get_evaluation_config(config_id)
+        config = await dspy_evaluation_service.get_evaluation_config(config_id, db)
         
         if not config:
             raise HTTPException(status_code=404, detail="Evaluation config not found")

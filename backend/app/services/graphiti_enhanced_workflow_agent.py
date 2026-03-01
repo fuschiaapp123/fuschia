@@ -25,37 +25,39 @@ logger = structlog.get_logger()
 
 class GraphitiEnhancedWorkflowAgent:
     """Workflow agent enhanced with Graphiti temporal knowledge graph memory"""
-    
+
     def __init__(
-        self, 
-        agent_node: AgentNode, 
-        organization, 
-        workflow_id: Optional[str] = None, 
-        execution_id: Optional[str] = None
+        self,
+        agent_node: AgentNode,
+        organization,
+        workflow_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        user_id: Optional[str] = None
     ):
         self.agent = agent_node
         self.organization = organization
         self.workflow_id = workflow_id
         self.execution_id = execution_id
+        self.user_id = user_id
         self.logger = logger.bind(
             agent_id=agent_node.id,
             agent_name=agent_node.name,
             workflow_id=workflow_id,
             execution_id=execution_id
         )
-        
+
         # Initialize base workflow execution agent
         self.base_agent = WorkflowExecutionAgent(
             agent_node=agent_node,
             organization=organization,
             llm_client=None
         )
-        
+
         # Memory-specific settings
         self.memory_search_limit = 10
         self.use_memory_first = True
         self.record_agent_thoughts = True
-        
+
         self.logger.info("Initialized Graphiti-enhanced workflow agent")
     
     async def execute_task_with_memory(
@@ -259,7 +261,7 @@ class GraphitiEnhancedWorkflowAgent:
             status=ExecutionStatus.RUNNING,
             tasks=[task],
             execution_context=context,
-            initiated_by="graphiti_enhanced_agent",
+            initiated_by=self.user_id or "system",
             started_at=datetime.utcnow()
         )
         
@@ -348,26 +350,27 @@ class GraphitiEnhancedWorkflowOrchestrator:
         self.enhanced_agents: Dict[str, GraphitiEnhancedWorkflowAgent] = {}
     
     def create_enhanced_agent(
-        self, 
-        agent_node: AgentNode, 
+        self,
+        agent_node: AgentNode,
         organization,
-        workflow_id: Optional[str] = None, 
-        execution_id: Optional[str] = None
+        workflow_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        user_id: Optional[str] = None
     ) -> GraphitiEnhancedWorkflowAgent:
         """Create a Graphiti-enhanced workflow agent"""
-        
+
         enhanced_agent = GraphitiEnhancedWorkflowAgent(
-            agent_node, organization, workflow_id, execution_id
+            agent_node, organization, workflow_id, execution_id, user_id
         )
         self.enhanced_agents[agent_node.id] = enhanced_agent
-        
+
         self.logger.info(
             "Created Graphiti-enhanced workflow agent",
             agent_id=agent_node.id,
             agent_name=agent_node.name,
             workflow_id=workflow_id
         )
-        
+
         return enhanced_agent
     
     async def execute_workflow_with_memory(
@@ -399,10 +402,11 @@ class GraphitiEnhancedWorkflowOrchestrator:
         )
         
         # Create Graphiti-enhanced agents for this execution
+        user_id = context.get("initiated_by", "system")
         enhanced_agents = []
         for agent in agents:
             enhanced_agent = self.create_enhanced_agent(
-                agent, organization, workflow_id, execution_id
+                agent, organization, workflow_id, execution_id, user_id
             )
             enhanced_agents.append(enhanced_agent)
         

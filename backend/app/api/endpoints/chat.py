@@ -22,35 +22,45 @@ security = HTTPBearer(auto_error=False)
 async def get_current_user_optional(credentials = Depends(security)) -> Optional[User]:
     """Get current user if authenticated, otherwise return None"""
     if not credentials:
+        print("🔐 No credentials provided in request")
         return None
-    
+
     try:
+        print(f"🔐 Attempting to decode JWT token: {credentials.credentials[:20]}...")
         payload = jwt.decode(
             credentials.credentials,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM]
         )
         email: str = payload.get("sub")
+        print(f"🔐 JWT decoded, email: {email}")
         if email is None:
+            print("🔐 No email in JWT payload")
             return None
-            
+
         from app.services.postgres_user_service import postgres_user_service
         user_in_db = await postgres_user_service.get_user_by_email(email=email)
         if user_in_db is None:
+            print(f"🔐 User not found in database: {email}")
             return None
-            
+
         # Convert UserInDB to User model
         user = User(
             id=user_in_db.id,
             email=user_in_db.email,
             full_name=user_in_db.full_name,
             role=user_in_db.role,
-            is_active=user_in_db.is_active
+            is_active=user_in_db.is_active,
+            created_at=user_in_db.created_at,
+            updated_at=getattr(user_in_db, 'updated_at', None)
         )
+        
         return user
-    except JWTError:
+    except JWTError as e:
+        print(f"🔐 JWT decode error: {e}")
         return None
-    except Exception:
+    except Exception as e:
+        print(f"🔐 Authentication error: {e}")
         return None
 
 async def get_fallback_user_id() -> str:
@@ -92,6 +102,10 @@ class ChatRequest(BaseModel):
     user_role: Optional[str] = None
     current_module: Optional[str] = None
     current_tab: Optional[str] = None
+    # Debug mode parameters
+    debug_mode: Optional[bool] = False
+    debug_workflow_template_id: Optional[str] = None
+    debug_agent_template_id: Optional[str] = None
 
 class AgentChatRequest(BaseModel):
     message: str
@@ -241,7 +255,7 @@ async def chat_endpoint(request: ChatRequest):
             else:
                 response_text = f"I'm here to help with '{user_message}' in the {module} module. What would you like to accomplish?"
         else:
-            response_text = f"I understand you're asking about '{user_message}'. I'm your AI assistant for the Fuschia Intelligent Automation Platform. How can I help you with your automation workflows today?"
+            response_text = f"I understand you're asking about '{user_message}'. I'm your AI assistant for the Fuchsia Intelligent Automation Platform. How can I help you with your automation workflows today?"
         
         return ChatResponse(
             response=response_text,
@@ -595,7 +609,7 @@ async def trigger_workflow_endpoint(request: WorkflowTriggerRequest):
     """
     try:
         # Load agent organization
-        agent_org_path = f"/Users/sanjay/Lab/Fuschia-alfa/backend/data/{request.organization_file}"
+        agent_org_path = f"/Users/sanjay/Lab/Fuchsia-alfa/backend/data/{request.organization_file}"
         
         try:
             with open(agent_org_path, 'r') as stream:
@@ -707,13 +721,13 @@ async def enhanced_chat_endpoint(request: ChatRequest, current_user: Optional[Us
             
             # human_loop_handled = True
             request_data = websocket_manager.pending_responses[matched_request_id]
-            print(f"Processing user response for human-in-the-loop request: {matched_request_id}")
+          
             
             # Submit the user response
             success = websocket_manager.submit_user_response(matched_request_id, user_message)
             
             if success:
-                print(f"Successfully submitted user response for request: {matched_request_id}")
+        
                 
                 # Return immediately - do NOT proceed with intent detection
                 return {
@@ -749,15 +763,91 @@ async def enhanced_chat_endpoint(request: ChatRequest, current_user: Optional[Us
                 }
             }
         
-        # Step 1: Detect intent with context (only when no pending human-in-the-loop requests)
+        # Step 1: Check for debug mode first
         
+        if request.debug_mode and request.debug_workflow_template_id and request.debug_agent_template_id:
+            
+
+            # Skip intent detection and directly trigger workflow execution
+            try:
+                from app.services.workflow_orchestrator import WorkflowOrchestrator
+                from app.services.websocket_manager import websocket_manager
+
+                # Initialize orchestrator
+                llm_client_for_orchestrator = llm_client if llm_client else None
+                orchestrator = WorkflowOrchestrator(llm_client=llm_client_for_orchestrator)
+
+                # Ensure WebSocket message processing is running
+                await websocket_manager.ensure_message_processing_running()
+
+                # Create execution context
+                execution_context = {
+                    'original_message': user_message,
+                    'debug_mode': True,
+                    'chat_session': True,
+                    'user_role': request.user_role,
+                    'current_module': request.current_module,
+                    'current_tab': request.current_tab
+                }
+
+                # Start workflow execution with debug parameters
+                execution = await orchestrator.initiate_workflow_execution(
+                    workflow_template_id=request.debug_workflow_template_id,
+                    organization_id=request.debug_agent_template_id,
+                    initiated_by=current_user.id if current_user else await get_fallback_user_id(),
+                    initial_context=execution_context
+                )
+
+                
+
+                # Generate debug mode response
+                main_response = f"""🐛 **DEBUG MODE ACTIVE**
+
+🚀 **Workflow Execution Started**
+
+**Execution Details:**
+• Execution ID: `{execution.id[:8]}...`
+• Workflow Template: {request.debug_workflow_template_id}
+• Agent Template: {request.debug_agent_template_id}
+• Tasks: {len(execution.tasks)}
+• Status: {execution.status}
+
+⚠️ **Note:** Intent detection was bypassed. Using configured debug templates.
+
+The workflow is now running. You can monitor its progress in the Monitoring module."""
+
+                return {
+                    "response": main_response,
+                    "agent_id": "debug-mode-handler",
+                    "agent_label": "Debug Mode Handler",
+                    "timestamp": datetime.now(),
+                    "metadata": {
+                        "debug_mode": True,
+                        "execution_id": execution.id,
+                        "workflow_template_id": request.debug_workflow_template_id,
+                        "agent_template_id": request.debug_agent_template_id,
+                        "workflow_triggered": True
+                    }
+                }
+
+            except Exception as e:
+                print(f"❌ DEBUG MODE: Workflow execution failed: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Debug mode workflow execution failed: {str(e)}"
+                )
+
+        # Step 1: Detect intent with context (only when no pending human-in-the-loop requests and NOT in debug mode)
+
         intent_result = await detect_intent(
             user_message,
             user_role=request.user_role,
             current_module=request.current_module,
             current_tab=request.current_tab
         )
-        
+
         # Step 2: Determine if workflow execution should be triggered
         workflow_result = None
         main_response = ""
@@ -845,13 +935,13 @@ The multi-agent system is now working on your request with Chain of Thought and 
                 print(f"Enhanced response generated: {main_response}")
             except Exception as workflow_error:
                 # Fall back to legacy workflow system
-                print(f"Workflow orchestrator failed: {str(workflow_error)}. Falling back to legacy workflow system.")
+                
                 workflow_result = await _fallback_to_legacy_workflow(intent_result, user_message)
                 main_response = f"🤖 **Intent Detected:** {intent_result.detected_intent.replace('_', ' ').title()}\n\n{workflow_result.response if workflow_result else 'I understand your request and will help you with the available tools.'}"
                 
         elif intent_result.requires_workflow and intent_result.confidence > 0.6:
             # Legacy workflow trigger for backwards compatibility
-            print(f"Legacy workflow trigger for intent: {intent_result.detected_intent}")
+            
             try:
                 workflow_result = await _fallback_to_legacy_workflow(intent_result, user_message)
                 main_response = f"🤖 **Intent Detected:** {intent_result.detected_intent.replace('_', ' ').title()}\n\n{workflow_result.response if workflow_result else 'Processing your request with available tools.'}"
@@ -861,7 +951,7 @@ The multi-agent system is now working on your request with Chain of Thought and 
                 main_response = f"I understand you need help with {intent_result.detected_intent.replace('_', ' ')}. Let me assist you with that.\n\n{intent_result.suggested_action}"
         
         else:
-            print(f"No workflow execution required for intent: {intent_result.detected_intent}")
+            
             # Step 3: Handle non-workflow intents with regular chat
             if intent_result.detected_intent == "workflow_design":
                 main_response = handle_workflow_design_intent(user_message, request)
@@ -908,7 +998,7 @@ def handle_system_status_intent() -> str:
 
 def handle_general_chat_intent(message: str, request: ChatRequest = None) -> str:
     """Handle general chat and unclear requests"""
-    return "Hello! I'm your AI assistant for the Fuschia Intelligent Automation Platform. I can help you with:\n\n• 🔧 IT support and system issues\n• 👥 HR inquiries (payroll, benefits)\n• 📞 Customer service questions\n• 🔄 Workflow design and automation\n• 🤖 Agent management\n• 📚 Platform knowledge and documentation\n\nHow can I assist you today?"
+    return "Hello! I'm your AI assistant for the Fuchsia Intelligent Automation Platform. I can help you with:\n\n• 🔧 IT support and system issues\n• 👥 HR inquiries (payroll, benefits)\n• 📞 Customer service questions\n• 🔄 Workflow design and automation\n• 🤖 Agent management\n• 📚 Platform knowledge and documentation\n\nHow can I assist you today?"
 
 class HumanLoopResponse(BaseModel):
     request_id: str
@@ -982,14 +1072,14 @@ async def get_pending_human_loop_requests():
 
 async def _fallback_to_legacy_workflow(user_message: str) -> Optional[WorkflowTriggerResponse]:
     """Fallback to legacy workflow system when multi-agent system fails"""
-    print(f"Fallback to legacy workflow for message: {user_message}")
+    
     try:
         
         # Load agent organization for workflow trigger
-        agent_org_path = "/Users/sanjay/Lab/Fuschia-alfa/backend/data/agent-org-default.yaml"
+        agent_org_path = "/Users/sanjay/Lab/Fuchsia-alfa/backend/data/agent-org-default.yaml"
         with open(agent_org_path, 'r') as stream:
             agent_org = yaml.safe_load(stream)
-        print(f"Loaded agent organization from {agent_org_path}")
+        
         # Route message to appropriate agents
         service_agent, specialist_agent = route_message_to_agent(user_message, agent_org)
         

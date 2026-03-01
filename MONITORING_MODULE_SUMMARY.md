@@ -1,7 +1,7 @@
 # Monitoring Module Implementation Summary
 
 ## Overview
-Successfully implemented a comprehensive runtime monitoring module for the Fuschia Intelligent Automation Platform that provides real-time visualization of workflow executions and agent activity.
+Successfully implemented a comprehensive runtime monitoring module for the Fuchsia Intelligent Automation Platform that provides real-time visualization of workflow executions and agent activity.
 
 ## Features Implemented
 

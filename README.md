@@ -1,25 +1,25 @@
-# Fuschia Intelligent Automation Platform
+# Fuchsia Intelligent Automation Platform
 
 <div align="center">
-  <img src="https://via.placeholder.com/200x200/d946ef/ffffff?text=F" alt="Fuschia Logo" width="100" height="100">
+  <img src="https://via.placeholder.com/200x200/d946ef/ffffff?text=F" alt="Fuchsia Logo" width="100" height="100">
   
   **Enterprise Intelligent Automation Platform**
   
   *Automate complex, cross-functional business processes through multi-agent AI workflows and graph-based knowledge management*
   
-  [![Version](https://img.shields.io/badge/version-0.1.0-d946ef)](https://github.com/fuschia/fuschia)
+  [![Version](https://img.shields.io/badge/version-0.1.0-d946ef)](https://github.com/fuchsia/fuchsia)
   [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
   [![Docker](https://img.shields.io/badge/docker-ready-blue)](docker-compose.yml)
 </div>
 
 ## 🚀 Quick Start
 
-Get Fuschia running in under 5 minutes:
+Get Fuchsia running in under 5 minutes:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/fuschia-alfa.git
-cd fuschia-alfa
+git clone https://github.com/your-org/fuchsia-alfa.git
+cd fuchsia-alfa
 
 # Run the automated setup script
 ./setup.sh
@@ -53,7 +53,7 @@ Access your application:
 
 ## 🎯 Overview
 
-Fuschia is an intelligent automation platform designed for large and medium enterprises to automate complex, cross-functional business processes. It combines:
+Fuchsia is an intelligent automation platform designed for large and medium enterprises to automate complex, cross-functional business processes. It combines:
 
 - **Multi-Agent AI Workflows**: Orchestrate intelligent agents for automated decision making
 - **Graph-Based Knowledge Management**: Visualize and manage business knowledge in Neo4j
@@ -270,10 +270,10 @@ docker-compose up -d
 
 #### Default Login Credentials
 ```
-Admin: admin@fuschia.io / admin123
-Manager: manager@fuschia.io / manager123
-Analyst: analyst@fuschia.io / analyst123
-User: user@fuschia.io / user123
+Admin: admin@fuchsia.io / admin123
+Manager: manager@fuchsia.io / manager123
+Analyst: analyst@fuchsia.io / analyst123
+User: user@fuchsia.io / user123
 ```
 
 ### Sample Workflows
@@ -352,7 +352,7 @@ const response = await fetch('/api/v1/knowledge/nodes', {
 
 ### Project Structure
 ```
-fuschia-alfa/
+fuchsia-alfa/
 ├── backend/                 # Python FastAPI backend
 │   ├── app/
 │   │   ├── api/            # API routes
@@ -564,15 +564,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Documentation**: [docs.fuschia.io](https://docs.fuschia.io)
-- **Issues**: [GitHub Issues](https://github.com/your-org/fuschia-alfa/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/fuschia-alfa/discussions)
-- **Email**: support@fuschia.io
+- **Documentation**: [docs.fuchsia.io](https://docs.fuchsia.io)
+- **Issues**: [GitHub Issues](https://github.com/your-org/fuchsia-alfa/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-org/fuchsia-alfa/discussions)
+- **Email**: support@fuchsia.io
 
 ---
 
 <div align="center">
-  Made with ❤️ by the Fuschia Team
-  
-  [Website](https://fuschia.io) • [Documentation](https://docs.fuschia.io) • [Community](https://community.fuschia.io)
+  Made with ❤️ by the Fuchsia Team
+
+  [Website](https://fuchsia.io) • [Documentation](https://docs.fuchsia.io) • [Community](https://community.fuchsia.io)
 </div>

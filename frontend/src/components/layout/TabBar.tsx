@@ -59,6 +59,7 @@ const defaultTabs: Record<string, Tab[]> = {
     { id: 'users', title: 'Users' },
     { id: 'roles', title: 'Roles & Permissions' },
     { id: 'profile', title: 'My Profile' },
+    { id: 'debug', title: 'Debug' },
   ],
 };
 

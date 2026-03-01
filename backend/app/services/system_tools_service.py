@@ -102,7 +102,7 @@ class RAGKnowledgeTool(BaseSystemTool):
         ))
         logger.info("RAGKnowledgeTool initialized")
         # Configuration
-        self.s3_bucket = os.getenv('KNOWLEDGE_S3_BUCKET', 'fuschia-knowledge-base')
+        self.s3_bucket = os.getenv('KNOWLEDGE_S3_BUCKET', 'fuchsia-knowledge-base')
         self.s3_prefix = os.getenv('KNOWLEDGE_S3_PREFIX', 'documents/')
         self.embedding_model = None
         self.vector_store = None

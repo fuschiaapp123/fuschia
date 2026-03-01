@@ -66,7 +66,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             className={`px-4 py-2 text-sm font-medium text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 ${
               isDestructive
                 ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-fuschia-600 hover:bg-fuschia-700'
+                : 'bg-fuchsia-600 hover:bg-fuchsia-700'
             }`}
           >
             {isLoading && (

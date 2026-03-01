@@ -205,7 +205,7 @@ export const DashboardHome: React.FC = () => {
               <div
                 key={index}
                 onClick={() => handleModuleClick(card.module)}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 cursor-pointer group hover:border-fuschia-200"
+                className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 cursor-pointer group hover:border-fuchsia-200"
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className={`p-3 rounded-lg ${card.bgColor} group-hover:scale-110 transition-transform`}>
@@ -221,27 +221,27 @@ export const DashboardHome: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-fuschia-600 transition-colors">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-fuchsia-600 transition-colors">
                   {card.title}
                 </h3>
                 <p className="text-gray-600 text-sm mb-4">{card.description}</p>
-                <div className="flex items-center text-sm text-fuschia-600 group-hover:text-fuschia-700 font-medium">
+                <div className="flex items-center text-sm text-fuchsia-600 group-hover:text-fuchsia-700 font-medium">
                   Open module <ArrowRight className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
             ))}
 
             {/* Add New Integration Card */}
-            <div className="bg-gradient-to-br from-fuschia-50 to-purple-50 rounded-lg border-2 border-dashed border-fuschia-200 p-6 hover:border-fuschia-300 transition-colors cursor-pointer group">
+            <div className="bg-gradient-to-br from-fuchsia-50 to-purple-50 rounded-lg border-2 border-dashed border-fuchsia-200 p-6 hover:border-fuchsia-300 transition-colors cursor-pointer group">
               <div className="text-center">
-                <div className="p-3 rounded-lg bg-fuschia-100 inline-flex mb-4 group-hover:scale-110 transition-transform">
-                  <Plus className="h-6 w-6 text-fuschia-600" />
+                <div className="p-3 rounded-lg bg-fuchsia-100 inline-flex mb-4 group-hover:scale-110 transition-transform">
+                  <Plus className="h-6 w-6 text-fuchsia-600" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Add Integration</h3>
                 <p className="text-gray-600 text-sm mb-4">
                   Connect new data sources and expand your automation capabilities
                 </p>
-                <div className="flex items-center justify-center text-sm text-fuschia-600 font-medium">
+                <div className="flex items-center justify-center text-sm text-fuchsia-600 font-medium">
                   Explore integrations <ArrowRight className="h-4 w-4 ml-1" />
                 </div>
               </div>
@@ -273,7 +273,7 @@ export const DashboardHome: React.FC = () => {
             </div>
             
             <div className="mt-6 pt-4 border-t border-gray-200">
-              <button className="text-sm font-medium text-fuschia-600 hover:text-fuschia-500 flex items-center">
+              <button className="text-sm font-medium text-fuchsia-600 hover:text-fuchsia-500 flex items-center">
                 View all activity <ArrowRight className="h-4 w-4 ml-1" />
               </button>
             </div>
@@ -285,11 +285,11 @@ export const DashboardHome: React.FC = () => {
             <div className="space-y-3">
               <button
                 onClick={() => handleModuleClick('knowledge')}
-                className="block w-full text-left px-4 py-3 bg-fuschia-50 hover:bg-fuschia-100 rounded-lg transition-colors"
+                className="block w-full text-left px-4 py-3 bg-fuchsia-50 hover:bg-fuchsia-100 rounded-lg transition-colors"
               >
                 <div className="flex items-center space-x-3">
-                  <Database className="h-5 w-5 text-fuschia-600" />
-                  <span className="text-sm font-medium text-fuschia-900">Import Data</span>
+                  <Database className="h-5 w-5 text-fuchsia-600" />
+                  <span className="text-sm font-medium text-fuchsia-900">Import Data</span>
                 </div>
               </button>
               <button
@@ -317,7 +317,7 @@ export const DashboardHome: React.FC = () => {
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Getting Started</h3>
             <p className="text-sm text-gray-600 mb-4">
-              New to Fuschia? Check out our quick start guide to begin automating your workflows.
+              New to Fuchsia? Check out our quick start guide to begin automating your workflows.
             </p>
             <button className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center">
               View tutorial <ArrowRight className="h-4 w-4 ml-1" />

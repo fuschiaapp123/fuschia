@@ -1,6 +1,6 @@
 """
-MCP (Model Context Protocol) Server Service for Fuschia Platform
-Provides MCP server functionality to expose Fuschia tools and resources to MCP clients
+MCP (Model Context Protocol) Server Service for Fuchsia Platform
+Provides MCP server functionality to expose Fuchsia tools and resources to MCP clients
 """
 
 import json
@@ -17,11 +17,11 @@ class MCPTool:
     """Represents an MCP tool with standardized interface"""
     
     def __init__(self, name: str, description: str, input_schema: Dict[str, Any], 
-                 fuschia_tool_id: str = None, server_id: str = None):
+                 fuchsia_tool_id: str = None, server_id: str = None):
         self.name = name
         self.description = description
         self.input_schema = input_schema
-        self.fuschia_tool_id = fuschia_tool_id
+        self.fuchsia_tool_id = fuchsia_tool_id
         self.server_id = server_id
     
     def to_dict(self) -> Dict[str, Any]:
@@ -53,54 +53,54 @@ class MCPResource:
         return result
 
 
-class FuschiaMCPServer:
+class FuchsiaMCPServer:
     """
-    Fuschia MCP Server implementation
-    Exposes Fuschia platform capabilities via MCP protocol
+    Fuchsia MCP Server implementation
+    Exposes Fuchsia platform capabilities via MCP protocol
     """
     
-    def __init__(self, server_id: str = "fuschia-platform"):
+    def __init__(self, server_id: str = "fuchsia-platform"):
         self.server_id = server_id
-        self.name = "Fuschia Intelligent Automation Platform"
+        self.name = "Fuchsia Intelligent Automation Platform"
         self.version = "1.0.0"
         self.tools: Dict[str, MCPTool] = {}
         self.resources: Dict[str, MCPResource] = {}
         self.is_running = False
         
     async def initialize(self):
-        """Initialize the MCP server with Fuschia tools and resources"""
-        logger.info(f"Initializing Fuschia MCP Server: {self.server_id}")
+        """Initialize the MCP server with Fuchsia tools and resources"""
+        logger.info(f"Initializing Fuchsia MCP Server: {self.server_id}")
         
-        # Load Fuschia tools into MCP format
-        await self._load_fuschia_tools()
+        # Load Fuchsia tools into MCP format
+        await self._load_fuchsia_tools()
         
-        # Load Fuschia resources
-        await self._load_fuschia_resources()
+        # Load Fuchsia resources
+        await self._load_fuchsia_resources()
         
         self.is_running = True
         logger.info(f"MCP Server initialized with {len(self.tools)} tools and {len(self.resources)} resources")
     
-    async def _load_fuschia_tools(self):
-        """Load Fuschia system tools and convert to MCP format"""
+    async def _load_fuchsia_tools(self):
+        """Load Fuchsia system tools and convert to MCP format"""
         try:
             # Get system tools
             system_tools = await system_tools_service.get_available_tools()
             
             for tool_id, tool_info in system_tools.items():
-                mcp_tool = self._convert_fuschia_tool_to_mcp(tool_id, tool_info)
+                mcp_tool = self._convert_fuchsia_tool_to_mcp(tool_id, tool_info)
                 self.tools[mcp_tool.name] = mcp_tool
                 
             logger.info(f"Loaded {len(system_tools)} system tools into MCP server")
             
         except Exception as e:
-            logger.error(f"Error loading Fuschia tools: {e}")
+            logger.error(f"Error loading Fuchsia tools: {e}")
     
-    def _convert_fuschia_tool_to_mcp(self, tool_id: str, tool_info: Dict[str, Any]) -> MCPTool:
-        """Convert Fuschia tool format to MCP Tool format"""
+    def _convert_fuchsia_tool_to_mcp(self, tool_id: str, tool_info: Dict[str, Any]) -> MCPTool:
+        """Convert Fuchsia tool format to MCP Tool format"""
         
         # Extract tool information
         name = tool_info.get('name', tool_id)
-        description = tool_info.get('description', f'Fuschia tool: {name}')
+        description = tool_info.get('description', f'Fuchsia tool: {name}')
         
         # Convert parameters to JSON Schema format
         parameters = tool_info.get('parameters', {})
@@ -111,27 +111,27 @@ class FuschiaMCPServer:
         }
         
         return MCPTool(
-            name=f"fuschia_{name}",
+            name=f"fuchsia_{name}",
             description=description,
             input_schema=input_schema,
-            fuschia_tool_id=tool_id
+            fuchsia_tool_id=tool_id
         )
     
-    async def _load_fuschia_resources(self):
-        """Load Fuschia knowledge resources"""
+    async def _load_fuchsia_resources(self):
+        """Load Fuchsia knowledge resources"""
         try:
             # Add knowledge graph as a resource
             knowledge_resource = MCPResource(
-                uri="fuschia://knowledge/graph",
+                uri="fuchsia://knowledge/graph",
                 name="Knowledge Graph",
-                description="Fuschia platform knowledge graph with entities and relationships",
+                description="Fuchsia platform knowledge graph with entities and relationships",
                 mime_type="application/json"
             )
             self.resources[knowledge_resource.uri] = knowledge_resource
             
             # Add agent templates as resources
             templates_resource = MCPResource(
-                uri="fuschia://templates/agents",
+                uri="fuchsia://templates/agents",
                 name="Agent Templates",
                 description="Available agent templates and configurations",
                 mime_type="application/json"
@@ -140,7 +140,7 @@ class FuschiaMCPServer:
             
             # Add workflow templates as resources
             workflows_resource = MCPResource(
-                uri="fuschia://templates/workflows",
+                uri="fuchsia://templates/workflows",
                 name="Workflow Templates",
                 description="Available workflow templates and configurations",
                 mime_type="application/json"
@@ -150,7 +150,7 @@ class FuschiaMCPServer:
             logger.info(f"Loaded {len(self.resources)} resources into MCP server")
             
         except Exception as e:
-            logger.error(f"Error loading Fuschia resources: {e}")
+            logger.error(f"Error loading Fuchsia resources: {e}")
     
     async def list_tools(self) -> List[Dict[str, Any]]:
         """Handle MCP list_tools request"""
@@ -171,8 +171,8 @@ class FuschiaMCPServer:
         tool = self.tools[name]
         
         try:
-            # Execute the Fuschia tool
-            result = await self._execute_fuschia_tool(tool, arguments)
+            # Execute the Fuchsia tool
+            result = await self._execute_fuchsia_tool(tool, arguments)
             
             # Return result in MCP format
             return [{
@@ -187,18 +187,18 @@ class FuschiaMCPServer:
                 "text": f"Error executing tool: {str(e)}"
             }]
     
-    async def _execute_fuschia_tool(self, tool: MCPTool, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a Fuschia tool and return the result"""
+    async def _execute_fuchsia_tool(self, tool: MCPTool, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a Fuchsia tool and return the result"""
         
-        if tool.fuschia_tool_id:
+        if tool.fuchsia_tool_id:
             # Execute system tool
-            if tool.fuschia_tool_id.startswith('system_'):
+            if tool.fuchsia_tool_id.startswith('system_'):
                 result = await system_tools_service.execute_tool(
-                    tool.fuschia_tool_id, 
+                    tool.fuchsia_tool_id, 
                     arguments
                 )
                 return {
-                    "tool_id": tool.fuschia_tool_id,
+                    "tool_id": tool.fuchsia_tool_id,
                     "result": result,
                     "status": "success",
                     "executed_at": datetime.utcnow().isoformat()
@@ -206,7 +206,7 @@ class FuschiaMCPServer:
         
         # Default execution
         return {
-            "tool_id": tool.fuschia_tool_id,
+            "tool_id": tool.fuchsia_tool_id,
             "arguments": arguments,
             "status": "executed",
             "message": f"Tool {tool.name} executed with arguments",
@@ -249,7 +249,7 @@ class FuschiaMCPServer:
     async def _get_resource_content(self, uri: str) -> Dict[str, Any]:
         """Get content for a specific resource URI"""
         
-        if uri == "fuschia://knowledge/graph":
+        if uri == "fuchsia://knowledge/graph":
             # Return knowledge graph summary
             return {
                 "type": "knowledge_graph",
@@ -262,7 +262,7 @@ class FuschiaMCPServer:
                 }
             }
         
-        elif uri == "fuschia://templates/agents":
+        elif uri == "fuchsia://templates/agents":
             # Return agent templates summary
             return {
                 "type": "agent_templates",
@@ -271,7 +271,7 @@ class FuschiaMCPServer:
                 "total_count": 0
             }
         
-        elif uri == "fuschia://templates/workflows":
+        elif uri == "fuchsia://templates/workflows":
             # Return workflow templates summary
             return {
                 "type": "workflow_templates", 
@@ -301,7 +301,7 @@ class FuschiaMCPServer:
 
 
 # Global server instance
-fuschia_mcp_server = FuschiaMCPServer()
+fuchsia_mcp_server = FuchsiaMCPServer()
 
 
 class MCPServerManager:
@@ -309,8 +309,8 @@ class MCPServerManager:
 
     def __init__(self):
         self.servers: Dict[str, Any] = {}
-        self.default_server = fuschia_mcp_server
-        self.servers["fuschia-platform"] = self.default_server
+        self.default_server = fuchsia_mcp_server
+        self.servers["fuchsia-platform"] = self.default_server
 
         # Register ServiceNow server when it's imported
         try:
@@ -336,7 +336,7 @@ class MCPServerManager:
     async def get_server(self, server_id: str) -> Any:
         """Get or create MCP server instance"""
         if server_id not in self.servers:
-            server = FuschiaMCPServer(server_id)
+            server = FuchsiaMCPServer(server_id)
             await server.initialize()
             self.servers[server_id] = server
         

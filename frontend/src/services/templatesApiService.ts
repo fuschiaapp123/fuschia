@@ -283,31 +283,57 @@ class TemplatesApiService {
       sampleAgentData: agentsData[0],
       sampleTools: agentsData[0]?.tools
     });
-    const nodes = agentsData.map((agentData, index) => ({
-      id: agentData.id || `agent-${index}`,
-      type: 'agentNode',
-      position: agentData.position || { 
-        x: 100 + (index % 3) * 250, 
-        y: 100 + Math.floor(index / 3) * 200 
-      },
-      data: {
-        name: agentData.name || `Agent ${index + 1}`,
-        role: agentData.role || 'executor',
-        skills: Array.isArray(agentData.skills) ? agentData.skills.filter((skill: any) => typeof skill === 'string') : [],
-        tools: this.normalizeTools(agentData.tools || []),
-        description: agentData.description || '',
-        status: agentData.status || 'active',
-        level: agentData.level || 1,
-        department: agentData.department || 'General',
-        maxConcurrentTasks: agentData.maxConcurrentTasks || agentData.max_concurrent_tasks || 5,
-        strategy: agentData.strategy || 'simple',
-        // Only include safe, primitive properties to avoid React rendering errors
-        capabilities: Array.isArray(agentData.capabilities) ? agentData.capabilities.filter((cap: any) => typeof cap === 'string') : [],
-        instructions: typeof agentData.instructions === 'string' ? agentData.instructions : '',
-        model: typeof agentData.model === 'string' ? agentData.model : '',
-        temperature: typeof agentData.temperature === 'number' ? agentData.temperature : 0.7
+    const nodes = agentsData.map((agentData, index) => {
+      // Convert rag_config from backend (snake_case) to ragConfig (camelCase) for frontend
+      let ragConfig = undefined;
+      if (agentData.rag_config) {
+        ragConfig = {
+          enabled: agentData.rag_config.enabled || false,
+          dataSourceType: agentData.rag_config.data_source_type || 'none',
+          dataSourcePath: agentData.rag_config.data_source_path || '',
+          vectorDatabase: agentData.rag_config.vector_database || 'faiss',
+          embeddingModel: agentData.rag_config.embedding_model || 'openai-text-embedding-3-small',
+          chunkSize: agentData.rag_config.chunk_size || 1000,
+          chunkOverlap: agentData.rag_config.chunk_overlap || 200,
+          topK: agentData.rag_config.top_k || 5,
+          similarityThreshold: agentData.rag_config.similarity_threshold || 0.7,
+          rerankResults: agentData.rag_config.rerank_results || false
+        };
+        console.log(`🔧 RAG config loaded for agent ${agentData.name}:`, ragConfig);
       }
-    }));
+
+      return {
+        id: agentData.id || `agent-${index}`,
+        type: 'agentNode',
+        position: agentData.position || {
+          x: 100 + (index % 3) * 250,
+          y: 100 + Math.floor(index / 3) * 200
+        },
+        data: {
+          name: agentData.name || `Agent ${index + 1}`,
+          role: agentData.role || 'executor',
+          skills: Array.isArray(agentData.skills) ? agentData.skills.filter((skill: any) => typeof skill === 'string') : [],
+          tools: this.normalizeTools(agentData.tools || []),
+          description: agentData.description || '',
+          status: agentData.status || 'active',
+          level: agentData.level || 1,
+          department: agentData.department || 'General',
+          maxConcurrentTasks: agentData.maxConcurrentTasks || agentData.max_concurrent_tasks || 5,
+          strategy: agentData.strategy || 'simple',
+          // Only include safe, primitive properties to avoid React rendering errors
+          capabilities: Array.isArray(agentData.capabilities) ? agentData.capabilities.filter((cap: any) => typeof cap === 'string') : [],
+          instructions: typeof agentData.instructions === 'string' ? agentData.instructions : '',
+          model: typeof agentData.model === 'string' ? agentData.model : '',
+          temperature: typeof agentData.temperature === 'number' ? agentData.temperature : 0.7,
+          // Include RAG configuration
+          ragConfig: ragConfig,
+          // Include memory enhancement setting (convert from snake_case to camelCase)
+          useMemoryEnhancement: agentData.use_memory_enhancement || agentData.useMemoryEnhancement || false,
+          // Include human-in-the-loop setting (convert from snake_case to camelCase)
+          requiresHumanApproval: agentData.requires_human_approval || agentData.requiresHumanApproval || false
+        }
+      };
+    });
 
     console.log(`🔧 Converted nodes:`, nodes.map(n => ({ id: n.id, tools: n.data.tools, dataKeys: Object.keys(n.data) })));
 

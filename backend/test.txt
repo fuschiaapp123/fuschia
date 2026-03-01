@@ -1,0 +1,1 @@
+To date, enterprise use of AI in business process automation has focused on isolated pilots and bespoke point solutions. Agentic AI platforms will standardise orchestration, security, integration, and monitoring, lowering cost and complexity while speeding deployment—and pushing organisations to move beyond fragmented, piecemeal AI strategies.

@@ -1,6 +1,6 @@
 # Gmail MCP Server Setup Guide
 
-This guide explains how to set up and configure the Gmail MCP (Model Context Protocol) server for the Fuschia Intelligent Automation Platform.
+This guide explains how to set up and configure the Gmail MCP (Model Context Protocol) server for the Fuchsia Intelligent Automation Platform.
 
 ## Overview
 
@@ -53,7 +53,7 @@ The Gmail MCP server enables AI agents to interact with Gmail mailboxes through 
    - Go to "APIs & Services" > "Credentials"
    - Click "Create Credentials" > "OAuth 2.0 Client IDs"
    - Choose "Desktop application" as the application type
-   - Give it a name (e.g., "Fuschia Gmail Integration")
+   - Give it a name (e.g., "Fuchsia Gmail Integration")
    - Click "Create"
 
 4. **Download Credentials**
@@ -112,7 +112,7 @@ The Gmail MCP server enables AI agents to interact with Gmail mailboxes through 
    - Grant the necessary permissions
    - The server will save a `token.json` file for future use
 
-### Step 4: Integration with Fuschia Platform
+### Step 4: Integration with Fuchsia Platform
 
 1. **Register the MCP Server**
 
@@ -163,7 +163,7 @@ The Gmail MCP server enables AI agents to interact with Gmail mailboxes through 
      "tool_name": "gmail_send_message",
      "arguments": {
        "to": "recipient@example.com",
-       "subject": "Hello from Fuschia",
+       "subject": "Hello from Fuchsia",
        "body": "This is a test email sent via the Gmail MCP server."
      }
    }

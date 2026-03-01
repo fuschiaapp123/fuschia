@@ -16,7 +16,7 @@
 
 ### Repository Structure Ready:
 ```
-Fuschia-alfa/
+Fuchsia-alfa/
 ├── .gitignore                    # Git ignore rules
 ├── README.md                     # Project documentation
 ├── PRD.md                        # Product requirements
@@ -45,7 +45,7 @@ git init
 git add .
 
 # Initial commit
-git commit -m "Initial commit: Fuschia Intelligent Automation Platform
+git commit -m "Initial commit: Fuchsia Intelligent Automation Platform
 
 Features:
 - Complete React/TypeScript frontend with Vite
@@ -60,7 +60,7 @@ Features:
 🤖 Generated with Claude Code"
 
 # Add remote repository (replace with your GitHub repo URL)
-git remote add origin https://github.com/yourusername/fuschia-automation-platform.git
+git remote add origin https://github.com/yourusername/fuchsia-automation-platform.git
 
 # Push to GitHub
 git push -u origin main

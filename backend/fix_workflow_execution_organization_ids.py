@@ -17,7 +17,7 @@ async def fix_organization_ids():
     """Fix organization_id references in workflow_executions table"""
 
     # Connect to database
-    db_path = "./fuschia_users.db"
+    db_path = "./fuchsia_users.db"
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 

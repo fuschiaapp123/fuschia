@@ -131,7 +131,7 @@ export const UserProfile: React.FC = () => {
           <div className="flex space-x-3">
             <button
               onClick={() => setIsEditing(true)}
-              className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
+              className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors"
             >
               Edit Profile
             </button>
@@ -182,7 +182,7 @@ export const UserProfile: React.FC = () => {
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                 />
               </div>
               
@@ -195,7 +195,7 @@ export const UserProfile: React.FC = () => {
                   required
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                 />
               </div>
 
@@ -234,7 +234,7 @@ export const UserProfile: React.FC = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 disabled:opacity-50 flex items-center"
+                  className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 disabled:opacity-50 flex items-center"
                 >
                   {loading && (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -260,7 +260,7 @@ export const UserProfile: React.FC = () => {
                   required
                   value={passwordData.current_password}
                   onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                 />
               </div>
 
@@ -274,7 +274,7 @@ export const UserProfile: React.FC = () => {
                   minLength={8}
                   value={passwordData.new_password}
                   onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                 />
               </div>
 
@@ -288,7 +288,7 @@ export const UserProfile: React.FC = () => {
                   minLength={8}
                   value={passwordData.confirm_password}
                   onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                 />
               </div>
 
@@ -304,7 +304,7 @@ export const UserProfile: React.FC = () => {
                 <button
                   type="submit"
                   disabled={passwordLoading}
-                  className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 disabled:opacity-50 flex items-center"
+                  className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 disabled:opacity-50 flex items-center"
                 >
                   {passwordLoading && (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -318,8 +318,8 @@ export const UserProfile: React.FC = () => {
           <div className="p-6">
             <div className="space-y-6">
               <div className="flex items-center space-x-4">
-                <div className="h-16 w-16 bg-fuschia-100 rounded-full flex items-center justify-center">
-                  <span className="text-fuschia-600 text-xl font-semibold">
+                <div className="h-16 w-16 bg-fuchsia-100 rounded-full flex items-center justify-center">
+                  <span className="text-fuchsia-600 text-xl font-semibold">
                     {currentUser.full_name.split(' ').map(n => n[0]).join('').toUpperCase()}
                   </span>
                 </div>

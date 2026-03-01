@@ -1,5 +1,5 @@
 """
-Authentication and Authorization system for Fuschia SaaS
+Authentication and Authorization system for Fuchsia SaaS
 Handles user registration, login, JWT tokens, and role-based access control
 """
 

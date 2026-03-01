@@ -106,7 +106,7 @@ export const LLMSettings: React.FC = () => {
             <select
               value={selectedProvider}
               onChange={(e) => updateProvider(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             >
               {LLM_PROVIDERS.map(provider => (
                 <option key={provider.id} value={provider.id}>
@@ -123,7 +123,7 @@ export const LLMSettings: React.FC = () => {
             <select
               value={selectedModel}
               onChange={(e) => updateModel(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             >
               {currentProvider?.models.map(model => (
                 <option key={model.id} value={model.id}>
@@ -163,7 +163,7 @@ export const LLMSettings: React.FC = () => {
               max="32000"
               value={maxTokens}
               onChange={(e) => updateMaxTokens(parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             />
           </div>
         </div>
@@ -175,7 +175,7 @@ export const LLMSettings: React.FC = () => {
               id="streaming"
               checked={streamingEnabled}
               onChange={(e) => updateStreamingEnabled(e.target.checked)}
-              className="rounded text-fuschia-500"
+              className="rounded text-fuchsia-500"
             />
             <label htmlFor="streaming" className="text-sm font-medium text-gray-700">
               Enable streaming responses
@@ -239,7 +239,7 @@ export const LLMSettings: React.FC = () => {
                             value={tempKey || (hasApiKey ? '••••••••••••••••' : '')}
                             onChange={(e) => handleApiKeyChange(provider.id, e.target.value)}
                             placeholder={`Enter ${provider.name} API key...`}
-                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                           />
                           <button
                             onClick={() => toggleApiKeyVisibility(provider.id)}
@@ -252,7 +252,7 @@ export const LLMSettings: React.FC = () => {
                         {tempKey && (
                           <button
                             onClick={() => saveApiKey(provider.id)}
-                            className="flex items-center space-x-1 px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600"
+                            className="flex items-center space-x-1 px-3 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600"
                           >
                             <Save className="w-4 h-4" />
                             <span>Save</span>

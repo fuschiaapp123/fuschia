@@ -17,6 +17,9 @@ from app.models.agent_organization import (
 )
 from app.services.websocket_manager import websocket_manager
 from app.services.tool_registry_service import tool_registry_service
+from app.services.rag_service import rag_service
+from app.services.graphiti_enhanced_memory_service import graphiti_enhanced_memory_service
+from app.models.rag_config import RAGConfig
 from openai import OpenAI
 
 
@@ -63,6 +66,7 @@ class SimpleTaskExecution(Signature):
     conversation_history: History = InputField(desc="Previous conversation messages and context for multi-turn interactions")
 
     # Output fields
+    response = OutputField(desc="Final response or result after completing the task")
     execution_result: str = OutputField(desc="Result of task execution")
     confidence_score: str = OutputField(desc="Confidence score between 0.0 and 1.0")
     success_status: str = OutputField(desc="Whether execution was successful (true/false)")
@@ -86,6 +90,7 @@ class ChainOfThoughtPlanning(Signature):
     conversation_history: History = InputField(desc="Previous conversation messages and context for multi-turn interactions")
 
     # Output fields
+    response = OutputField(desc="Final response or result after completing the task")
     reasoning_steps: str = OutputField(desc="JSON list of reasoning steps")
     execution_plan: str = OutputField(desc="Detailed execution plan")
     required_tools: str = OutputField(desc="Tools needed for execution")
@@ -140,7 +145,7 @@ class SimpleExecutionModule(dspy.Module):
         except Exception as e:
             logger.warning("Failed to get tools from registry", error=str(e))
             available_tools_list = []
-
+    
         result = self.execute_task(
             task_name=task_name,
             task_description=task_description,
@@ -154,7 +159,7 @@ class SimpleExecutionModule(dspy.Module):
             execution_context=execution_context,
             conversation_history=conversation_history
         )
-
+        
         return result
 
 
@@ -236,7 +241,7 @@ class WorkflowExecutionAgent:
             self.cot_planner = ChainOfThoughtModule()
             # Initialize dspy.ReAct with tools - will be done lazily when needed
             self.react_executor = None
-            self.logger.info("DSPy modules initialized for WorkflowExecutionAgent")
+            
         else:
             self.logger.warning("DSPy not configured - falling back to OpenAI client")
             self.simple_executor = None
@@ -252,7 +257,7 @@ class WorkflowExecutionAgent:
 
         # Conversation history for multi-turn interactions (DSPy History)
         self.conversation_history: History = History(messages=[])
-        self.logger.info("Initialized DSPy conversation history for multi-turn interactions")
+        
 
         # Initialize tools
         self.available_tools = self._initialize_tools()
@@ -260,36 +265,165 @@ class WorkflowExecutionAgent:
     def _initialize_tools(self) -> Dict[str, Callable]:
         """Initialize available tools for the agent"""
         tools = {}
-        
+
         for tool in self.agent_node.tools:
+            tool_name = tool.name  # Capture tool name for closure
+            self.logger.debug("Initializing tool for agent", tool_name=tool_name, agent_id=self.agent_node.id)
             # Map tool names to implementations
-            if tool.name == "database_query":
-                tools[tool.name] = self._tool_database_query
-            elif tool.name == "api_request":
-                tools[tool.name] = self._tool_api_request
-            elif tool.name == "file_operation":
-                tools[tool.name] = self._tool_file_operation
-            elif tool.name == "human_interaction":
-                tools[tool.name] = self._tool_human_interaction
-            elif tool.name == "agent_handoff":
-                tools[tool.name] = self._tool_agent_handoff
-            elif tool.name == "task_validation":
-                tools[tool.name] = self._tool_task_validation
-            elif tool.name == "knowledge_search":
-                tools[tool.name] = self._tool_knowledge_search
-            elif tool.name == "notification":
-                tools[tool.name] = self._tool_notification
+            if tool_name == "database_query":
+                tools[tool_name] = self._tool_database_query
+            elif tool_name == "api_request":
+                tools[tool_name] = self._tool_api_request
+            elif tool_name == "file_operation":
+                tools[tool_name] = self._tool_file_operation
+            elif tool_name == "human_interaction":
+                tools[tool_name] = self._tool_human_interaction
+            elif tool_name == "agent_handoff":
+                tools[tool_name] = self._tool_agent_handoff
+            elif tool_name == "task_validation":
+                tools[tool_name] = self._tool_task_validation
+            elif tool_name == "knowledge_search":
+                tools[tool_name] = self._tool_knowledge_search
+            elif tool_name == "notification":
+                tools[tool_name] = self._tool_notification
+            elif self._is_mcp_tool(tool_name):
+                # MCP tool - create wrapper that calls the appropriate MCP server
+                tools[tool_name] = self._create_mcp_tool_wrapper(tool_name)
             else:
-                # Generic tool wrapper
-                tools[tool.name] = lambda **kwargs: self._generic_tool_execution(tool.name, **kwargs)
-        
+                # Generic tool wrapper - use default argument to capture tool_name
+                tools[tool_name] = self._create_generic_tool_wrapper(tool_name)
+
         # Log the tool mapping for debugging
         logger.info("Tool mapping initialized for agent", agent_id=self.agent_node.id)
-        for tool_name, func in tools.items():
+        for name, func in tools.items():
             func_qualname = getattr(func, '__qualname__', getattr(func, '__name__', str(func)))
-            logger.debug(f"Tool '{tool_name}' -> {func_qualname}")
-        
+            logger.debug(f"Tool '{name}' -> {func_qualname}")
+
         return tools
+
+    def _is_mcp_tool(self, tool_name: str) -> bool:
+        """Check if a tool name corresponds to an MCP tool"""
+        # Full MCP format: mcp_{server-id}_{tool_name}
+        if tool_name.startswith("mcp_"):
+            return True
+        # Simple format: servicenow_*, hcmpro_*, gmail_*
+        mcp_prefixes = ("servicenow_", "hcmpro_", "gmail_")
+        return tool_name.startswith(mcp_prefixes)
+
+    def _create_mcp_tool_wrapper(self, tool_name: str) -> Callable:
+        """Create a wrapper function for MCP tools that calls the appropriate MCP server"""
+        async def mcp_tool_wrapper(**kwargs) -> Dict[str, Any]:
+            return await self._execute_mcp_tool(tool_name, **kwargs)
+
+        mcp_tool_wrapper.__name__ = tool_name
+        mcp_tool_wrapper.__doc__ = f"Execute MCP tool: {tool_name}"
+        return mcp_tool_wrapper
+
+    def _create_generic_tool_wrapper(self, tool_name: str) -> Callable:
+        """Create a wrapper function for generic tools"""
+        async def generic_tool_wrapper(**kwargs) -> Dict[str, Any]:
+            return await self._generic_tool_execution(tool_name, **kwargs)
+
+        generic_tool_wrapper.__name__ = tool_name
+        generic_tool_wrapper.__doc__ = f"Execute tool: {tool_name}"
+        return generic_tool_wrapper
+
+    async def _execute_mcp_tool(self, tool_name: str, **kwargs) -> Dict[str, Any]:
+        """Execute an MCP tool by routing to the appropriate MCP server"""
+        self.logger.info(f"Executing MCP tool: {tool_name}", params=kwargs)
+
+        try:
+            # Parse the tool name to determine MCP server and actual tool name
+            # Format can be:
+            #   - "mcp_servicenow-api_servicenow_create_record" (full MCP format)
+            #   - "servicenow_create_record" (simple format)
+            mcp_server = None
+            actual_tool_name = tool_name
+
+            # Handle full MCP format: mcp_{server-id}_{tool_name}
+            if tool_name.startswith("mcp_"):
+                # Parse: mcp_servicenow-api_servicenow_create_record
+                parts = tool_name.split("_", 2)  # ['mcp', 'servicenow-api', 'servicenow_create_record']
+                if len(parts) >= 3:
+                    server_id = parts[1]  # e.g., 'servicenow-api'
+                    actual_tool_name = parts[2]  # e.g., 'servicenow_create_record'
+
+                    if "servicenow" in server_id:
+                        from app.services.servicenow_mcp_server import servicenow_mcp_server
+                        mcp_server = servicenow_mcp_server
+                    elif "hcmpro" in server_id:
+                        from app.services.hcmpro_mcp_server import hcmpro_mcp_server
+                        mcp_server = hcmpro_mcp_server
+                    elif "gmail" in server_id:
+                        from app.services.gmail_mcp_server import gmail_mcp_server
+                        mcp_server = gmail_mcp_server
+
+            # Handle simple format: servicenow_create_record, hcmpro_list_job_offers, gmail_list_messages
+            if mcp_server is None:
+                if tool_name.startswith("servicenow_") or actual_tool_name.startswith("servicenow_"):
+                    from app.services.servicenow_mcp_server import servicenow_mcp_server
+                    mcp_server = servicenow_mcp_server
+                elif tool_name.startswith("hcmpro_") or actual_tool_name.startswith("hcmpro_"):
+                    from app.services.hcmpro_mcp_server import hcmpro_mcp_server
+                    mcp_server = hcmpro_mcp_server
+                elif tool_name.startswith("gmail_") or actual_tool_name.startswith("gmail_"):
+                    from app.services.gmail_mcp_server import gmail_mcp_server
+                    mcp_server = gmail_mcp_server
+
+            if mcp_server is None:
+                return {
+                    'success': False,
+                    'tool_name': tool_name,
+                    'error': f"No MCP server found for tool: {tool_name}",
+                    'observation': f"Failed to execute {tool_name}: Unknown MCP server"
+                }
+
+            self.logger.info(f"Resolved MCP tool: {tool_name} -> server={type(mcp_server).__name__}, actual_tool={actual_tool_name}")
+
+            # Initialize server if not running
+            if not mcp_server.is_running:
+                self.logger.info(f"Initializing MCP server for tool: {actual_tool_name}")
+                await mcp_server.initialize()
+
+            # Unwrap nested kwargs if present (DSPy sometimes wraps params)
+            actual_params = kwargs.get('kwargs', kwargs) if len(kwargs) == 1 and 'kwargs' in kwargs else kwargs
+
+            # Call the MCP server's call_tool method with the actual tool name
+            self.logger.info(f"Calling MCP server.call_tool({actual_tool_name})", params=actual_params)
+            result = await mcp_server.call_tool(actual_tool_name, actual_params)
+
+            # Format result
+            result_text = ""
+            if isinstance(result, list) and len(result) > 0:
+                first_content = result[0]
+                if isinstance(first_content, dict) and 'text' in first_content:
+                    result_text = first_content['text']
+                else:
+                    result_text = str(first_content)
+            elif isinstance(result, dict):
+                result_text = json.dumps(result, default=str)
+            else:
+                result_text = str(result)
+
+            self.logger.info(f"MCP tool {tool_name} executed successfully", result_preview=result_text[:200] if result_text else "empty")
+
+            return {
+                'success': True,
+                'tool_name': tool_name,
+                'result': result,
+                'result_text': result_text,
+                'observation': f"MCP tool {tool_name} executed successfully: {result_text[:500] if result_text else 'No output'}"
+            }
+
+        except Exception as e:
+            error_msg = f"MCP tool {tool_name} failed: {str(e)}"
+            self.logger.error(error_msg, tool=tool_name, error=str(e))
+            return {
+                'success': False,
+                'tool_name': tool_name,
+                'error': str(e),
+                'observation': error_msg
+            }
     
     async def execute_task(self,
                           task: WorkflowTask,
@@ -301,7 +435,7 @@ class WorkflowExecutionAgent:
         self.current_execution_id = workflow_execution.id
 
         task_id = task.id
-        self.logger.info("Preparing to execute task", task_id=task_id, task_context=task.context)
+        
         # Extract task_type from task context (passed from workflow node)
         task_type = task.context.get('node_type', 'action') if task.context else 'action'
 
@@ -318,14 +452,36 @@ class WorkflowExecutionAgent:
         task.started_at = datetime.utcnow()
         task.assigned_agent_id = self.agent_node.id
 
-        # Search knowledge graph memory before task execution (if enabled)
-        if workflow_execution.use_memory_enhancement:
+        # Search knowledge graph memory before task execution (if enabled at agent level)
+        self.logger.info(
+            "Checking memory enhancement for agent",
+            task_id=task_id,
+            agent_id=self.agent_node.id,
+            agent_name=self.agent_node.name,
+            use_memory_enhancement=self.agent_node.use_memory_enhancement
+        )
+        if self.agent_node.use_memory_enhancement:
             execution_context = await self._search_and_enhance_context(
                 task,
                 execution_context,
                 workflow_execution
             )
+            
 
+        # Enhance context with RAG (Retrieval-Augmented Generation) if configured
+        self.logger.info(
+            "Checking RAG configuration for agent",
+            task_id=task_id,
+            rag_enabled=self.agent_node.rag_config.enabled if self.agent_node.rag_config else False
+            )
+        if self.agent_node.rag_config and self.agent_node.rag_config.enabled:
+            execution_context = await self._enhance_context_with_rag(
+                task,
+                execution_context,
+                workflow_execution
+            )
+           
+        
         try:
             # Condition tasks always use simple strategy regardless of agent configuration
             if task_type == 'condition':
@@ -368,9 +524,21 @@ class WorkflowExecutionAgent:
                 }
 
             # Check if human approval required
+            self.logger.info(
+                "Checking if human approval is required",
+                task_id=task_id,
+                requires_human_approval=self.agent_node.requires_human_approval,
+                confidence=result.get('confidence', 1.0),
+                escalation_threshold=self.agent_node.human_escalation_threshold
+            )
             if (self.agent_node.requires_human_approval or
                 result.get('confidence', 1.0) < self.agent_node.human_escalation_threshold):
-
+                self.logger.info(
+                    "Task requires human approval",
+                    task_id=task_id,
+                    confidence=result.get('confidence', 1.0),
+                    escalation_threshold=self.agent_node.human_escalation_threshold
+                )
                 approval_result = await self._request_human_approval(task, result, workflow_execution)
                 if approval_result['status'] == 'approved':
                     task.status = TaskStatus.COMPLETED
@@ -385,18 +553,31 @@ class WorkflowExecutionAgent:
 
             # Store results
             task.results = result
-            
-            
+
+
             self.logger.info(
                 "Task execution completed",
                 task_id=task_id,
                 status=task.status,
                 confidence=result.get('confidence', 0.0)
             )
-            
+
+            # Record task execution to knowledge graph memory (if memory enhancement is enabled)
+            if self.agent_node.use_memory_enhancement:
+                try:
+                    await self._record_task_execution_to_memory(
+                        task, result, workflow_execution, execution_context
+                    )
+                except Exception as mem_error:
+                    self.logger.warning(
+                        "Failed to record task to memory graph (non-blocking)",
+                        task_id=task_id,
+                        error=str(mem_error)
+                    )
+
             # Clean up execution ID
             self.current_execution_id = None
-            
+
             return {
                 'task_id': task_id,
                 'status': task.status.value,
@@ -413,10 +594,30 @@ class WorkflowExecutionAgent:
                 'error_type': type(e).__name__,
                 'timestamp': datetime.utcnow().isoformat()
             }
-            
+
+            # Record failed task execution to knowledge graph memory (if memory enhancement is enabled)
+            # This helps learn from failures
+            if self.agent_node.use_memory_enhancement:
+                try:
+                    failure_result = {
+                        'success': False,
+                        'status': TaskStatus.FAILED.value,
+                        'error': str(e),
+                        'error_type': type(e).__name__
+                    }
+                    await self._record_task_execution_to_memory(
+                        task, failure_result, workflow_execution, execution_context
+                    )
+                except Exception as mem_error:
+                    self.logger.warning(
+                        "Failed to record task failure to memory graph (non-blocking)",
+                        task_id=task_id,
+                        error=str(mem_error)
+                    )
+
             # Clean up execution ID
             self.current_execution_id = None
-            
+
             return {
                 'task_id': task_id,
                 'status': task.status.value,
@@ -492,6 +693,7 @@ class WorkflowExecutionAgent:
                     execution_context=execution_context_str,
                     conversation_history=self.conversation_history
                 )
+                self.logger.debug("SimpleExecutionModule result", result=prediction)
 
             # Append this interaction to conversation history
             self.conversation_history.messages.append({
@@ -503,11 +705,7 @@ class WorkflowExecutionAgent:
                 "content": f"Result: {prediction.execution_result}\nReasoning: {prediction.reasoning}"
             })
 
-            self.logger.info(
-                "Updated conversation history",
-                task_id=task.id,
-                history_length=len(self.conversation_history.messages)
-            )
+
             
             # Send DSPy response to WebSocket
             await websocket_manager.send_agent_thought(
@@ -517,7 +715,7 @@ class WorkflowExecutionAgent:
                 workflow_id=workflow_execution.id,
                 workflow_name=f"Workflow-{workflow_execution.workflow_template_id[:8]}...",
                 thought_type='action',
-                message=f"DSPy Simple Execution Result:\n{prediction.execution_result}",
+                message=f"DSPy Simple Execution Result:\n Response: {prediction.response}\n Reasoning: {prediction.reasoning}",
                 metadata={
                     'step': 'dspy_simple_response',
                     'tool': 'dspy_simple_module',
@@ -541,7 +739,7 @@ class WorkflowExecutionAgent:
                 'confidence': confidence,
                 'execution_summary': f"Task '{task.name}' executed using DSPy simple strategy by {self.agent_node.name}",
                 'reasoning': prediction.reasoning,
-                'response': prediction.execution_result,
+                'response': prediction.response,
                 'task_id': task.id,
                 'agent_id': self.agent_node.id,
                 'completed_at': datetime.utcnow().isoformat()
@@ -550,11 +748,11 @@ class WorkflowExecutionAgent:
             # Include task_status and pause_reason if present
             if task_status and task_status != 'COMPLETED':
                 result['task_status'] = task_status
-                self.logger.info(f"Task status from DSPy simple: {task_status}")
+                
 
             if pause_reason:
                 result['pause_reason'] = pause_reason
-                self.logger.info(f"Pause reason from DSPy simple: {pause_reason}")
+                
 
             self.logger.info(
                 "DSPy simple strategy execution completed",
@@ -589,11 +787,7 @@ class WorkflowExecutionAgent:
                                          workflow_execution: WorkflowExecution) -> Dict[str, Any]:
         """Fallback execution using direct OpenAI client calls"""
         
-        self.logger.info(
-            "Executing task with OpenAI simple strategy (fallback)",
-            task_id=task.id,
-            agent_id=self.agent_node.id
-        )
+        
         
         simple_prompt = self._build_simple_prompt(task, execution_context, workflow_execution)
         
@@ -749,11 +943,7 @@ class WorkflowExecutionAgent:
                 "content": f"Plan: {prediction.execution_plan}\nTools: {prediction.required_tools}"
             })
 
-            self.logger.info(
-                "Updated conversation history",
-                task_id=task.id,
-                history_length=len(self.conversation_history.messages)
-            )
+            
             
             # Parse reasoning steps from DSPy output
             reasoning_steps = []
@@ -797,7 +987,7 @@ class WorkflowExecutionAgent:
                 'reasoning_steps': reasoning_steps,
                 'execution_plan': prediction.execution_plan,
                 'required_tools': prediction.required_tools,
-                'response': prediction.execution_plan,
+                'response': prediction.response,
                 'task_id': task.id,
                 'agent_id': self.agent_node.id,
                 'completed_at': datetime.utcnow().isoformat()
@@ -1241,18 +1431,25 @@ class WorkflowExecutionAgent:
         
         # Create DSPy Tool objects for async human-in-the-loop functions
         # DSPy will handle the async execution properly with acall()
-        human_tools = [
-            dspy.Tool(ask_user_question, name="ask_user_question", 
-                     desc="Ask the user a question and wait for their response"),
-            dspy.Tool(request_user_approval, name="request_user_approval", 
-                     desc="Request user approval for an action"),
-            dspy.Tool(request_missing_information, name="request_missing_information", 
-                     desc="Request additional information from the user"),
-            dspy.Tool(complete_task, name="complete_task", 
-                     desc="Mark the current task as completed with the given result")
-        ]
-        logger.info(f"Adding {len(human_tools)} human-in-the-loop tools for DSPy execution")
-        tools.extend(human_tools)
+        # Only add human-in-the-loop tools if the agent has requires_human_approval enabled
+        if self.agent_node.requires_human_approval:
+            human_tools = [
+                dspy.Tool(ask_user_question, name="ask_user_question",
+                         desc="Ask the user a question and wait for their response"),
+                dspy.Tool(request_user_approval, name="request_user_approval",
+                         desc="Request user approval for an action"),
+                dspy.Tool(request_missing_information, name="request_missing_information",
+                         desc="Request additional information from the user"),
+                dspy.Tool(complete_task, name="complete_task",
+                         desc="Mark the current task as completed with the given result")
+            ]
+            logger.info(f"Adding {len(human_tools)} human-in-the-loop tools for DSPy execution (agent requires_human_approval=True)")
+            tools.extend(human_tools)
+        else:
+            # Only add the complete_task tool when human-in-the-loop is disabled
+            tools.append(dspy.Tool(complete_task, name="complete_task",
+                         desc="Mark the current task as completed with the given result"))
+            logger.info("Human-in-the-loop tools skipped (agent requires_human_approval=False), only complete_task added")
         
         # Add selected System Tools (RAG, MCP, Context Enhancement, etc.)
         system_tools = await self._get_selected_system_tools(task, workflow_execution)
@@ -1829,6 +2026,7 @@ class WorkflowExecutionAgent:
             'success': react_result.get('success', False),
             'planning_phase': planning_result,
             'execution_phase': react_result,
+            'response': react_result.get('response', ''),
             'confidence': min(planning_result.get('confidence', 0.5), react_result.get('confidence', 0.5)),
             'strategy': 'hybrid'
         }
@@ -2017,6 +2215,7 @@ class WorkflowExecutionAgent:
     
     async def _generic_tool_execution(self, tool_name: str, **kwargs) -> Dict[str, Any]:
         """Generic tool execution wrapper"""
+        self.logger.info(f"Executing generic tool: {tool_name} with parameters: {kwargs}")
         return {
             'success': True,
             'tool_name': tool_name,
@@ -2343,19 +2542,20 @@ Available actions: {', '.join(self.available_tools.keys())}, complete_task, requ
                 )
                 return execution_context
 
-            # Build search query from task information
-            query_parts = [task.name]
-            if task.description:
-                query_parts.append(task.description)
-            if task.objective:
-                query_parts.append(task.objective)
+            # Use the actual user query for knowledge graph search
+            user_query = execution_context.get('original_message') or execution_context.get('user_request', '')
+            self.logger.debug("User query for knowledge graph search", task_id=task.id, user_query_preview=user_query[:100] if user_query else "No user query provided")    
 
-            # Add relevant context
-            for key, value in execution_context.items():
-                if isinstance(value, str) and len(value) < 200 and key not in ['graphiti_memory']:
-                    query_parts.append(f"{key}: {value}")
-
-            search_query = " ".join(query_parts)
+            # Fall back to task info only if no user query is available
+            if not user_query:
+                query_parts = [task.name]
+                if task.description:
+                    query_parts.append(task.description)
+                if task.objective:
+                    query_parts.append(task.objective)
+                search_query = " ".join(query_parts)
+            else:
+                search_query = user_query
 
             self.logger.info(
                 "Searching knowledge graph memory before task execution",
@@ -2447,16 +2647,16 @@ Available actions: {', '.join(self.available_tools.keys())}, complete_task, requ
             )
 
             # Record this memory search as an agent thought
-            try:
-                await graphiti_enhanced_memory_service.record_agent_thought(
-                    workflow_id=workflow_execution.workflow_template_id,
-                    execution_id=workflow_execution.id,
-                    agent_id=self.agent_node.id,
-                    thought=f"Searched knowledge graph for task '{task.name}' and found {total_results} relevant memory items",
-                    context={"task_id": task.id, "memory_stats": memory_result.search_metadata}
-                )
-            except Exception as e:
-                self.logger.warning("Failed to record memory search thought", error=str(e))
+            # try:
+            #     await graphiti_enhanced_memory_service.record_agent_thought(
+            #         workflow_id=workflow_execution.workflow_template_id,
+            #         execution_id=workflow_execution.id,
+            #         agent_id=self.agent_node.id,
+            #         thought=f"Searched knowledge graph for task '{task.name}' and found {total_results} relevant memory items",
+            #         context={"task_id": task.id, "memory_stats": memory_result.search_metadata}
+            #     )
+            # except Exception as e:
+            #     self.logger.warning("Failed to record memory search thought", error=str(e))
 
             return enhanced_context
 
@@ -2468,3 +2668,313 @@ Available actions: {', '.join(self.available_tools.keys())}, complete_task, requ
             )
             # Return original context on error - graceful degradation
             return execution_context
+
+    async def _record_task_execution_to_memory(
+        self,
+        task: WorkflowTask,
+        result: Dict[str, Any],
+        workflow_execution: WorkflowExecution,
+        execution_context: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Record task execution results to the Graphiti knowledge graph memory
+
+        This method is called after task completion to store the task results,
+        agent actions, and any learned information in the temporal knowledge graph.
+        This enables future tasks to benefit from this execution's insights.
+
+        The content focuses on user queries and responses to build meaningful
+        knowledge graph entities from conversational data.
+        """
+        try:
+            # Initialize if needed
+            await graphiti_enhanced_memory_service.initialize()
+
+            # Check if client is available
+            if not graphiti_enhanced_memory_service._client:
+                self.logger.warning(
+                    "Graphiti memory client not available - skipping memory recording",
+                    task_id=task.id
+                )
+                return
+
+            self.logger.info(
+                "Recording task execution to knowledge graph memory",
+                task_id=task.id,
+                task_name=task.name,
+                agent_id=self.agent_node.id,
+                success=result.get('success', False)
+            )
+
+            # Enrich result with user request from execution context
+            enriched_result = result.copy()
+            if execution_context:
+                # Extract user request from execution context
+                user_request = (
+                    execution_context.get('original_message') or
+                    execution_context.get('user_request') or
+                    execution_context.get('query') or
+                    ""
+                )
+                if user_request:
+                    # Add to results dict so record_task_execution can find it
+                    if 'results' not in enriched_result:
+                        enriched_result['results'] = {}
+                    if isinstance(enriched_result['results'], dict):
+                        enriched_result['results']['user_request'] = user_request
+                        enriched_result['results']['original_message'] = user_request
+
+            # Record the task execution episode
+            await graphiti_enhanced_memory_service.record_task_execution(
+                workflow_id=workflow_execution.workflow_template_id,
+                execution_id=workflow_execution.id,
+                task_id=task.id,
+                agent_id=self.agent_node.id,
+                task_name=task.name,
+                task_description=task.description or "",
+                execution_result=enriched_result
+            )
+
+            # Record agent thought about task completion
+            task_status = result.get('status', 'unknown')
+            success = result.get('success', False)
+            thought_message = (
+                f"Completed task '{task.name}' with status: {task_status}. "
+                f"Success: {success}. "
+                f"Agent: {self.agent_node.name} ({self.agent_node.id})"
+            )
+
+            # Include key insights from the result if available
+            # if 'results' in result and isinstance(result['results'], dict):
+            #     response = result['results'].get('response', '')
+            #     if response and len(response) > 0:
+            #         # Truncate long responses
+            #         summary = response[:500] + '...' if len(response) > 500 else response
+            #         thought_message += f" Result summary: {summary}"
+
+            # await graphiti_enhanced_memory_service.record_agent_thought(
+            #     workflow_id=workflow_execution.workflow_template_id,
+            #     execution_id=workflow_execution.id,
+            #     agent_id=self.agent_node.id,
+            #     thought=thought_message,
+            #     context={
+            #         "task_id": task.id,
+            #         "task_name": task.name,
+            #         "phase": "completion",
+            #         "status": task_status,
+            #         "success": success
+            #     }
+            # )
+
+            self.logger.info(
+                "Successfully recorded task execution to knowledge graph memory",
+                task_id=task.id,
+                task_name=task.name
+            )
+
+        except Exception as e:
+            self.logger.warning(
+                "Failed to record task execution to knowledge graph memory",
+                task_id=task.id,
+                error=str(e)
+            )
+            # Don't raise - memory recording failure shouldn't fail the task
+
+    async def _enhance_context_with_rag(
+        self,
+        task: WorkflowTask,
+        execution_context: Dict[str, Any],
+        workflow_execution: WorkflowExecution
+    ) -> Dict[str, Any]:
+        """Enhance context with RAG (Retrieval-Augmented Generation) from agent's knowledge base
+
+        This method retrieves relevant documents from the agent's configured knowledge base
+        and adds them to the execution context for enhanced task execution.
+        """
+        # Check if agent has RAG configured
+        rag_config = self.agent_node.rag_config
+        if not rag_config or not rag_config.enabled:
+            return execution_context
+
+        try:
+            self.logger.info(
+                "Retrieving RAG context for task",
+                task_id=task.id,
+                task_name=task.name,
+                data_source=rag_config.data_source_type,
+                data_source_path=rag_config.data_source_path
+            )
+
+            # Initialize RAG for this agent if not already done
+            # This loads documents, creates embeddings, and stores them in the vector database
+            initialized = await rag_service.initialize_rag_for_agent(
+                agent_id=self.agent_node.id,
+                rag_config=rag_config
+            )
+
+            if not initialized:
+                self.logger.warning(
+                    "RAG initialization failed or returned no documents",
+                    agent_id=self.agent_node.id,
+                    data_source_path=rag_config.data_source_path
+                )
+                return execution_context
+
+            # Build query from task information and user request
+            query_parts = [task.name]
+            if task.description:
+                query_parts.append(task.description)
+            if task.objective:
+                query_parts.append(task.objective)
+
+            # Add user request if available
+            user_request = execution_context.get('original_message', execution_context.get('user_request', ''))
+            if user_request:
+                query_parts.append(user_request)
+
+            query = " ".join(query_parts)
+
+            self.logger.info(
+                "Searching RAG knowledge base",
+                agent_id=self.agent_node.id,
+                query_length=len(query)
+            )
+
+            # Retrieve context using RAG service
+            rag_context = await rag_service.retrieve_context(
+                agent_id=self.agent_node.id,
+                query=query,
+                rag_config=rag_config
+            )
+
+            if not rag_context.retrieved_text:
+                self.logger.info(
+                    "No relevant RAG context found",
+                    task_id=task.id
+                )
+                return execution_context
+
+            # Enhance context with RAG results
+            enhanced_context = execution_context.copy()
+            enhanced_context["rag_context"] = {
+                "retrieved_text": rag_context.retrieved_text,
+                "sources": rag_context.sources,
+                "confidence": rag_context.confidence,
+                "num_chunks": rag_context.num_chunks,
+                "summary": f"Retrieved {rag_context.num_chunks} relevant document chunks from knowledge base with {rag_context.confidence:.2f} average confidence."
+            }
+
+            self.logger.info(
+                "RAG context retrieved successfully",
+                task_id=task.id,
+                chunks_found=rag_context.num_chunks,
+                sources=rag_context.sources,
+                confidence=rag_context.confidence
+            )
+
+            # Send RAG thought to WebSocket
+            await websocket_manager.send_agent_thought(
+                user_id=workflow_execution.initiated_by,
+                agent_id=self.agent_node.id,
+                agent_name=self.agent_node.name,
+                workflow_id=workflow_execution.id,
+                workflow_name=f"Workflow-{workflow_execution.workflow_template_id[:8]}...",
+                thought_type='thought',
+                message=f"Retrieved relevant context from knowledge base:\n- {rag_context.num_chunks} document chunks found\n- Sources: {', '.join(rag_context.sources[:3])}",
+                metadata={
+                    'step': 'rag_retrieval',
+                    'tool': 'rag_service',
+                    'confidence': rag_context.confidence,
+                    'sources': rag_context.sources
+                }
+            )
+
+            return enhanced_context
+
+        except Exception as e:
+            self.logger.error(
+                "Failed to retrieve RAG context",
+                task_id=task.id,
+                error=str(e)
+            )
+            # Return original context on error - graceful degradation
+            return execution_context
+
+    async def execute_with_rag(
+        self,
+        task: WorkflowTask,
+        execution_context: Dict[str, Any],
+        workflow_execution: WorkflowExecution
+    ) -> Dict[str, Any]:
+        """Execute a task using RAG-enhanced strategy
+
+        This method uses the RAG service to execute tasks with retrieved context,
+        using the appropriate DSPy module based on the agent's strategy.
+        """
+        rag_config = self.agent_node.rag_config
+        if not rag_config or not rag_config.enabled:
+            # Fallback to regular execution if RAG not enabled
+            return await self.execute_task(task, execution_context, workflow_execution)
+
+        try:
+            self.logger.info(
+                "Executing task with RAG enhancement",
+                task_id=task.id,
+                strategy=self.agent_node.strategy.value
+            )
+
+            # Extract user request
+            user_request = execution_context.get('original_message', execution_context.get('user_request', 'Complete the task'))
+
+            # Execute with RAG
+            result = await rag_service.execute_with_rag(
+                agent_id=self.agent_node.id,
+                task_name=task.name,
+                task_description=task.description or "",
+                task_objective=task.objective or "Complete the task successfully",
+                user_request=user_request,
+                rag_config=rag_config,
+                strategy=self.agent_node.strategy.value,
+                agent_name=self.agent_node.name,
+                agent_capabilities=json.dumps([cap.name for cap in self.agent_node.capabilities]),
+                available_tools=json.dumps(list(self.available_tools.keys())),
+                execution_context=json.dumps(execution_context, default=str)
+            )
+
+            # Send result to WebSocket
+            await websocket_manager.send_agent_thought(
+                user_id=workflow_execution.initiated_by,
+                agent_id=self.agent_node.id,
+                agent_name=self.agent_node.name,
+                workflow_id=workflow_execution.id,
+                workflow_name=f"Workflow-{workflow_execution.workflow_template_id[:8]}...",
+                thought_type='action',
+                message=f"RAG-Enhanced Execution Result:\n{result.get('result', 'No result')}",
+                metadata={
+                    'step': 'rag_execution',
+                    'success': result.get('success', False),
+                    'sources': result.get('sources', []),
+                    'confidence': result.get('confidence', 0.0)
+                }
+            )
+
+            return {
+                'success': result.get('success', False),
+                'strategy': f"rag_{self.agent_node.strategy.value}",
+                'confidence': result.get('confidence', 0.0),
+                'response': result.get('result', ''),
+                'reasoning': result.get('reasoning', ''),
+                'sources_used': result.get('sources', []),
+                'rag_enhanced': True,
+                'task_id': task.id,
+                'agent_id': self.agent_node.id,
+                'completed_at': datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            self.logger.error(
+                "RAG-enhanced execution failed",
+                task_id=task.id,
+                error=str(e)
+            )
+            # Fallback to regular execution
+            return await self.execute_task(task, execution_context, workflow_execution)

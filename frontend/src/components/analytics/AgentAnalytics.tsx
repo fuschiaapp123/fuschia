@@ -160,7 +160,7 @@ export const AgentAnalytics: React.FC = () => {
           <select 
             value={selectedTimeframe}
             onChange={(e) => setSelectedTimeframe(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
           >
             <option value="1h">Last hour</option>
             <option value="24h">Last 24 hours</option>
@@ -171,7 +171,7 @@ export const AgentAnalytics: React.FC = () => {
           <select 
             value={selectedDepartment}
             onChange={(e) => setSelectedDepartment(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
           >
             <option value="all">All Departments</option>
             <option value="Operations">Operations</option>
@@ -343,8 +343,8 @@ export const AgentAnalytics: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-8 w-8">
-                        <div className="h-8 w-8 rounded-full bg-fuschia-100 flex items-center justify-center">
-                          <Bot className="w-4 h-4 text-fuschia-600" />
+                        <div className="h-8 w-8 rounded-full bg-fuchsia-100 flex items-center justify-center">
+                          <Bot className="w-4 h-4 text-fuchsia-600" />
                         </div>
                       </div>
                       <div className="ml-4">

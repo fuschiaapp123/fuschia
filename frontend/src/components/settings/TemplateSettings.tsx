@@ -63,7 +63,7 @@ export const TemplateSettingsComponent: React.FC = () => {
             </button>
             <button
               onClick={handleSave}
-              className="flex items-center space-x-1 px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600"
+              className="flex items-center space-x-1 px-3 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600"
             >
               <Save className="w-4 h-4" />
               <span>Save Changes</span>
@@ -90,7 +90,7 @@ export const TemplateSettingsComponent: React.FC = () => {
                 type="text"
                 value={settings.defaultTemplatesFolder}
                 onChange={(e) => handleSettingChange('defaultTemplatesFolder', e.target.value)}
-                className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                 placeholder="./templates/workflows"
               />
               <button
@@ -116,7 +116,7 @@ export const TemplateSettingsComponent: React.FC = () => {
                 type="text"
                 value={settings.customTemplatesFolder}
                 onChange={(e) => handleSettingChange('customTemplatesFolder', e.target.value)}
-                className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                 placeholder="./templates/custom"
               />
               <button
@@ -140,7 +140,7 @@ export const TemplateSettingsComponent: React.FC = () => {
             <select
               value={settings.templateFileExtension}
               onChange={(e) => handleSettingChange('templateFileExtension', e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             >
               <option value=".json">.json</option>
               <option value=".yaml">.yaml</option>
@@ -159,7 +159,7 @@ export const TemplateSettingsComponent: React.FC = () => {
                 id="autoSaveEnabled"
                 checked={settings.autoSaveEnabled}
                 onChange={(e) => handleSettingChange('autoSaveEnabled', e.target.checked)}
-                className="h-4 w-4 text-fuschia-600 focus:ring-fuschia-500 border-gray-300 rounded"
+                className="h-4 w-4 text-fuchsia-600 focus:ring-fuchsia-500 border-gray-300 rounded"
               />
               <label htmlFor="autoSaveEnabled" className="ml-2 block text-sm text-gray-900">
                 Enable Auto-Save for Templates

@@ -19,17 +19,17 @@ export const WorkflowModule: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Active Workflows</h3>
-                <p className="text-3xl font-bold text-fuschia-600">23</p>
+                <p className="text-3xl font-bold text-fuchsia-600">23</p>
                 <p className="text-sm text-gray-500 mt-1">Currently running</p>
               </div>
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Templates</h3>
-                <p className="text-3xl font-bold text-fuschia-600">18</p>
+                <p className="text-3xl font-bold text-fuchsia-600">18</p>
                 <p className="text-sm text-gray-500 mt-1">Available templates</p>
               </div>
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Executions</h3>
-                <p className="text-3xl font-bold text-fuschia-600">1,456</p>
+                <p className="text-3xl font-bold text-fuchsia-600">1,456</p>
                 <p className="text-sm text-gray-500 mt-1">This month</p>
               </div>
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
@@ -89,14 +89,14 @@ export const WorkflowModule: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <button className="flex items-center space-x-3 p-4 bg-fuschia-50 hover:bg-fuschia-100 rounded-lg transition-colors group">
-                  <div className="p-2 bg-fuschia-500 text-white rounded-lg">
+                <button className="flex items-center space-x-3 p-4 bg-fuchsia-50 hover:bg-fuchsia-100 rounded-lg transition-colors group">
+                  <div className="p-2 bg-fuchsia-500 text-white rounded-lg">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   </div>
                   <div className="text-left">
-                    <h4 className="font-medium text-gray-900 group-hover:text-fuschia-700">Create Workflow</h4>
+                    <h4 className="font-medium text-gray-900 group-hover:text-fuchsia-700">Create Workflow</h4>
                     <p className="text-sm text-gray-500">Start from scratch</p>
                   </div>
                 </button>

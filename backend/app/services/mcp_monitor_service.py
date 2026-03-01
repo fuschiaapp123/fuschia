@@ -41,7 +41,7 @@ class MCPMonitorService:
                 "gmail": MCPServiceConfig(
                     service_id="gmail",
                     service_name="Gmail API",
-                    enabled=True,
+                    enabled=False,
                     auto_start=False
                 ),
                 "hcmpro": MCPServiceConfig(

@@ -35,7 +35,7 @@ This file documents the legacy files that were removed during backend cleanup.
 - **Status**: ✅ REMOVED
 
 ### 6. Database Files
-- **Files**: `fuschia_templates.db`, `fuschia_users.db`
+- **Files**: `fuchsia_templates.db`, `fuchsia_users.db`
 - **Reason**: SQLite databases replaced by PostgreSQL
 - **Date**: Current cleanup
 - **Status**: ✅ REMOVED

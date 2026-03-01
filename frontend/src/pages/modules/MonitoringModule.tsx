@@ -8,17 +8,18 @@ import { ThoughtsActionsVisualization, AgentThought } from '@/components/monitor
 import { MCPMonitor } from '@/components/monitoring/MCPMonitor';
 import { monitoringService, WorkflowExecution, AgentOrganization } from '@/services/monitoringService';
 import { websocketService, AgentThought as WSAgentThought } from '@/services/websocketService';
-import { 
-  Activity, 
-  Play, 
-  Pause, 
-  CheckCircle, 
+import {
+  Activity,
+  Play,
+  Pause,
+  CheckCircle,
   XCircle,
   Clock,
   AlertTriangle,
   RefreshCw,
   Eye,
-  Filter
+  Filter,
+  Trash2
 } from 'lucide-react';
 
 // Types are now imported from the service
@@ -164,6 +165,46 @@ export const MonitoringModule: React.FC = () => {
   };
 
 
+  const handleDeleteWorkflowExecution = async (executionId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the row click
+    if (!confirm('Are you sure you want to delete this workflow execution? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await monitoringService.deleteWorkflowExecution(executionId);
+      // Remove from local state
+      setWorkflowExecutions(prev => prev.filter(ex => ex.id !== executionId));
+      // Clear selection if deleted item was selected
+      if (selectedExecution?.id === executionId) {
+        setSelectedExecution(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete workflow execution:', error);
+      alert(`Failed to delete workflow execution: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleDeleteAgentOrganization = async (organizationId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the row click
+    if (!confirm('Are you sure you want to delete this agent organization? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await monitoringService.deleteAgentOrganization(organizationId);
+      // Remove from local state
+      setAgentOrganizations(prev => prev.filter(org => org.id !== organizationId));
+      // Clear selection if deleted item was selected
+      if (selectedAgent?.id === organizationId) {
+        setSelectedAgent(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete agent organization:', error);
+      alert(`Failed to delete agent organization: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const handleClearThoughts = () => {
     setAgentThoughts([]);
   };
@@ -244,7 +285,7 @@ export const MonitoringModule: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-              <Activity className="w-8 h-8 text-fuschia-600 mr-3" />
+              <Activity className="w-8 h-8 text-fuchsia-600 mr-3" />
               Runtime Monitoring
             </h1>
             <p className="text-gray-600 mt-1">
@@ -258,7 +299,7 @@ export const MonitoringModule: React.FC = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               >
                 <option value="all">All Status</option>
                 <option value="running">Running</option>
@@ -272,7 +313,7 @@ export const MonitoringModule: React.FC = () => {
             <button
               onClick={fetchData}
               disabled={loading}
-              className="flex items-center space-x-2 px-4 py-2 bg-fuschia-600 text-white rounded-md hover:bg-fuschia-700 disabled:opacity-50"
+              className="flex items-center space-x-2 px-4 py-2 bg-fuchsia-600 text-white rounded-md hover:bg-fuchsia-700 disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
@@ -353,7 +394,7 @@ export const MonitoringModule: React.FC = () => {
               
               {loading ? (
                 <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="w-6 h-6 animate-spin text-fuschia-600" />
+                  <RefreshCw className="w-6 h-6 animate-spin text-fuchsia-600" />
                   <span className="ml-2 text-gray-600">Loading executions...</span>
                 </div>
               ) : filteredWorkflowExecutions.length === 0 ? (
@@ -368,7 +409,7 @@ export const MonitoringModule: React.FC = () => {
                       key={execution.id}
                       onClick={() => setSelectedExecution(execution)}
                       className={`border rounded-lg p-4 cursor-pointer transition-colors hover:bg-gray-50 ${
-                        selectedExecution?.id === execution.id ? 'border-fuschia-200 bg-fuschia-50' : 'border-gray-200'
+                        selectedExecution?.id === execution.id ? 'border-fuchsia-200 bg-fuchsia-50' : 'border-gray-200'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
@@ -378,9 +419,16 @@ export const MonitoringModule: React.FC = () => {
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadgeClasses(execution.status)}`}>
                             {execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}
                           </span>
+                          <button
+                            onClick={(e) => handleDeleteWorkflowExecution(execution.id, e)}
+                            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                            title="Delete execution"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-                      
+
                       <div className="text-sm text-gray-600 space-y-1">
                         <div>Started by: {execution.initiated_by_name}</div>
                         <div>Started: {new Date(execution.started_at).toLocaleString()}</div>
@@ -405,7 +453,7 @@ export const MonitoringModule: React.FC = () => {
               
               {loading ? (
                 <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="w-6 h-6 animate-spin text-fuschia-600" />
+                  <RefreshCw className="w-6 h-6 animate-spin text-fuchsia-600" />
                   <span className="ml-2 text-gray-600">Loading agent organizations...</span>
                 </div>
               ) : filteredAgentOrganizations.length === 0 ? (
@@ -420,7 +468,7 @@ export const MonitoringModule: React.FC = () => {
                       key={organization.id}
                       onClick={() => setSelectedAgent(organization)}
                       className={`border rounded-lg p-4 cursor-pointer transition-colors hover:bg-gray-50 ${
-                        selectedAgent?.id === organization.id ? 'border-fuschia-200 bg-fuschia-50' : 'border-gray-200'
+                        selectedAgent?.id === organization.id ? 'border-fuchsia-200 bg-fuchsia-50' : 'border-gray-200'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
@@ -430,9 +478,16 @@ export const MonitoringModule: React.FC = () => {
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadgeClasses(organization.status)}`}>
                             {organization.status.charAt(0).toUpperCase() + organization.status.slice(1)}
                           </span>
+                          <button
+                            onClick={(e) => handleDeleteAgentOrganization(organization.id, e)}
+                            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                            title="Delete organization"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-                      
+
                       <div className="text-sm text-gray-600 space-y-1">
                         <div>{organization.description}</div>
                         <div>Created by: {organization.created_by_name}</div>

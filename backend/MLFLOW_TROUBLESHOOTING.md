@@ -23,7 +23,7 @@ MLflow experiments were created using SQLite tracking but missing file-based met
 **Method 1: Simple Start (Recommended)**
 ```bash
 # From the backend directory
-cd /Users/sanjay/Lab/Fuschia-alfa/backend
+cd /Users/sanjay/Lab/Fuchsia-alfa/backend
 mlflow ui --port 5000
 ```
 
@@ -80,7 +80,7 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Terminal 2: MLflow UI
-cd /Users/sanjay/Lab/Fuschia-alfa/backend
+cd /Users/sanjay/Lab/Fuchsia-alfa/backend
 mlflow ui --port 5000 --host 0.0.0.0
 
 # Access points:

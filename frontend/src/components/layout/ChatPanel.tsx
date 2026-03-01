@@ -224,7 +224,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               {workflowMode ? (
                 <Workflow className="w-5 h-5 text-green-600" />
               ) : (
-                <MessageCircle className="w-5 h-5 text-fuschia-600" />
+                <MessageCircle className="w-5 h-5 text-fuchsia-600" />
               )}
               <div>
                 <span className="font-medium text-gray-900">
@@ -278,7 +278,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                         <select
                           value={selectedProvider}
                           onChange={(e) => onProviderChange(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500 text-sm"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm"
                         >
                           {LLM_PROVIDERS.map(provider => (
                             <option key={provider.id} value={provider.id}>
@@ -295,7 +295,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                         <select
                           value={selectedModel}
                           onChange={(e) => onModelChange(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500 text-sm"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm"
                         >
                           {currentProvider?.models.map(model => (
                             <option key={model.id} value={model.id}>
@@ -321,7 +321,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                       
                       <button
                         onClick={() => setShowSettings(false)}
-                        className="w-full px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 text-sm"
+                        className="w-full px-3 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 text-sm"
                       >
                         Done
                       </button>
@@ -342,7 +342,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             onClick={() => setIsExpanded(true)}
             className="p-1 hover:bg-gray-100 rounded w-full flex justify-center"
           >
-            <MessageCircle className="w-5 h-5 text-fuschia-600" />
+            <MessageCircle className="w-5 h-5 text-fuchsia-600" />
           </button>
         )}
       </div>
@@ -363,7 +363,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   className={cn(
                     'max-w-[80%] p-3 rounded-lg text-sm',
                     message.sender === 'user'
-                      ? 'bg-fuschia-500 text-white'
+                      ? 'bg-fuchsia-500 text-white'
                       : message.sender === 'workflow'
                       ? 'bg-green-100 text-green-900 border border-green-200'
                       : 'bg-gray-100 text-gray-900'
@@ -456,7 +456,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     ? "border-blue-300 focus:ring-blue-500"
                     : workflowMode 
                       ? "border-green-300 focus:ring-green-500" 
-                      : "border-gray-300 focus:ring-fuschia-500"
+                      : "border-gray-300 focus:ring-fuchsia-500"
                 )}
                 rows={1}
               />
@@ -467,7 +467,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   "p-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors",
                   workflowMode 
                     ? "bg-green-500 hover:bg-green-600" 
-                    : "bg-fuschia-500 hover:bg-fuschia-600"
+                    : "bg-fuchsia-500 hover:bg-fuchsia-600"
                 )}
               >
                 <Send className="w-4 h-4" />

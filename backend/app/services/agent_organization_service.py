@@ -11,6 +11,7 @@ from app.models.agent_organization import (
     AgentConnection
 )
 from app.models.template import TemplateType, Template, TemplateStatus
+from app.models.rag_config import RAGConfig, DataSourceType, VectorDatabase, EmbeddingModel
 
 logger = structlog.get_logger()
 
@@ -93,7 +94,9 @@ class AgentOrganizationService:
                         "can_handoff_to": agent.can_handoff_to,
                         "department": agent.department,
                         "level": agent.level,
-                        "status": agent.status
+                        "status": agent.status,
+                        "rag_config": agent.rag_config.model_dump() if agent.rag_config else None,
+                        "use_memory_enhancement": agent.use_memory_enhancement
                     }
                     agents_json.append(agent_dict)
                 
@@ -281,7 +284,7 @@ class AgentOrganizationService:
                     description=cap_data["description"],
                     confidence_level=cap_data["confidence_level"]
                 ))
-            
+
             # Convert tools
             tools = []
             for tool_data in agent_data.get("tools", []):
@@ -293,7 +296,12 @@ class AgentOrganizationService:
                     required_permissions=tool_data.get("required_permissions", []),
                     configuration=tool_data.get("configuration", {})
                 ))
-            
+
+            # Convert RAG config if present
+            rag_config = None
+            if agent_data.get("rag_config"):
+                rag_config = RAGConfig(**agent_data["rag_config"])
+
             # Create AgentNode
             agent = AgentNode(
                 id=agent_data["id"],
@@ -303,13 +311,15 @@ class AgentOrganizationService:
                 description=agent_data.get("description", ""),
                 capabilities=capabilities,
                 tools=tools,
-                max_concurrent_tasks=agent_data.get("max_concurrent_tasks", 1),
-                requires_human_approval=agent_data.get("requires_human_approval", False),
+                max_concurrent_tasks=agent_data.get("maxConcurrentTasks", agent_data.get("max_concurrent_tasks", 1)),
+                requires_human_approval=agent_data.get("requiresHumanApproval", agent_data.get("requires_human_approval", False)),
                 human_escalation_threshold=agent_data.get("human_escalation_threshold", 0.5),
-                can_handoff_to=agent_data.get("can_handoff_to", [])
+                can_handoff_to=agent_data.get("can_handoff_to", []),
+                rag_config=rag_config,
+                use_memory_enhancement=agent_data.get("useMemoryEnhancement", agent_data.get("use_memory_enhancement", False))
             )
             agents.append(agent)
-        
+
         # Convert connections data
         connections = []
         for conn_data in template.connections_data:
@@ -390,7 +400,7 @@ class AgentOrganizationService:
                         "name": agent.name,
                         "role": agent.role.value,
                         "strategy": agent.strategy.value,
-                        "description": f"Agent for {agent.role.value} tasks",  # Generate description from role
+                        "description": agent.description or f"Agent for {agent.role.value} tasks",
                         "capabilities": [
                             {
                                 "name": cap.name,
@@ -411,10 +421,12 @@ class AgentOrganizationService:
                         "max_concurrent_tasks": agent.max_concurrent_tasks,
                         "requires_human_approval": agent.requires_human_approval,
                         "human_escalation_threshold": agent.human_escalation_threshold,
-                        "can_handoff_to": agent.can_handoff_to
+                        "can_handoff_to": agent.can_handoff_to,
+                        "rag_config": agent.rag_config.model_dump() if agent.rag_config else None,
+                        "use_memory_enhancement": agent.use_memory_enhancement
                     }
                     agents_json.append(agent_dict)
-                
+
                 # Convert connections data to JSON-serializable format
                 connections_json = []
                 if org_data.connections:
@@ -583,7 +595,7 @@ class AgentOrganizationService:
                                 description=cap_data["description"],
                                 confidence_level=cap_data.get("confidence_level", 0.8)
                             ))
-                        
+
                         # Create AgentTool objects
                         tools = []
                         for tool_data in agent_data.get("tools", []):
@@ -595,7 +607,12 @@ class AgentOrganizationService:
                                 required_permissions=tool_data.get("required_permissions", []),
                                 configuration=tool_data.get("configuration", {})
                             ))
-                        
+
+                        # Convert RAG config if present
+                        rag_config = None
+                        if agent_data.get("rag_config"):
+                            rag_config = RAGConfig(**agent_data["rag_config"])
+
                         # Create AgentNode
                         agent = AgentNode(
                             id=agent_data["id"],
@@ -605,13 +622,15 @@ class AgentOrganizationService:
                             description=agent_data.get("description", ""),
                             capabilities=capabilities,
                             tools=tools,
-                            max_concurrent_tasks=agent_data.get("max_concurrent_tasks", 1),
-                            requires_human_approval=agent_data.get("requires_human_approval", False),
+                            max_concurrent_tasks=agent_data.get("maxConcurrentTasks", agent_data.get("max_concurrent_tasks", 1)),
+                            requires_human_approval=agent_data.get("requiresHumanApproval", agent_data.get("requires_human_approval", False)),
                             human_escalation_threshold=agent_data.get("human_escalation_threshold", 0.5),
-                            can_handoff_to=agent_data.get("can_handoff_to", [])
+                            can_handoff_to=agent_data.get("can_handoff_to", []),
+                            rag_config=rag_config,
+                            use_memory_enhancement=agent_data.get("useMemoryEnhancement", agent_data.get("use_memory_enhancement", False))
                         )
                         agents.append(agent)
-                
+
                 # Create connections from template connections_data
                 connections = []
                 for conn_data in template.connections_data:
@@ -739,7 +758,7 @@ class AgentOrganizationService:
                             "name": agent.name,
                             "role": agent.role.value,
                             "strategy": agent.strategy.value,
-                            "description": f"Agent for {agent.role.value} tasks",  # Generate description from role
+                            "description": agent.description or f"Agent for {agent.role.value} tasks",
                             "capabilities": [
                                 {
                                     "name": cap.name,
@@ -760,7 +779,9 @@ class AgentOrganizationService:
                             "max_concurrent_tasks": agent.max_concurrent_tasks,
                             "requires_human_approval": agent.requires_human_approval,
                             "human_escalation_threshold": agent.human_escalation_threshold,
-                            "can_handoff_to": agent.can_handoff_to
+                            "can_handoff_to": agent.can_handoff_to,
+                            "rag_config": agent.rag_config.model_dump() if agent.rag_config else None,
+                            "use_memory_enhancement": agent.use_memory_enhancement
                         }
                         agents_json.append(agent_dict)
                     db_org.agents_data = agents_json
@@ -848,7 +869,7 @@ class AgentOrganizationService:
                     description=cap_data["description"],
                     confidence_level=cap_data["confidence_level"]
                 ))
-            
+
             # Convert tools
             tools = []
             for tool_data in agent_data.get("tools", []):
@@ -860,7 +881,12 @@ class AgentOrganizationService:
                     required_permissions=tool_data.get("required_permissions", []),
                     configuration=tool_data.get("configuration", {})
                 ))
-            
+
+            # Convert RAG config if present
+            rag_config = None
+            if agent_data.get("rag_config"):
+                rag_config = RAGConfig(**agent_data["rag_config"])
+
             # Create AgentNode
             agent = AgentNode(
                 id=agent_data["id"],
@@ -870,13 +896,15 @@ class AgentOrganizationService:
                 description=agent_data.get("description", ""),
                 capabilities=capabilities,
                 tools=tools,
-                max_concurrent_tasks=agent_data.get("max_concurrent_tasks", 1),
-                requires_human_approval=agent_data.get("requires_human_approval", False),
+                max_concurrent_tasks=agent_data.get("maxConcurrentTasks", agent_data.get("max_concurrent_tasks", 1)),
+                requires_human_approval=agent_data.get("requiresHumanApproval", agent_data.get("requires_human_approval", False)),
                 human_escalation_threshold=agent_data.get("human_escalation_threshold", 0.5),
-                can_handoff_to=agent_data.get("can_handoff_to", [])
+                can_handoff_to=agent_data.get("can_handoff_to", []),
+                rag_config=rag_config,
+                use_memory_enhancement=agent_data.get("useMemoryEnhancement", agent_data.get("use_memory_enhancement", False))
             )
             agents.append(agent)
-        
+
         # Convert connections data
         connections = []
         for conn_data in db_org.connections_data:
@@ -924,7 +952,7 @@ class AgentOrganizationService:
                             description=cap_data["description"],
                             confidence_level=cap_data.get("confidence_level", 0.8)
                         ))
-                    
+
                     # Create AgentTool objects
                     tools = []
                     for tool_data in agent_data.get("tools", []):
@@ -936,7 +964,12 @@ class AgentOrganizationService:
                             required_permissions=tool_data.get("required_permissions", []),
                             configuration=tool_data.get("configuration", {})
                         ))
-                    
+
+                    # Convert RAG config if present
+                    rag_config = None
+                    if agent_data.get("rag_config"):
+                        rag_config = RAGConfig(**agent_data["rag_config"])
+
                     # Create AgentNode
                     agent = AgentNode(
                         id=agent_data["id"],
@@ -946,13 +979,15 @@ class AgentOrganizationService:
                         description=agent_data.get("description", ""),
                         capabilities=capabilities,
                         tools=tools,
-                        max_concurrent_tasks=agent_data.get("max_concurrent_tasks", 1),
-                        requires_human_approval=agent_data.get("requires_human_approval", False),
+                        max_concurrent_tasks=agent_data.get("maxConcurrentTasks", agent_data.get("max_concurrent_tasks", 1)),
+                        requires_human_approval=agent_data.get("requiresHumanApproval", agent_data.get("requires_human_approval", False)),
                         human_escalation_threshold=agent_data.get("human_escalation_threshold", 0.5),
-                        can_handoff_to=agent_data.get("can_handoff_to", [])
+                        can_handoff_to=agent_data.get("can_handoff_to", []),
+                        rag_config=rag_config,
+                        use_memory_enhancement=agent_data.get("useMemoryEnhancement", agent_data.get("use_memory_enhancement", False))
                     )
                     agents.append(agent)
-            
+
             # Create connections from template data
             connections = []
             if "connections" in template_data:

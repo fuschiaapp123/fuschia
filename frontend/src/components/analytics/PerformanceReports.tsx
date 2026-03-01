@@ -148,7 +148,7 @@ export const PerformanceReports: React.FC = () => {
           <p className="text-gray-600">Generate and download comprehensive analytics reports</p>
         </div>
         
-        <button className="flex items-center space-x-2 px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors">
+        <button className="flex items-center space-x-2 px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors">
           <Calendar className="w-4 h-4" />
           <span>Schedule Report</span>
         </button>
@@ -163,8 +163,8 @@ export const PerformanceReports: React.FC = () => {
                 <p className="text-sm font-medium text-gray-600">{kpi.label}</p>
                 <p className="text-2xl font-bold text-gray-900">{kpi.value}</p>
               </div>
-              <div className="p-3 bg-fuschia-100 rounded-lg">
-                <FileText className="w-6 h-6 text-fuschia-600" />
+              <div className="p-3 bg-fuchsia-100 rounded-lg">
+                <FileText className="w-6 h-6 text-fuchsia-600" />
               </div>
             </div>
             <div className="mt-4 flex items-center text-sm">
@@ -185,7 +185,7 @@ export const PerformanceReports: React.FC = () => {
           <select 
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
           >
             <option value="all">All Categories</option>
             <option value="workflow">Workflow Reports</option>
@@ -197,7 +197,7 @@ export const PerformanceReports: React.FC = () => {
           <select 
             value={selectedFormat}
             onChange={(e) => setSelectedFormat(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
           >
             <option value="all">All Formats</option>
             <option value="PDF">PDF</option>
@@ -250,7 +250,7 @@ export const PerformanceReports: React.FC = () => {
               <button
                 onClick={() => handleGenerateReport(report.id)}
                 disabled={isGenerating === report.id}
-                className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
               >
                 {isGenerating === report.id ? (
                   <>
@@ -308,7 +308,7 @@ export const PerformanceReports: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-8 w-8">
-                        <div className="h-8 w-8 rounded-full bg-fuschia-100 flex items-center justify-center">
+                        <div className="h-8 w-8 rounded-full bg-fuchsia-100 flex items-center justify-center">
                           {getCategoryIcon(report.category)}
                         </div>
                       </div>
@@ -333,7 +333,7 @@ export const PerformanceReports: React.FC = () => {
                     {(Math.random() * 5 + 0.5).toFixed(1)} MB
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button className="text-fuschia-600 hover:text-fuschia-900 mr-4">
+                    <button className="text-fuchsia-600 hover:text-fuchsia-900 mr-4">
                       Download
                     </button>
                     <button className="text-gray-600 hover:text-gray-900">

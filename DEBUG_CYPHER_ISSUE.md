@@ -6,7 +6,7 @@ You're getting "API Error: Unknown error. Showing sample data." when clicking Ru
 
 1. **Check if the FastAPI server is running:**
    ```bash
-   cd /Users/sanjay/Lab/Fuschia-alfa/backend
+   cd /Users/sanjay/Lab/Fuchsia-alfa/backend
    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
 
@@ -58,7 +58,7 @@ curl -X POST "http://localhost:8000/api/v1/knowledge/cypher" \
 ### Issue 1: Backend Server Not Running
 **Solution:** Start the backend server:
 ```bash
-cd /Users/sanjay/Lab/Fuschia-alfa/backend
+cd /Users/sanjay/Lab/Fuchsia-alfa/backend
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -68,7 +68,7 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ### Issue 3: Neo4j Database Not Running  
 **Solution:** Start Neo4j database:
 ```bash
-cd /Users/sanjay/Lab/Fuschia-alfa
+cd /Users/sanjay/Lab/Fuchsia-alfa
 docker-compose up -d neo4j
 ```
 

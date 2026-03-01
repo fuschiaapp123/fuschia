@@ -219,7 +219,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
     return (
       <div className="p-6">
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fuschia-500"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fuchsia-500"></div>
           <span className="ml-2 text-gray-600">Loading users...</span>
         </div>
       </div>
@@ -233,7 +233,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
         {canCreateUsers() && (
           <button
             onClick={() => setShowCreateForm(true)}
-            className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
+            className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors"
           >
             Add User
           </button>
@@ -275,7 +275,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   />
                 </div>
                 
@@ -286,7 +286,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                     required
                     value={formData.full_name}
                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   />
                 </div>
                 
@@ -298,7 +298,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                       required
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     />
                   </div>
                 )}
@@ -308,7 +308,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as User['role'] })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   >
                     {getAvailableRoles(currentUser?.role).map((role) => (
                       <option key={role.value} value={role.value}>
@@ -324,7 +324,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                     id="is_active"
                     checked={formData.is_active}
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="h-4 w-4 text-fuschia-600 focus:ring-fuschia-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-fuchsia-600 focus:ring-fuchsia-500 border-gray-300 rounded"
                   />
                   <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
                     Active User
@@ -342,7 +342,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600"
+                  className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600"
                 >
                   {editingUser ? 'Update' : 'Create'}
                 </button>
@@ -380,7 +380,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                       ...passwordResetData,
                       new_password: e.target.value
                     })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="Enter new password (min 8 characters)"
                   />
                 </div>
@@ -398,7 +398,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                       ...passwordResetData,
                       confirm_password: e.target.value
                     })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="Confirm new password"
                   />
                 </div>
@@ -473,7 +473,7 @@ export const UserManagement: React.FC<UserManagementProps> = () => {
                         <>
                           <button
                             onClick={() => startEdit(user)}
-                            className="text-fuschia-600 hover:text-fuschia-900"
+                            className="text-fuchsia-600 hover:text-fuchsia-900"
                           >
                             Edit
                           </button>

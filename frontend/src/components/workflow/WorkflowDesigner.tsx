@@ -17,7 +17,7 @@ import {
   getNodesBounds,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Plus, Play, Save, Upload, FolderOpen, Trash2, Settings, Brain, FileImage, FileText } from 'lucide-react';
+import { Plus, Play, Save, Upload, FolderOpen, Trash2, Settings, FileImage, FileText } from 'lucide-react';
 import { toJpeg, toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
 import { cn } from '@/utils/cn';
@@ -97,7 +97,7 @@ const WorkflowStepNode: React.FC<{ data: WorkflowStepData; selected: boolean }> 
             fill="#fef9c3"
             stroke="#fde047"
             strokeWidth={selected ? "3" : "2"}
-            className={selected ? 'stroke-fuschia-500' : ''}
+            className={selected ? 'stroke-fuchsia-500' : ''}
           />
         </svg>
 
@@ -152,7 +152,7 @@ const WorkflowStepNode: React.FC<{ data: WorkflowStepData; selected: boolean }> 
       className={cn(
         'px-4 py-3 rounded-lg border-2 min-w-[200px] shadow-sm relative',
         getNodeColor(),
-        selected && 'ring-2 ring-fuschia-500'
+        selected && 'ring-2 ring-fuchsia-500'
       )}
     >
       {/* Input Handle - only show if not a trigger node */}
@@ -308,9 +308,6 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     category: 'Custom',
   });
 
-  // Memory enhancement state
-  const [isMemoryEnhanced, setIsMemoryEnhanced] = useState(false);
-
   // State for properties dialog
   const [isPropertiesDialogOpen, setIsPropertiesDialogOpen] = useState(false);
   
@@ -328,10 +325,6 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           category: workflowData.metadata.category || 'Custom',
         });
 
-        // Restore memory enhancement setting from metadata
-        if ('use_memory_enhancement' in workflowData.metadata) {
-          setIsMemoryEnhanced(workflowData.metadata.use_memory_enhancement || false);
-        }
       }
     }
   }, [workflowData, setNodes, setEdges]);
@@ -355,13 +348,13 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           console.warn('Database not available, falling back to local storage templates');
           // Fallback to local storage if database is not available
           setAvailableTemplates(templateService.getAllTemplates());
-          setAvailableCategories(['Custom', 'Fuschia', ...templateService.getAvailableCategories()]);
+          setAvailableCategories(['Custom', 'Fuchsia', ...templateService.getAvailableCategories()]);
         }
       } catch (error) {
         console.error('Failed to load templates from database:', error);
         // Fallback to local storage on error
         setAvailableTemplates(templateService.getAllTemplates());
-        setAvailableCategories(['Custom', 'Fuschia', ...templateService.getAvailableCategories()]);
+        setAvailableCategories(['Custom', 'Fuchsia', ...templateService.getAvailableCategories()]);
       }
     };
 
@@ -468,7 +461,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           complexity: 'medium' as const,
           estimatedTime: '30-60 minutes',
           tags: ['execution', 'temporary'],
-          use_memory_enhancement: isMemoryEnhanced,
+          use_memory_enhancement: false,
           nodes: nodes.map(node => ({ ...node, selected: false, dragging: false })),
           edges: edges.map(edge => ({ ...edge, selected: false })),
         };
@@ -487,7 +480,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           initiated_at: new Date().toISOString()
         },
         priority: 1,
-        use_memory_enhancement: isMemoryEnhanced
+        use_memory_enhancement: false
       });
 
       console.log('Workflow execution started:', execution);
@@ -507,7 +500,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     } finally {
       setIsRunning(false);
     }
-  }, [nodes, edges, workflowMetadata, isMemoryEnhanced]);
+  }, [nodes, edges, workflowMetadata]);
 
   const showSaveWorkflowDialog = useCallback(() => {
     // Initialize form with current workflow metadata
@@ -561,7 +554,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
         complexity,
         estimatedTime,
         tags: [saveFormData.category, 'Custom', workflowMetadata.name !== 'Untitled Workflow' ? 'Named' : 'Untitled'],
-        use_memory_enhancement: isMemoryEnhanced,
+        use_memory_enhancement: false,
         nodes: nodes.map(node => ({
           ...node,
           selected: false,
@@ -674,7 +667,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
         }
       }
     }
-  }, [saveFormData, nodes, edges, workflowMetadata, isMemoryEnhanced]);
+  }, [saveFormData, nodes, edges, workflowMetadata]);
 
   const loadTemplate = useCallback((template: WorkflowTemplate | DatabaseWorkflowTemplate) => {
     console.log('Loading template:', template.name, `(${template.nodes?.length || 0} nodes, ${template.edges?.length || 0} edges)`);
@@ -689,11 +682,6 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
       description: template.description,
       category: template.category || 'Custom',
     });
-
-    // Restore memory enhancement setting
-    if ('use_memory_enhancement' in template) {
-      setIsMemoryEnhanced(template.use_memory_enhancement || false);
-    }
 
     // Extract nodes and edges from template - handle both direct and template_data formats
     let templateNodes = template.nodes || [];
@@ -1001,7 +989,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
             <div className="flex items-center space-x-2">
               <button
                 onClick={addNewNode}
-                className="flex items-center space-x-1 px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors text-sm"
+                className="flex items-center space-x-1 px-3 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors text-sm"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Step</span>
@@ -1038,19 +1026,6 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Clear</span>
-              </button>
-
-              <button
-                onClick={() => setIsMemoryEnhanced(!isMemoryEnhanced)}
-                className={`flex items-center space-x-1 px-3 py-2 rounded-md transition-colors text-sm ${
-                  isMemoryEnhanced
-                    ? 'bg-purple-500 text-white hover:bg-purple-600'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-                title={isMemoryEnhanced ? 'Memory Enhancement: ON' : 'Memory Enhancement: OFF'}
-              >
-                <Brain className="w-4 h-4" />
-                <span>Memory Enhanced</span>
               </button>
 
               <div className="h-6 w-px bg-gray-300"></div>
@@ -1168,7 +1143,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
             ? 'Edit Edge Properties'
             : 'Properties'
         }
-        size="md"
+        size="xl"
       >
         {selectedNode ? (
           <NodePropertyForm
@@ -1295,7 +1270,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
                     required
                     value={saveFormData.name}
                     onChange={(e) => setSaveFormData({ ...saveFormData, name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="Enter template name"
                   />
                 </div>
@@ -1307,7 +1282,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
                   <textarea
                     value={saveFormData.description}
                     onChange={(e) => setSaveFormData({ ...saveFormData, description: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     rows={3}
                     placeholder="Describe what this template does"
                   />
@@ -1320,7 +1295,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
                   <select
                     value={saveFormData.category}
                     onChange={(e) => setSaveFormData({ ...saveFormData, category: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   >
                     {availableCategories.map((category) => (
                       <option key={category} value={category}>
@@ -1352,7 +1327,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
                           ...saveFormData, 
                           folder: e.target.checked ? 'download' : '' 
                         })}
-                        className="rounded border-gray-300 text-fuschia-600 focus:ring-fuschia-500"
+                        className="rounded border-gray-300 text-fuchsia-600 focus:ring-fuchsia-500"
                       />
                       <span className="text-sm text-gray-700">Also download as backup file</span>
                     </label>
@@ -1370,7 +1345,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
               </button>
               <button
                 onClick={saveWorkflowAsTemplate}
-                className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600"
+                className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600"
               >
                 Save Template
               </button>
@@ -1395,7 +1370,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
               type="text"
               value={workflowMetadata.name}
               onChange={(e) => setWorkflowMetadata({ ...workflowMetadata, name: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               placeholder="Enter workflow name"
             />
           </div>
@@ -1407,7 +1382,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
             <select
               value={workflowMetadata.category}
               onChange={(e) => setWorkflowMetadata({ ...workflowMetadata, category: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             >
               {availableCategories.map((category) => (
                 <option key={category} value={category}>
@@ -1424,32 +1399,12 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
             <textarea
               value={workflowMetadata.description}
               onChange={(e) => setWorkflowMetadata({ ...workflowMetadata, description: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               rows={4}
               placeholder="Describe what this workflow does"
             />
           </div>
 
-          <div>
-            <label className="flex items-center space-x-3">
-              <input
-                type="checkbox"
-                checked={isMemoryEnhanced}
-                onChange={(e) => setIsMemoryEnhanced(e.target.checked)}
-                className="rounded border-gray-300 text-fuschia-600 focus:ring-fuschia-500"
-              />
-              <div>
-                <span className="text-sm font-medium text-gray-700 flex items-center">
-                  <Brain className="w-4 h-4 mr-2" />
-                  Memory Enhanced Execution
-                </span>
-                <p className="text-xs text-gray-500 mt-1">
-                  Enable advanced memory capabilities for better context retention across workflow steps
-                </p>
-              </div>
-            </label>
-          </div>
-          
           <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
             <button
               onClick={handlePropertiesCancel}
@@ -1459,7 +1414,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
             </button>
             <button
               onClick={handlePropertiesSave}
-              className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 text-sm"
+              className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 text-sm"
             >
               Save Properties
             </button>

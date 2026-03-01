@@ -1,5 +1,5 @@
 """
-External system integrations for Fuschia platform
+External system integrations for Fuchsia platform
 Provides connectors for ServiceNow, Salesforce, SAP, and Workday
 """
 

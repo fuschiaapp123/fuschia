@@ -243,7 +243,7 @@ export const ToolsRegistry: React.FC = () => {
         <h2 className="text-2xl font-bold text-gray-900">Tools Registry</h2>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center space-x-2 px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600"
+          className="flex items-center space-x-2 px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600"
         >
           <Plus className="w-4 h-4" />
           <span>Create Tool</span>
@@ -259,14 +259,14 @@ export const ToolsRegistry: React.FC = () => {
               placeholder="Search tools..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             />
           </div>
           <div>
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             >
               <option value="">All Categories</option>
               {categories.map(cat => (
@@ -378,7 +378,7 @@ export const ToolsRegistry: React.FC = () => {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="e.g., calculate_sum"
                   />
                 </div>
@@ -387,7 +387,7 @@ export const ToolsRegistry: React.FC = () => {
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   >
                     {categories.map(cat => (
                       <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -402,7 +402,7 @@ export const ToolsRegistry: React.FC = () => {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   placeholder="Describe what this tool does..."
                 />
               </div>
@@ -414,7 +414,7 @@ export const ToolsRegistry: React.FC = () => {
                   value={formData.function_code}
                   onChange={(e) => setFormData({ ...formData, function_code: e.target.value })}
                   rows={12}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500 font-mono text-sm"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 font-mono text-sm"
                   placeholder={`def my_function(param1: str, param2: int = 0) -> str:
     \"\"\"Function description\"\"\"
     # Your code here
@@ -428,7 +428,7 @@ export const ToolsRegistry: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700">Parameters</label>
                   <button
                     onClick={addParameter}
-                    className="text-sm text-fuschia-600 hover:text-fuschia-700"
+                    className="text-sm text-fuchsia-600 hover:text-fuchsia-700"
                   >
                     + Add Parameter
                   </button>
@@ -484,7 +484,7 @@ export const ToolsRegistry: React.FC = () => {
                     type="text"
                     value={formData.return_type}
                     onChange={(e) => setFormData({ ...formData, return_type: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="e.g., str, int, dict, Any"
                   />
                 </div>
@@ -497,7 +497,7 @@ export const ToolsRegistry: React.FC = () => {
                       ...formData, 
                       tags: e.target.value.split(',').map(t => t.trim()).filter(t => t) 
                     })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="e.g., math, utility, calculation"
                   />
                 </div>
@@ -513,7 +513,7 @@ export const ToolsRegistry: React.FC = () => {
               </button>
               <button
                 onClick={handleCreateTool}
-                className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600"
+                className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600"
               >
                 Create Tool
               </button>
@@ -539,7 +539,7 @@ export const ToolsRegistry: React.FC = () => {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="e.g., calculate_sum"
                   />
                 </div>
@@ -548,7 +548,7 @@ export const ToolsRegistry: React.FC = () => {
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   >
                     {categories.map(cat => (
                       <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -563,7 +563,7 @@ export const ToolsRegistry: React.FC = () => {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   placeholder="Describe what this tool does..."
                 />
               </div>
@@ -575,7 +575,7 @@ export const ToolsRegistry: React.FC = () => {
                   value={formData.function_code}
                   onChange={(e) => setFormData({ ...formData, function_code: e.target.value })}
                   rows={12}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500 font-mono text-sm"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 font-mono text-sm"
                   placeholder={`def my_function(param1: str, param2: int = 0) -> str:
     \"\"\"Function description\"\"\"
     # Your code here
@@ -589,7 +589,7 @@ export const ToolsRegistry: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700">Parameters</label>
                   <button
                     onClick={addParameter}
-                    className="text-sm text-fuschia-600 hover:text-fuschia-700"
+                    className="text-sm text-fuchsia-600 hover:text-fuchsia-700"
                   >
                     + Add Parameter
                   </button>
@@ -645,7 +645,7 @@ export const ToolsRegistry: React.FC = () => {
                     type="text"
                     value={formData.return_type}
                     onChange={(e) => setFormData({ ...formData, return_type: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="e.g., str, int, dict, Any"
                   />
                 </div>
@@ -658,7 +658,7 @@ export const ToolsRegistry: React.FC = () => {
                       ...formData, 
                       tags: e.target.value.split(',').map(t => t.trim()).filter(t => t) 
                     })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                     placeholder="e.g., math, utility, calculation"
                   />
                 </div>
@@ -678,7 +678,7 @@ export const ToolsRegistry: React.FC = () => {
               </button>
               <button
                 onClick={handleUpdateTool}
-                className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600"
+                className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600"
               >
                 Update Tool
               </button>
@@ -718,7 +718,7 @@ export const ToolsRegistry: React.FC = () => {
                                        param.type === 'bool' ? e.target.value === 'true' :
                                        e.target.value
                         })}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                         placeholder={param.description}
                       />
                     </div>

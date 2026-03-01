@@ -87,7 +87,7 @@ export const EdgePropertyForm: React.FC<EdgePropertyFormProps> = ({ edge, onUpda
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="e.g., Yes, No, Approved, Rejected"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Optional label to display on the edge
@@ -103,7 +103,7 @@ export const EdgePropertyForm: React.FC<EdgePropertyFormProps> = ({ edge, onUpda
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe this connection..."
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               />
             </div>
 
@@ -116,7 +116,7 @@ export const EdgePropertyForm: React.FC<EdgePropertyFormProps> = ({ edge, onUpda
                 value={condition}
                 onChange={(e) => setCondition(e.target.value)}
                 placeholder="e.g., value > 100, status == 'approved'"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Condition for this transition (for conditional edges)
@@ -137,7 +137,7 @@ export const EdgePropertyForm: React.FC<EdgePropertyFormProps> = ({ edge, onUpda
               <select
                 value={edgeType}
                 onChange={(e) => setEdgeType(e.target.value as any)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               >
                 <option value="smoothstep">Smooth Step</option>
                 <option value="straight">Straight</option>
@@ -152,7 +152,7 @@ export const EdgePropertyForm: React.FC<EdgePropertyFormProps> = ({ edge, onUpda
                 id="animated"
                 checked={animated}
                 onChange={(e) => setAnimated(e.target.checked)}
-                className="w-4 h-4 text-fuschia-600 border-gray-300 rounded focus:ring-fuschia-500"
+                className="w-4 h-4 text-fuchsia-600 border-gray-300 rounded focus:ring-fuchsia-500"
               />
               <label htmlFor="animated" className="text-sm font-medium text-gray-700">
                 Animated
@@ -175,7 +175,7 @@ export const EdgePropertyForm: React.FC<EdgePropertyFormProps> = ({ edge, onUpda
                     type="text"
                     value={strokeColor}
                     onChange={(e) => setStrokeColor(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                   />
                 </div>
               </div>
@@ -190,7 +190,7 @@ export const EdgePropertyForm: React.FC<EdgePropertyFormProps> = ({ edge, onUpda
                   max="10"
                   value={strokeWidth}
                   onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
                 />
               </div>
             </div>
@@ -248,7 +248,7 @@ export const EdgePropertyForm: React.FC<EdgePropertyFormProps> = ({ edge, onUpda
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-fuschia-600 text-white rounded-md hover:bg-fuschia-700 transition-colors"
+              className="px-4 py-2 bg-fuchsia-600 text-white rounded-md hover:bg-fuchsia-700 transition-colors"
             >
               Save Changes
             </button>

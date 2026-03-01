@@ -85,7 +85,7 @@ const KnowledgeNode: React.FC<{ data: KnowledgeNodeData; selected: boolean }> = 
       className={cn(
         'px-4 py-3 rounded-lg border-2 min-w-[160px] max-w-[220px] shadow-sm relative bg-white',
         getNodeStyle(),
-        selected && 'ring-2 ring-fuschia-500'
+        selected && 'ring-2 ring-fuchsia-500'
       )}
     >
       <Handle
@@ -360,14 +360,14 @@ export const KnowledgeGraph: React.FC = () => {
                 placeholder="Search nodes..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
               />
             </div>
             
             <select
               value={selectedNodeType}
               onChange={(e) => setSelectedNodeType(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             >
               <option value="all">All Types</option>
               <option value="entity">Entities</option>
@@ -381,7 +381,7 @@ export const KnowledgeGraph: React.FC = () => {
             <select
               value={selectedSource}
               onChange={(e) => setSelectedSource(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
             >
               <option value="all">All Sources</option>
               {sources.map(source => (

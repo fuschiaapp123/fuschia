@@ -1,5 +1,6 @@
 import { ChatRequest, ChatResponse } from '@/types/llm';
 import { useAuthStore } from '@/store/authStore';
+import { debugConfigService } from '@/services/debugConfigService';
 
 // Enhanced chat response interface
 interface EnhancedChatResponse extends ChatResponse {
@@ -108,6 +109,10 @@ const ChatAPI = async (
             };
         }
     } else {
+        // Check if debug mode is enabled
+        const debugConfig = debugConfigService.getDebugConfig();
+        const isDebugMode = debugConfig.enabled && debugConfigService.isValidDebugConfig();
+
         // Use enhanced chat endpoint with intent detection and workflow triggering
         const chatUrl = `${baseUrl}/api/v1/chat/enhanced`;
         const chatRequest: ChatRequest = {
@@ -120,9 +125,13 @@ const ChatAPI = async (
             tabCtx: ctx,
             user_role: userRole,
             current_module: currentModule,
-            current_tab: currentTab
+            current_tab: currentTab,
+            // Add debug mode parameters
+            debug_mode: isDebugMode,
+            debug_workflow_template_id: isDebugMode ? debugConfig.selectedWorkflowTemplateId : undefined,
+            debug_agent_template_id: isDebugMode ? debugConfig.selectedAgentTemplateId : undefined
         };
-        
+
         const myHeaders = createAuthHeaders();
         
         try {

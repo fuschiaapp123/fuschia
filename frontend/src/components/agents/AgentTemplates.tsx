@@ -745,7 +745,7 @@ export const AgentTemplates: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center justify-center py-12">
-          <Loader className="w-8 h-8 animate-spin text-fuschia-500" />
+          <Loader className="w-8 h-8 animate-spin text-fuchsia-500" />
           <span className="ml-2 text-gray-600">Loading agent templates...</span>
         </div>
       </div>
@@ -766,7 +766,7 @@ export const AgentTemplates: React.FC = () => {
             <p className="text-red-600 mb-2">{error}</p>
             <button 
               onClick={() => window.location.reload()} 
-              className="px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
+              className="px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors"
             >
               Retry
             </button>
@@ -801,7 +801,7 @@ export const AgentTemplates: React.FC = () => {
               className={cn(
                 'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
                 selectedCategory === category
-                  ? 'bg-fuschia-100 text-fuschia-800 border border-fuschia-200'
+                  ? 'bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               )}
             >
@@ -882,7 +882,7 @@ export const AgentTemplates: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => handleTemplateLoad(template)}
-                  className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors text-sm"
+                  className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors text-sm"
                 >
                   <Play className="w-4 h-4" />
                   <span>Use Template</span>
@@ -938,8 +938,8 @@ export const AgentTemplates: React.FC = () => {
                   <div className="space-y-2">
                     {selectedTemplate.nodes.map((node) => (
                       <div key={node.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded">
-                        <div className="w-8 h-8 bg-fuschia-100 rounded-full flex items-center justify-center">
-                          <Users className="w-4 h-4 text-fuschia-600" />
+                        <div className="w-8 h-8 bg-fuchsia-100 rounded-full flex items-center justify-center">
+                          <Users className="w-4 h-4 text-fuchsia-600" />
                         </div>
                         <div>
                           <div className="font-medium text-gray-900">{node.data.name}</div>
@@ -957,7 +957,7 @@ export const AgentTemplates: React.FC = () => {
                       handleTemplateLoad(selectedTemplate);
                       setSelectedTemplate(null);
                     }}
-                    className="flex-1 px-4 py-2 bg-fuschia-500 text-white rounded-md hover:bg-fuschia-600 transition-colors"
+                    className="flex-1 px-4 py-2 bg-fuchsia-500 text-white rounded-md hover:bg-fuchsia-600 transition-colors"
                   >
                     Use This Template
                   </button>

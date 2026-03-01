@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Fuschia Development Environment Setup Script
+# Fuchsia Development Environment Setup Script
 
 set -e
 
-echo "🚀 Setting up Fuschia Intelligent Automation Platform"
+echo "🚀 Setting up Fuchsia Intelligent Automation Platform"
 echo "=================================================="
 
 # Check if required tools are installed
@@ -121,7 +121,7 @@ main() {
     init_database
     
     echo ""
-    echo "🎉 Fuschia setup completed successfully!"
+    echo "🎉 Fuchsia setup completed successfully!"
     echo "=================================================="
     echo ""
     echo "Next steps:"
@@ -136,10 +136,10 @@ main() {
     echo "- Neo4j Browser: http://localhost:7474 (neo4j/password123)"
     echo ""
     echo "Sample users:"
-    echo "- Admin: admin@fuschia.io / admin123"
-    echo "- Manager: manager@fuschia.io / manager123"
-    echo "- Analyst: analyst@fuschia.io / analyst123"
-    echo "- User: user@fuschia.io / user123"
+    echo "- Admin: admin@fuchsia.io / admin123"
+    echo "- Manager: manager@fuchsia.io / manager123"
+    echo "- Analyst: analyst@fuchsia.io / analyst123"
+    echo "- User: user@fuchsia.io / user123"
     echo ""
 }
 

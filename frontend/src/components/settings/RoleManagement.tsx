@@ -293,7 +293,7 @@ export const RoleManagement: React.FC = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 flex items-center">
-            <Shield className="w-8 h-8 text-fuschia-600 mr-3" />
+            <Shield className="w-8 h-8 text-fuchsia-600 mr-3" />
             Role & Permissions Management
           </h2>
           <p className="text-gray-600 mt-1">
@@ -328,7 +328,7 @@ export const RoleManagement: React.FC = () => {
           <div className="p-6">
             {loading && !isEditing ? (
               <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fuschia-600 mx-auto"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fuchsia-600 mx-auto"></div>
                 <p className="text-gray-600 mt-2">Loading roles...</p>
               </div>
             ) : (
@@ -340,7 +340,7 @@ export const RoleManagement: React.FC = () => {
                     key={roleInfo.role}
                     className={`border rounded-lg p-4 transition-colors ${
                       selectedRole === roleInfo.role
-                        ? 'border-fuschia-200 bg-fuschia-50'
+                        ? 'border-fuchsia-200 bg-fuchsia-50'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
@@ -357,7 +357,7 @@ export const RoleManagement: React.FC = () => {
                       {!isEditing && (
                         <button
                           onClick={() => handleEditRole(roleInfo.role)}
-                          className="flex items-center space-x-1 px-3 py-1 text-sm text-fuschia-600 hover:bg-fuschia-50 rounded-md transition-colors"
+                          className="flex items-center space-x-1 px-3 py-1 text-sm text-fuchsia-600 hover:bg-fuchsia-50 rounded-md transition-colors"
                         >
                           <Edit className="w-4 h-4" />
                           <span>Edit</span>
@@ -400,7 +400,7 @@ export const RoleManagement: React.FC = () => {
                   <button
                     onClick={handleSaveRole}
                     disabled={loading}
-                    className="flex items-center space-x-1 px-3 py-2 bg-fuschia-600 text-white rounded-md hover:bg-fuschia-700 transition-colors disabled:opacity-50"
+                    className="flex items-center space-x-1 px-3 py-2 bg-fuchsia-600 text-white rounded-md hover:bg-fuchsia-700 transition-colors disabled:opacity-50"
                   >
                     {loading ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>

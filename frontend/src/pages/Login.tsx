@@ -73,14 +73,14 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-fuschia-50 to-purple-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-fuchsia-50 to-purple-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
           <div className="mx-auto mb-6">
             <img 
-              src="/FUSCHIA-LOGO-COLOR.png" 
-              alt="Fuschia Logo" 
+              src="/FUCHSIA-LOGO-COLOR.png" 
+              alt="Fuchsia Logo" 
               className="h-16 w-auto mx-auto"
               onError={(e) => {
                 // Fallback to icon if image fails to load
@@ -89,7 +89,7 @@ export const Login: React.FC = () => {
                 if (fallback) fallback.style.display = 'flex';
               }}
             />
-            <div className="mx-auto h-16 w-16 bg-fuschia-600 rounded-full items-center justify-center hidden">
+            <div className="mx-auto h-16 w-16 bg-fuchsia-600 rounded-full items-center justify-center hidden">
               <LogIn className="h-8 w-8 text-white" />
             </div>
           </div>
@@ -97,7 +97,7 @@ export const Login: React.FC = () => {
             Welcome back
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            Sign in to your Fuschia account
+            Sign in to your Fuchsia account
           </p>
         </div>
 
@@ -142,7 +142,7 @@ export const Login: React.FC = () => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-fuschia-500 focus:border-fuschia-500 sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-fuchsia-500 focus:border-fuchsia-500 sm:text-sm"
                   placeholder="Enter your email"
                 />
               </div>
@@ -162,7 +162,7 @@ export const Login: React.FC = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-fuschia-500 focus:border-fuschia-500 sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-fuchsia-500 focus:border-fuchsia-500 sm:text-sm"
                   placeholder="Enter your password"
                 />
                 <button
@@ -186,7 +186,7 @@ export const Login: React.FC = () => {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
-                  className="h-4 w-4 text-fuschia-600 focus:ring-fuschia-500 border-gray-300 rounded"
+                  className="h-4 w-4 text-fuchsia-600 focus:ring-fuchsia-500 border-gray-300 rounded"
                 />
                 <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
                   Remember me
@@ -196,7 +196,7 @@ export const Login: React.FC = () => {
               <div className="text-sm">
                 <Link
                   to="/forgot-password"
-                  className="font-medium text-fuschia-600 hover:text-fuschia-500"
+                  className="font-medium text-fuchsia-600 hover:text-fuchsia-500"
                 >
                   Forgot your password?
                 </Link>
@@ -208,7 +208,7 @@ export const Login: React.FC = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-fuschia-600 hover:bg-fuschia-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-fuschia-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-fuchsia-600 hover:bg-fuchsia-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-fuchsia-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isLoading ? (
                   <div className="flex items-center">
@@ -227,7 +227,7 @@ export const Login: React.FC = () => {
                 Don't have an account?{' '}
                 <Link
                   to="/register"
-                  className="font-medium text-fuschia-600 hover:text-fuschia-500"
+                  className="font-medium text-fuchsia-600 hover:text-fuchsia-500"
                 >
                   Sign up for free
                 </Link>
@@ -240,11 +240,11 @@ export const Login: React.FC = () => {
         <div className="text-center">
           <p className="text-xs text-gray-500">
             By signing in, you agree to our{' '}
-            <Link to="/terms" className="text-fuschia-600 hover:text-fuschia-500">
+            <Link to="/terms" className="text-fuchsia-600 hover:text-fuchsia-500">
               Terms of Service
             </Link>{' '}
             and{' '}
-            <Link to="/privacy" className="text-fuschia-600 hover:text-fuschia-500">
+            <Link to="/privacy" className="text-fuchsia-600 hover:text-fuchsia-500">
               Privacy Policy
             </Link>
           </p>

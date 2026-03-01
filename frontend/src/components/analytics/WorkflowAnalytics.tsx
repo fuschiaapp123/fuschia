@@ -111,7 +111,7 @@ export const WorkflowAnalytics: React.FC = () => {
           <select 
             value={selectedTimeframe}
             onChange={(e) => setSelectedTimeframe(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
           >
             <option value="1d">Last 24 hours</option>
             <option value="7d">Last 7 days</option>
@@ -122,7 +122,7 @@ export const WorkflowAnalytics: React.FC = () => {
           <select 
             value={selectedWorkflow}
             onChange={(e) => setSelectedWorkflow(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuschia-500"
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
           >
             <option value="all">All Workflows</option>
             <option value="invoice">Invoice Processing</option>
@@ -224,7 +224,7 @@ export const WorkflowAnalytics: React.FC = () => {
               return (
                 <div key={index} className="flex-1 flex flex-col items-center">
                   <div 
-                    className="w-full bg-fuschia-500 rounded-t"
+                    className="w-full bg-fuchsia-500 rounded-t"
                     style={{ height: `${height}%` }}
                   />
                   <div className="text-xs text-gray-600 mt-2">{item.time}</div>
@@ -271,8 +271,8 @@ export const WorkflowAnalytics: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-8 w-8">
-                        <div className="h-8 w-8 rounded-full bg-fuschia-100 flex items-center justify-center">
-                          <BarChart3 className="w-4 h-4 text-fuschia-600" />
+                        <div className="h-8 w-8 rounded-full bg-fuchsia-100 flex items-center justify-center">
+                          <BarChart3 className="w-4 h-4 text-fuchsia-600" />
                         </div>
                       </div>
                       <div className="ml-4">

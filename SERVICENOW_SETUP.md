@@ -1,7 +1,7 @@
 # ServiceNow Integration Setup
 
 ## Overview
-The Fuschia platform can integrate with ServiceNow to import data into the knowledge graph. This guide explains how to configure the ServiceNow connection.
+The Fuchsia platform can integrate with ServiceNow to import data into the knowledge graph. This guide explains how to configure the ServiceNow connection.
 
 ## Environment Variables Required
 

@@ -14,14 +14,8 @@ from app.services.workflow_execution_service import workflow_execution_service
 from app.services.websocket_manager import websocket_manager
 from openai import OpenAI
 
-# Import Graphiti enhanced memory functionality
-try:
-    from app.services.graphiti_enhanced_workflow_agent import graphiti_enhanced_orchestrator
-    GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE = True
-except ImportError:
-    graphiti_enhanced_orchestrator = None
-    GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE = False
-
+# Note: Graphiti memory enhancement is now handled at the agent level in WorkflowExecutionAgent
+# Each agent can have use_memory_enhancement=True/False to enable/disable memory for their tasks
 
 logger = structlog.get_logger()
 
@@ -61,12 +55,10 @@ class WorkflowOrchestrator:
             workflow_template = await template_service.get_template(workflow_template_id)
             if not workflow_template:
                 raise ValueError(f"Workflow template {workflow_template_id} not found")
-            self.logger.debug("Retrieved workflow template", workflow_template_id=workflow_template_id)
             # Get agent organization (mock for now - would come from database)
             organization = await self._get_agent_organization(organization_id)
             if not organization:
                 raise ValueError(f"Agent organization {organization_id} not found")
-            self.logger.debug("Retrieved agent organization", organization_id=organization.id)
             # Create workflow execution using the database service
             # IMPORTANT: Use organization.id (the actual organization ID) not organization_id (which might be a template ID)
             execution = await workflow_execution_service.create_execution(
@@ -76,26 +68,16 @@ class WorkflowOrchestrator:
                 execution_context=initial_context or {},
                 priority=1
             )
-            self.logger.debug("Created workflow execution in database", execution_id=execution.id, actual_organization_id=organization.id)
             
             # Store execution in memory for orchestration
             self.active_executions[execution.id] = execution
-            self.logger.debug("Stored workflow execution in memory", execution_id=execution.id)
             
             # Register execution with WebSocket manager for real-time updates
             websocket_manager.register_execution(execution.id, initiated_by)
             # Initialize agent instances
             await self._initialize_agent_instances(organization, execution)
-            self.logger.debug("Initialized agent instances", execution_id=execution.id)
             # Start execution
             asyncio.create_task(self._execute_workflow(execution))
-            self.logger.debug("Started execution task", execution_id=execution.id)
-            self.logger.info(
-                "Workflow execution initiated",
-                execution_id=execution.id,
-                task_count=len(execution.tasks),
-                organization_agents=len(organization.agents)
-            )
             
             return execution
             
@@ -104,45 +86,20 @@ class WorkflowOrchestrator:
             raise
     
     async def _execute_workflow(self, execution: WorkflowExecution) -> None:
-        """Execute the workflow with multi-agent coordination"""
-        
-        execution.status = ExecutionStatus.RUNNING
-        # Update status in database
-        await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.RUNNING)
-        
-        # Check if memory enhancement is requested
-        use_memory_enhancement = execution.use_memory_enhancement
+        """Execute the workflow with multi-agent coordination
+
+        Note: Memory enhancement is now handled at the agent level, not workflow level.
+        Each agent can have use_memory_enhancement=True to enable Graphiti memory for their tasks.
+        This is checked in WorkflowExecutionAgent.execute_task() before task execution.
+        """
         self.logger.info(
             "Starting workflow execution",
             execution_id=execution.id,
-            use_memory_enhancement=use_memory_enhancement,
-            graphiti_memory_enhancement_available=GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE
+            workflow_template_id=execution.workflow_template_id
         )
-        
-         # If memory enhancement is requested and available, use Graphiti
-        if use_memory_enhancement and GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE:
-            self.logger.info(
-                "Using Graphiti temporal knowledge graph memory-enhanced workflow execution",
-                execution_id=execution.id
-            )
-            
-            try:
-                await self._execute_workflow_with_graphiti_memory(execution)
-                return
-            except Exception as graphiti_error:
-                self.logger.warning(
-                    "Graphiti memory-enhanced execution failed, falling back to standard execution",
-                    execution_id=execution.id,
-                    error=str(graphiti_error)
-                )
-                # Continue with standard execution below
-        elif use_memory_enhancement and not GRAPHITI_MEMORY_ENHANCEMENT_AVAILABLE:
-            self.logger.warning(
-                "Memory enhancement requested but not available, using standard execution",
-                execution_id=execution.id
-            )
-        
-        # Standard workflow execution continues below...
+        execution.status = ExecutionStatus.RUNNING
+        # Update status in database
+        await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.RUNNING)
         
         # Send real-time execution update
         await websocket_manager.send_execution_update(execution.id, {
@@ -155,19 +112,11 @@ class WorkflowOrchestrator:
             while not self._is_workflow_complete(execution):
                 # Get ready tasks (dependencies satisfied)
                 ready_tasks = self._get_ready_tasks(execution)
-                self.logger.debug(
-                    "Retrieved ready tasks for execution",
-                    execution_id=execution.id,
-                    ready_task_count=len(ready_tasks)
-                )
+                
                 if not ready_tasks:
                     # Check if waiting for human interaction
                     if execution.human_approvals_pending:
-                        self.logger.info(
-                            "Workflow paused - waiting for human approval",
-                            execution_id=execution.id,
-                            pending_approvals=len(execution.human_approvals_pending)
-                        )
+                        
                         execution.status = ExecutionStatus.PAUSED
                         # Update status in database
                         await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.PAUSED)
@@ -183,34 +132,19 @@ class WorkflowOrchestrator:
                 
                 # Assign and execute ready tasks
                 task_assignments = await self._assign_tasks_to_agents(ready_tasks, execution)
-                self.logger.info(
-                    "Assigned tasks to agents",
-                    execution_id=execution.id,
-                    task_assignments=task_assignments
-                )
+                
 
                 # Execute tasks in parallel
                 execution_coroutines = []
                 for task_id, agent_id in task_assignments.items():
-                    self.logger.debug("Preparing to execute task", task_id=task_id, agent_id=agent_id)
                     task = next(t for t in execution.tasks if t.id == task_id)
-                    self.logger.debug("Found task for execution", task_id=task.id, task_name=task.name) 
                     agent = self.agent_instances[agent_id]
-                    self.logger.debug(
-                        "Executing task with agent",
-                        task_id=task.id,
-                        agent_id=agent.agent_node.id
-                    )
+                    
                     coroutine = self._execute_task_with_monitoring(
                         agent, task, execution.execution_context, execution
                     )
-                    self.logger.debug("Prepared task execution coroutine", task_id=task.id)
                     execution_coroutines.append(coroutine)
-                self.logger.debug(
-                    "Prepared execution coroutines for tasks",
-                    execution_id=execution.id,
-                    task_count=len(execution_coroutines)
-                )
+                
                 # Wait for all assigned tasks to complete
                 if execution_coroutines:
                     task_results = await asyncio.gather(*execution_coroutines, return_exceptions=True)
@@ -220,30 +154,16 @@ class WorkflowOrchestrator:
 
                     # Process results
                     for i, result in enumerate(task_results):
-                        self.logger.debug(
-                            "Processing task result",
-                            execution_id=execution.id,
-                            task_id=ready_tasks[i].id,
-                            result=result
-                        )
+                        
 
                         # Check for PENDING status - workflow should pause
                         if isinstance(result, dict) and result.get('status') == TaskStatus.PENDING.value:
                             has_pending_task = True
-                            self.logger.info(
-                                "Task in PENDING state detected - workflow will pause",
-                                execution_id=execution.id,
-                                task_id=ready_tasks[i].id
-                            )
+                            
 
                         # Check for PAUSED status - workflow should pause immediately
                         if isinstance(result, dict) and result.get('status') == TaskStatus.PAUSED.value:
-                            self.logger.info(
-                                "Task PAUSED - stopping workflow execution",
-                                execution_id=execution.id,
-                                task_id=ready_tasks[i].id,
-                                pause_reason=result.get('pause_reason', 'Task requested pause')
-                            )
+                            
 
                             # Update workflow status to PAUSED
                             execution.status = ExecutionStatus.PAUSED
@@ -260,10 +180,7 @@ class WorkflowOrchestrator:
                                 'pause_reason': result.get('pause_reason', 'Task requested pause')
                             })
 
-                            self.logger.info(
-                                "Workflow execution paused - can be resumed later",
-                                execution_id=execution.id
-                            )
+                            
                             return  # Stop workflow execution
 
                         # Enhanced YAML canvas update detection and processing
@@ -281,11 +198,7 @@ class WorkflowOrchestrator:
                                 if any(keyword in yaml_content.lower() for keyword in ['agent', 'role:', 'skills:', 'department:']):
                                     canvas_type = "agent"
                                 
-                                self.logger.info("YAML canvas update detected", 
-                                               task_id=ready_tasks[i].id, 
-                                               canvas_type=canvas_type,
-                                               yaml_preview=yaml_content[:200] + "..." if len(yaml_content) > 200 else yaml_content)
-                                
+                                                       
                                 # Send specialized canvas update message
                                 await websocket_manager.send_execution_update(execution.id, {
                                     'type': 'canvas_update',
@@ -299,9 +212,6 @@ class WorkflowOrchestrator:
                             # Check for other structured data patterns
                             elif any(pattern in response.lower() for pattern in ['nodes:', 'edges:', 'workflow:', 'agents:']):
                                 # This might be YAML without explicit markers
-                                self.logger.info("Potential YAML content detected without markers", 
-                                               task_id=ready_tasks[i].id,
-                                               content_preview=response[:200] + "..." if len(response) > 200 else response)
                                 
                                 await websocket_manager.send_execution_update(execution.id, {
                                     'type': 'potential_canvas_update',
@@ -332,10 +242,7 @@ class WorkflowOrchestrator:
                             'pending_tasks': [t.id for t in execution.tasks if t.status == TaskStatus.PENDING]
                         })
 
-                        self.logger.info(
-                            "Workflow execution paused due to PENDING task",
-                            execution_id=execution.id
-                        )
+                        
                         break  # Exit the workflow execution loop
 
                 # Brief pause before next iteration
@@ -347,21 +254,51 @@ class WorkflowOrchestrator:
                 execution.actual_completion = datetime.utcnow()
                 # Update status in database
                 await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.COMPLETED)
-                
-                # Send completion update
+
+                # Extract final response from the last completed task
+                final_response = self._extract_final_response(execution)
+
+                # Send completion update with final response
+                completion_message = '✅ Workflow execution completed successfully!'
+                if final_response:
+                    completion_message += f'\n\n**Final Response:**\n{final_response}'
+
                 await websocket_manager.send_execution_update(execution.id, {
                     'status': 'completed',
-                    'message': '✅ Workflow execution completed successfully!',
+                    'message': completion_message,
                     'completed_tasks': len(execution.completed_tasks),
                     'total_tasks': len(execution.tasks),
-                    'duration': (execution.actual_completion - execution.started_at).total_seconds()
+                    'duration': (execution.actual_completion - execution.started_at).total_seconds(),
+                    'final_response': final_response
                 })
-                
-                self.logger.info(
-                    "Workflow execution completed successfully",
-                    execution_id=execution.id,
-                    duration=(execution.actual_completion - execution.started_at).total_seconds()
-                )
+
+                # Also send the final response as a chat message for better visibility
+                if final_response:
+                    self.logger.info(
+                        "Sending final workflow response to chat",
+                        execution_id=execution.id,
+                        response_length=len(final_response)
+                    )
+                    await websocket_manager.send_chat_message(
+                        execution_id=execution.id,
+                        message_content=final_response,
+                        agent_id='workflow-completion',
+                        agent_name='Workflow Result',
+                        message_type='workflow_response',
+                        metadata={
+                            'workflow_id': execution.workflow_template_id,
+                            'execution_id': execution.id,
+                            'completed_tasks': len(execution.completed_tasks),
+                            'total_tasks': len(execution.tasks)
+                        }
+                    )
+                else:
+                    self.logger.warning(
+                        "No final response extracted from workflow",
+                        execution_id=execution.id,
+                        agent_actions_count=len(execution.agent_actions)
+                    )
+
             else:
                 execution.status = ExecutionStatus.FAILED
                 # Update status in database
@@ -392,141 +329,18 @@ class WorkflowOrchestrator:
             await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.FAILED, str(e))
             self.logger.error("Workflow execution failed with exception", error=str(e))
     
-    async def _execute_workflow_with_graphiti_memory(self, execution: WorkflowExecution) -> None:
-        """Execute workflow using Graphiti temporal knowledge graph memory"""
-        
-        try:
-            # Initialize Graphiti memory service if needed
-            from app.services.graphiti_enhanced_memory_service import graphiti_enhanced_memory_service
-            await graphiti_enhanced_memory_service.initialize()
-            
-            # Get organization for agents
-            self.logger.debug("Retrieving agent organization for Graphiti execution", organization_id=execution.organization_id)
-            organization = await self._get_agent_organization(execution.organization_id)
-            if not organization:
-                raise ValueError(f"Agent organization {execution.organization_id} not found")
-            
-            # Execute with Graphiti memory enhancement
-            memory_result = await graphiti_enhanced_orchestrator.execute_workflow_with_memory(
-                workflow_id=execution.workflow_template_id,
-                execution_id=execution.id,
-                agents=organization.agents,
-                tasks=execution.tasks,
-                context={
-                    **execution.execution_context,
-                    "initiated_by": execution.initiated_by,
-                    "workflow_name": f"Workflow-{execution.workflow_template_id[:8]}"
-                },
-                organization=organization
-            )
-            
-            # Update execution with memory results
-            execution.agent_actions.append({
-                "timestamp": datetime.utcnow().isoformat(),
-                "action": "graphiti_enhanced_execution_completed",
-                "details": {
-                    "successful_tasks": memory_result.get("successful_tasks", 0),
-                    "failed_tasks": memory_result.get("failed_tasks", 0),
-                    "total_tasks": memory_result.get("total_tasks", 0),
-                    "memory_enhanced": True,
-                    "enhancement_type": "graphiti_temporal_knowledge_graph"
-                }
-            })
-            
-            # Update task statuses based on Graphiti execution results
-            task_results = memory_result.get("task_results", [])
-            for task_result in task_results:
-                task_id = task_result.get("task_id")
-                success = task_result.get("success", False)
-                
-                if success:
-                    if task_id not in execution.completed_tasks:
-                        execution.completed_tasks.append(task_id)
-                    # Update task status in database
-                    await workflow_execution_service.update_task_status(
-                        task_id, TaskStatus.COMPLETED, 
-                        task_result.get("agent_id", "graphiti-enhanced-agent"),
-                        task_result.get("result", {})
-                    )
-                else:
-                    if task_id not in execution.failed_tasks:
-                        execution.failed_tasks.append(task_id)
-                    # Update task status in database
-                    await workflow_execution_service.update_task_status(
-                        task_id, TaskStatus.FAILED,
-                        task_result.get("agent_id", "graphiti-enhanced-agent"),
-                        task_result.get("result", {})
-                    )
-            
-            # Determine final execution status
-            if memory_result.get("successful_tasks", 0) == len(execution.tasks):
-                execution.status = ExecutionStatus.COMPLETED
-                execution.actual_completion = datetime.utcnow()
-                await workflow_execution_service.update_execution_status(execution.id, ExecutionStatus.COMPLETED)
-                
-                # Send completion update
-                await websocket_manager.send_execution_update(execution.id, {
-                    'status': 'completed',
-                    'message': '✅ Graphiti temporal memory-enhanced workflow execution completed successfully!',
-                    'completed_tasks': len(execution.completed_tasks),
-                    'total_tasks': len(execution.tasks),
-                    'memory_enhanced': True,
-                    'memory_type': 'graphiti_temporal_knowledge_graph',
-                    'duration': (execution.actual_completion - execution.started_at).total_seconds()
-                })
-                
-                self.logger.info(
-                    "Graphiti memory-enhanced workflow execution completed successfully",
-                    execution_id=execution.id,
-                    successful_tasks=memory_result.get("successful_tasks", 0),
-                    failed_tasks=memory_result.get("failed_tasks", 0),
-                    duration=(execution.actual_completion - execution.started_at).total_seconds()
-                )
-            else:
-                execution.status = ExecutionStatus.FAILED
-                await workflow_execution_service.update_execution_status(
-                    execution.id, ExecutionStatus.FAILED, 
-                    "Graphiti memory-enhanced execution incomplete"
-                )
-                
-                # Send failure update
-                await websocket_manager.send_execution_update(execution.id, {
-                    'status': 'failed',
-                    'message': '❌ Graphiti temporal memory-enhanced workflow execution failed',
-                    'completed_tasks': memory_result.get("successful_tasks", 0),
-                    'failed_tasks': memory_result.get("failed_tasks", 0),
-                    'total_tasks': len(execution.tasks),
-                    'memory_enhanced': True,
-                    'memory_type': 'graphiti_temporal_knowledge_graph'
-                })
-                
-                self.logger.error(
-                    "Graphiti memory-enhanced workflow execution failed",
-                    execution_id=execution.id,
-                    successful_tasks=memory_result.get("successful_tasks", 0),
-                    failed_tasks=memory_result.get("failed_tasks", 0)
-                )
-                
-        except Exception as e:
-            execution.status = ExecutionStatus.FAILED
-            execution.error_log.append({
-                'error': str(e),
-                'timestamp': datetime.utcnow().isoformat(),
-                'phase': 'graphiti_memory_enhanced_execution'
-            })
-            await workflow_execution_service.update_execution_status(
-                execution.id, ExecutionStatus.FAILED, f"Graphiti memory-enhanced execution failed: {str(e)}"
-            )
-            self.logger.error("Graphiti memory-enhanced workflow execution failed with exception", 
-                            execution_id=execution.id, error=str(e))
-            raise
-    
     async def _execute_task_with_monitoring(self,
                                           agent: WorkflowExecutionAgent,
                                           task: WorkflowTask,
                                           context: Dict[str, Any],
                                           execution: WorkflowExecution) -> Dict[str, Any]:
-        """Execute task with monitoring and error handling"""
+        """Execute task with monitoring and error handling
+
+        Note: Memory enhancement (Graphiti) is handled at the agent level.
+        If agent.agent_node.use_memory_enhancement is True, the agent will automatically
+        search and enhance context with Graphiti memory before task execution.
+        This is done in WorkflowExecutionAgent.execute_task().
+        """
 
         try:
             # Update task status to IN_PROGRESS using helper method
@@ -658,8 +472,7 @@ class WorkflowOrchestrator:
                                     execution: WorkflowExecution) -> Dict[str, str]:
         """Assign ready tasks to appropriate agents"""
 
-        self.logger.debug("Assigning tasks to agents", execution_id=execution.id, ready_task_count=len(ready_tasks))
-        
+         
         assignments = {}
         organization = await self._get_agent_organization(execution.organization_id)
         
@@ -677,12 +490,7 @@ class WorkflowOrchestrator:
                 # Update agent load tracking
                 self.agent_load[best_agent_id] = self.agent_load.get(best_agent_id, 0) + 1
                 
-                self.logger.info(
-                    "Task assigned to agent",
-                    task_id=task.id,
-                    task_name=task.name,
-                    agent_id=best_agent_id
-                )
+               
             else:
                 self.logger.warning(
                     "No suitable agent found for task",
@@ -774,6 +582,65 @@ class WorkflowOrchestrator:
         total_tasks = len(execution.tasks)
         completed = len([t for t in execution.tasks if t.status == TaskStatus.COMPLETED])
         return completed == total_tasks
+
+    def _extract_final_response(self, execution: WorkflowExecution) -> Optional[str]:
+        """Extract the final response from the workflow execution
+
+        Looks through agent_actions to find the last task completion result
+        and extracts the response/summary from it.
+        """
+        try:
+            # Look through agent_actions in reverse order to find the last task result
+            for action in reversed(execution.agent_actions):
+                if action.get('action_type') == 'task_completion':
+                    result = action.get('result', {})
+                    self.logger.info(
+                        "Processing task completion result",
+                        execution_id=execution.id,
+                        result=result
+                    )
+
+                    # Try to extract response from various possible locations
+                    if isinstance(result, dict):
+                        # Check for 'results' > 'response' structure
+                        results = result.get('results', {})
+                        if isinstance(results, dict):
+                            response = results.get('response')
+                            if response and isinstance(response, str):
+                                # Clean up the response - remove YAML markers if present
+                                if 'YaMl_StArT' in response:
+                                    continue  # Skip canvas updates
+                                return response[:2000]  # Limit length
+
+                            # Check for execution_summary
+                            summary = results.get('execution_summary')
+                            if summary and isinstance(summary, str):
+                                return summary[:2000]
+
+                        # Check for direct response
+                        direct_response = result.get('response')
+                        if direct_response and isinstance(direct_response, str):
+                            return direct_response[:2000]
+
+                        # Check for execution_summary at top level
+                        exec_summary = result.get('execution_summary')
+                        if exec_summary and isinstance(exec_summary, str):
+                            return exec_summary[:2000]
+
+            # If no response found in agent_actions, check task results directly
+            for task in reversed(execution.tasks):
+                if task.status == TaskStatus.COMPLETED and task.results:
+                    results = task.results
+                    if isinstance(results, dict):
+                        response = results.get('response') or results.get('execution_summary')
+                        if response and isinstance(response, str):
+                            if 'YaMl_StArT' not in response:
+                                return response[:2000]
+
+            return None
+        except Exception as e:
+            self.logger.warning("Failed to extract final response", error=str(e))
+            return None
     
     def _process_task_result(self, result: Dict[str, Any], execution: WorkflowExecution) -> None:
         """Process task execution result"""
@@ -816,9 +683,7 @@ class WorkflowOrchestrator:
                                         organization: AgentOrganization,
                                         execution: WorkflowExecution) -> None:
         """Initialize agent instances for the organization"""
-        self.logger.debug("Initializing agent instances for organization", organization_id=organization.id)
         for agent_node in organization.agents:
-            self.logger.debug("Initializing agent instance", agent_name=agent_node.name, agent_id=agent_node.id)
             # Create agent instance 
             agent_instance = WorkflowExecutionAgent(
                 agent_node=agent_node,
@@ -829,11 +694,7 @@ class WorkflowOrchestrator:
             self.agent_instances[agent_node.id] = agent_instance
             self.agent_load[agent_node.id] = 0
         
-        self.logger.info(
-            "Agent instances initialized",
-            execution_id=execution.id,
-            agent_count=len(organization.agents)
-        )
+        
     
     def _create_tasks_from_template(self, workflow_template) -> List[WorkflowTask]:
         """Create workflow tasks from template"""
@@ -842,25 +703,12 @@ class WorkflowOrchestrator:
         template_data = workflow_template.template_data
 
         # Debug: Log the entire template_data structure
-        self.logger.info(
-            "Creating tasks from workflow template",
-            workflow_template_id=workflow_template.id,
-            workflow_name=workflow_template.name,
-            template_data_type=type(template_data).__name__,
-            has_nodes='nodes' in template_data if isinstance(template_data, dict) else False,
-            node_count=len(template_data.get('nodes', [])) if isinstance(template_data, dict) else 0
-        )
+        
 
         # Debug: Log first node structure if available
         if isinstance(template_data, dict) and 'nodes' in template_data and len(template_data['nodes']) > 0:
             first_node = template_data['nodes'][0]
-            self.logger.info(
-                "Sample node structure",
-                node_keys=list(first_node.keys()),
-                node_data_keys=list(first_node.get('data', {}).keys()) if 'data' in first_node else [],
-                node_type_value=first_node.get('data', {}).get('type', 'NOT FOUND'),
-                full_node_data=first_node.get('data', {})
-            )
+            
 
         # Map original node IDs to new unique task IDs for dependency resolution
         node_id_mapping = {}
@@ -878,14 +726,7 @@ class WorkflowOrchestrator:
                 node_type = node_data.get('type', 'action')
 
                 # Debug logging to verify node type extraction
-                self.logger.info(
-                    "Creating task from workflow node",
-                    node_id=original_node_id,
-                    task_id=unique_task_id,
-                    node_label=node_data.get('label', 'Unnamed Task'),
-                    node_type=node_type,
-                    node_data_keys=list(node_data.keys())
-                )
+                
 
                 task = WorkflowTask(
                     id=unique_task_id,
@@ -925,23 +766,14 @@ class WorkflowOrchestrator:
         
         try:
             from app.services.agent_organization_service import agent_organization_service
-            self.logger.debug("Retrieving agent organization", organization_id=organization_id)
             # First, try to get existing organization from database
             organization = await agent_organization_service.get_agent_organization(organization_id)
             
             if organization:
-                self.logger.info(
-                    "Retrieved existing agent organization from database",
-                    organization_id=organization_id,
-                    agent_count=len(organization.agents)
-                )
+                
                 return organization
             
             # If not found, try to treat organization_id as a template_id and create from template
-            self.logger.info(
-                "Organization not found, attempting to create from agent template",
-                template_id=organization_id
-            )
             
             organization = await agent_organization_service.create_organization_from_template(
                 agent_template_id=organization_id,
@@ -950,12 +782,7 @@ class WorkflowOrchestrator:
             )
             
             if organization:
-                self.logger.info(
-                    "Created agent organization from template",
-                    organization_id=organization.id,
-                    template_id=organization_id,
-                    agent_count=len(organization.agents)
-                )
+                
                 return organization
             
             # If template creation also fails, fall back to mock organization
@@ -979,7 +806,6 @@ class WorkflowOrchestrator:
         
         from app.models.agent_organization import AgentNode, AgentRole, AgentStrategy, AgentCapability, AgentTool
         
-        self.logger.info("Creating fallback mock organization", organization_id=organization_id)
         
         return AgentOrganization(
             id=organization_id,
@@ -1074,7 +900,7 @@ class WorkflowOrchestrator:
             if execution:
                 # Store in memory for orchestration
                 self.active_executions[execution_id] = execution
-                self.logger.info("Loaded execution from database", execution_id=execution_id)
+               
                 return execution
             return None
         except Exception as e:
@@ -1158,8 +984,7 @@ class WorkflowOrchestrator:
 
         # If not in memory, load from database
         if not execution:
-            self.logger.info("Execution not in memory, loading from database",
-                           execution_id=execution_id)
+            
             execution = await workflow_execution_service.get_execution(execution_id)
 
             if not execution:
@@ -1167,10 +992,7 @@ class WorkflowOrchestrator:
                                 execution_id=execution_id)
                 return False
 
-        self.logger.info("Attempting to resume execution",
-                       execution_id=execution_id,
-                       status=execution.status.value if execution else None)
-
+    
         # Check if execution is paused
         if execution.status != ExecutionStatus.PAUSED:
             self.logger.warning("Cannot resume execution - not in PAUSED state",
@@ -1193,10 +1015,6 @@ class WorkflowOrchestrator:
             ExecutionStatus.RUNNING
         )
 
-        self.logger.info("Resuming workflow execution",
-                       execution_id=execution_id,
-                       workflow_template_id=execution.workflow_template_id,
-                       progress=execution.get_execution_progress())
 
         # Restart execution task
         asyncio.create_task(self._execute_workflow(execution))

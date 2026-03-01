@@ -86,7 +86,7 @@ const WorkflowExecutions: React.FC = () => {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fuschia-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fuchsia-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading workflow executions...</p>
         </div>
       </div>
@@ -102,7 +102,7 @@ const WorkflowExecutions: React.FC = () => {
           <p className="text-gray-600 text-sm mb-4">{error}</p>
           <button
             onClick={handleRefresh}
-            className="px-4 py-2 bg-fuschia-600 text-white rounded-lg hover:bg-fuschia-700 transition-colors"
+            className="px-4 py-2 bg-fuchsia-600 text-white rounded-lg hover:bg-fuchsia-700 transition-colors"
           >
             Try Again
           </button>
@@ -122,7 +122,7 @@ const WorkflowExecutions: React.FC = () => {
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="flex items-center space-x-2 px-4 py-2 bg-fuschia-600 text-white rounded-lg hover:bg-fuschia-700 transition-colors disabled:opacity-50"
+          className="flex items-center space-x-2 px-4 py-2 bg-fuchsia-600 text-white rounded-lg hover:bg-fuchsia-700 transition-colors disabled:opacity-50"
         >
           <RotateCcw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
@@ -135,7 +135,7 @@ const WorkflowExecutions: React.FC = () => {
           onClick={() => handleStatusFilter('')}
           className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
             selectedStatus === '' 
-              ? 'bg-fuschia-100 text-fuschia-800' 
+              ? 'bg-fuchsia-100 text-fuchsia-800' 
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
@@ -147,7 +147,7 @@ const WorkflowExecutions: React.FC = () => {
             onClick={() => handleStatusFilter(status)}
             className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
               selectedStatus === status 
-                ? 'bg-fuschia-100 text-fuschia-800' 
+                ? 'bg-fuchsia-100 text-fuchsia-800' 
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -225,7 +225,7 @@ const WorkflowExecutions: React.FC = () => {
                         <div className="flex items-center">
                           <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
                             <div 
-                              className="bg-fuschia-600 h-2 rounded-full" 
+                              className="bg-fuchsia-600 h-2 rounded-full" 
                               style={{ width: `${progress}%` }}
                             ></div>
                           </div>

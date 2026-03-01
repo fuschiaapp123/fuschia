@@ -13,13 +13,17 @@ from app.api.router import api_router
 # Reduce uvicorn access log verbosity
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
-print("Starting Fuschia Backend API...")
+# Suppress Neo4j driver notifications (property key warnings, etc.)
+logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
+logging.getLogger("neo4j").setLevel(logging.ERROR)
+
+print("Starting Fuchsia Backend API...")
 logger = structlog.get_logger()
 print("Logger initialized")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting Fuschia Backend API")
+    logger.info("Starting Fuchsia Backend API")
     
     # Initialize PostgreSQL database
     try:
@@ -58,20 +62,20 @@ async def lifespan(app: FastAPI):
         from app.services.gmail_monitor_service import gmail_monitor_service
         logger.info("Gmail Monitor Service available - use /api/v1/gmail-monitor/start to enable")
         # Uncomment the following lines to auto-start monitoring on application startup:
-        await gmail_monitor_service.initialize()
-        await gmail_monitor_service.start_monitoring()
-        logger.info("Gmail Monitor Service started automatically")
+        # await gmail_monitor_service.initialize()
+        # await gmail_monitor_service.start_monitoring()
+        # logger.info("Gmail Monitor Service started automatically")
     except Exception as e:
         logger.warning(f"Gmail Monitor Service initialization failed: {e}")
 
     yield
     
-    logger.info("Shutting down Fuschia Backend API")
+    logger.info("Shutting down Fuchsia Backend API")
     await neo4j_driver.close()
 
 
 app = FastAPI(
-    title="Fuschia API",
+    title="Fuchsia API",
     description="Intelligent Automation Platform API",
     version="0.1.0",
     docs_url="/api/docs",
@@ -100,4 +104,4 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    return {"message": "Fuschia Intelligent Automation Platform API"}
+    return {"message": "Fuchsia Intelligent Automation Platform API"}

@@ -1,9 +1,9 @@
   How Graphiti-Based Knowledge Graph Memory Works in 
-  Fuschia
+  Fuchsia
 
   Overview
 
-  Fuschia implements temporal knowledge graph memory using
+  Fuchsia implements temporal knowledge graph memory using
   the https://github.com/getzep/graphiti library, which
   provides episodic memory, semantic entity extraction, and
    relationship mapping for AI agents. This enhances
@@ -147,7 +147,7 @@
   (:Entity)-[:RELATES_TO {fact}]->(:Entity)
   (:Entity)-[:MEMBER_OF]->(:Community)
 
-  Benefits for Fuschia
+  Benefits for Fuchsia
 
   1. Learning from Past Executions
     - Agents remember how similar tasks were handled
@@ -203,7 +203,7 @@
 
   Summary
 
-  Fuschia's Graphiti integration provides temporal 
+  Fuchsia's Graphiti integration provides temporal 
   knowledge graph memory that:
   - Records every workflow event as episodes
   - Extracts entities and relationships automatically

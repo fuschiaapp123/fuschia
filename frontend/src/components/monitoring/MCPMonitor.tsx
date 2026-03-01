@@ -132,7 +132,7 @@ export const MCPMonitor: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <Server className="w-6 h-6 text-fuschia-600" />
+          <Server className="w-6 h-6 text-fuchsia-600" />
           <h2 className="text-2xl font-bold text-gray-900">MCP Services Monitor</h2>
         </div>
         <div className="flex items-center space-x-2">

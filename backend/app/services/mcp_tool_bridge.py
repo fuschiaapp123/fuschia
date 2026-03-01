@@ -1,6 +1,6 @@
 """
 MCP Tool Bridge Service
-Bridges Fuschia platform tools with MCP protocol
+Bridges Fuchsia platform tools with MCP protocol
 Handles bidirectional tool execution and format conversion
 """
 
@@ -48,30 +48,30 @@ class MCPToolExecution:
 
 class MCPToolBridge:
     """
-    Bridge between Fuschia tools and MCP protocol
+    Bridge between Fuchsia tools and MCP protocol
     Handles tool format conversion and execution routing
     """
     
     def __init__(self):
         self.executions: Dict[str, MCPToolExecution] = {}
-        self.tool_mappings: Dict[str, str] = {}  # MCP tool name -> Fuschia tool ID
+        self.tool_mappings: Dict[str, str] = {}  # MCP tool name -> Fuchsia tool ID
         self.external_servers: Dict[str, Any] = {}  # External MCP servers
         
     async def initialize(self):
-        """Initialize the tool bridge with current Fuschia tools"""
+        """Initialize the tool bridge with current Fuchsia tools"""
         logger.info("Initializing MCP Tool Bridge")
         await self._build_tool_mappings()
         await self._initialize_external_servers()
         logger.info(f"Tool bridge initialized with {len(self.tool_mappings)} tool mappings and {len(self.external_servers)} external servers")
     
     async def _build_tool_mappings(self):
-        """Build mappings between MCP tool names and Fuschia tool IDs"""
+        """Build mappings between MCP tool names and Fuchsia tool IDs"""
         try:
             # Get all available system tools
             system_tools = await system_tools_service.get_available_tools()
             
             for tool_id, tool_info in system_tools.items():
-                mcp_name = f"fuschia_{tool_info.get('name', tool_id)}"
+                mcp_name = f"fuchsia_{tool_info.get('name', tool_id)}"
                 self.tool_mappings[mcp_name] = tool_id
                 
             logger.info(f"Built {len(self.tool_mappings)} tool mappings")
@@ -95,20 +95,26 @@ class MCPToolBridge:
 
             logger.info(f"Initialized ServiceNow MCP server with {len(servicenow_tools)} tools")
 
-            # Initialize Gmail MCP server
+            # Initialize Gmail MCP server (only if enabled in config)
             try:
-                from app.services.gmail_mcp_server import gmail_mcp_server
-                await gmail_mcp_server.initialize()
-                self.external_servers["gmail"] = gmail_mcp_server
+                from app.services.mcp_monitor_service import mcp_monitor_service
+                gmail_config = mcp_monitor_service.services_config.get("gmail")
 
-                # Add Gmail tools to mappings
-                gmail_tools = await gmail_mcp_server.list_tools()
-                for tool in gmail_tools:
-                    tool_name = tool.get("name")
-                    if tool_name:
-                        self.tool_mappings[tool_name] = f"gmail:{tool_name}"
+                if gmail_config and gmail_config.enabled:
+                    from app.services.gmail_mcp_server import gmail_mcp_server
+                    await gmail_mcp_server.initialize()
+                    self.external_servers["gmail"] = gmail_mcp_server
 
-                logger.info(f"Initialized Gmail MCP server with {len(gmail_tools)} tools")
+                    # Add Gmail tools to mappings
+                    gmail_tools = await gmail_mcp_server.list_tools()
+                    for tool in gmail_tools:
+                        tool_name = tool.get("name")
+                        if tool_name:
+                            self.tool_mappings[tool_name] = f"gmail:{tool_name}"
+
+                    logger.info(f"Initialized Gmail MCP server with {len(gmail_tools)} tools")
+                else:
+                    logger.info("Gmail MCP server disabled in config - skipping initialization")
 
             except ImportError:
                 logger.warning("Gmail MCP server not available - missing dependencies")
@@ -118,13 +124,13 @@ class MCPToolBridge:
         except Exception as e:
             logger.error(f"Error initializing external servers: {e}")
     
-    async def convert_fuschia_tool_to_mcp_format(self, tool_id: str, tool_info: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert Fuschia tool to MCP tool format"""
+    async def convert_fuchsia_tool_to_mcp_format(self, tool_id: str, tool_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert Fuchsia tool to MCP tool format"""
         
         name = tool_info.get('name', tool_id)
-        description = tool_info.get('description', f'Fuschia platform tool: {name}')
+        description = tool_info.get('description', f'Fuchsia platform tool: {name}')
         
-        # Convert Fuschia parameters to JSON Schema
+        # Convert Fuchsia parameters to JSON Schema
         parameters = tool_info.get('parameters', {})
         input_schema = {
             "type": "object",
@@ -160,10 +166,10 @@ class MCPToolBridge:
                 }
         
         return {
-            "name": f"fuschia_{name}",
+            "name": f"fuchsia_{name}",
             "description": description,
             "inputSchema": input_schema,
-            "fuschia_tool_id": tool_id,
+            "fuchsia_tool_id": tool_id,
             "tool_type": tool_info.get('tool_type', 'system'),
             "categories": tool_info.get('categories', []),
             "version": tool_info.get('version', '1.0.0')
@@ -171,7 +177,7 @@ class MCPToolBridge:
     
     async def execute_mcp_tool_call(self, tool_name: str, arguments: Dict[str, Any], 
                                    agent_id: str = None, server_id: str = None) -> MCPToolExecution:
-        """Execute an MCP tool call by routing to appropriate Fuschia service"""
+        """Execute an MCP tool call by routing to appropriate Fuchsia service"""
         
         execution_id = str(uuid.uuid4())
         execution = MCPToolExecution(
@@ -185,7 +191,7 @@ class MCPToolBridge:
         self.executions[execution_id] = execution
         
         try:
-            # Find corresponding Fuschia tool
+            # Find corresponding Fuchsia tool
             if tool_name not in self.tool_mappings:
                 # Try to refresh mappings
                 await self._build_tool_mappings()
@@ -193,21 +199,21 @@ class MCPToolBridge:
             if tool_name not in self.tool_mappings:
                 raise ValueError(f"Unknown MCP tool: {tool_name}")
             
-            fuschia_tool_id = self.tool_mappings[tool_name]
+            fuchsia_tool_id = self.tool_mappings[tool_name]
             
             # Route to appropriate service based on tool type
             execution.status = "running"
             
-            if fuschia_tool_id.startswith('servicenow:'):
+            if fuchsia_tool_id.startswith('servicenow:'):
                 result = await self._execute_servicenow_tool(tool_name, arguments)
-            elif fuschia_tool_id.startswith('gmail:'):
+            elif fuchsia_tool_id.startswith('gmail:'):
                 result = await self._execute_gmail_tool(tool_name, arguments)
-            elif fuschia_tool_id.startswith('system_'):
-                result = await self._execute_system_tool(fuschia_tool_id, arguments)
-            elif fuschia_tool_id.startswith('agent_'):
-                result = await self._execute_agent_tool(fuschia_tool_id, arguments, agent_id)
+            elif fuchsia_tool_id.startswith('system_'):
+                result = await self._execute_system_tool(fuchsia_tool_id, arguments)
+            elif fuchsia_tool_id.startswith('agent_'):
+                result = await self._execute_agent_tool(fuchsia_tool_id, arguments, agent_id)
             else:
-                result = await self._execute_custom_tool(fuschia_tool_id, arguments)
+                result = await self._execute_custom_tool(fuchsia_tool_id, arguments)
             
             execution.result = result
             execution.status = "completed"
@@ -359,8 +365,8 @@ class MCPToolBridge:
         
         return executions[:limit]
     
-    async def convert_mcp_result_to_fuschia_format(self, mcp_result: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Convert MCP tool result back to Fuschia format"""
+    async def convert_mcp_result_to_fuchsia_format(self, mcp_result: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Convert MCP tool result back to Fuchsia format"""
         
         if not mcp_result:
             return {"status": "empty", "content": None}
@@ -383,11 +389,11 @@ class MCPToolBridge:
         tools = []
         
         try:
-            # Get Fuschia system tools
+            # Get Fuchsia system tools
             system_tools = await system_tools_service.get_available_tools()
             
             for tool_id, tool_info in system_tools.items():
-                mcp_tool = await self.convert_fuschia_tool_to_mcp_format(tool_id, tool_info)
+                mcp_tool = await self.convert_fuchsia_tool_to_mcp_format(tool_id, tool_info)
                 tools.append(mcp_tool)
             
             # Get ServiceNow tools
@@ -411,17 +417,17 @@ class MCPToolBridge:
         
         try:
             # Get tool info
-            fuschia_tool_id = self.tool_mappings[tool_name]
+            fuchsia_tool_id = self.tool_mappings[tool_name]
             system_tools = await system_tools_service.get_available_tools()
             
-            if fuschia_tool_id not in system_tools:
+            if fuchsia_tool_id not in system_tools:
                 return {
                     "valid": False,
-                    "error": f"Tool not found: {fuschia_tool_id}"
+                    "error": f"Tool not found: {fuchsia_tool_id}"
                 }
             
             # Basic validation (could be enhanced with JSON Schema validation)
-            tool_info = system_tools[fuschia_tool_id]
+            tool_info = system_tools[fuchsia_tool_id]
             parameters = tool_info.get('parameters', {})
             required = parameters.get('required', [])
             

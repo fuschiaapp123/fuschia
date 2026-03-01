@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 // Import logo as a module (this will work with Vite)
-const fuschinLogoUrl = '/FUSCHIA-LOGO-COLOR.png';
+const fuschinLogoUrl = '/FUCHSIA-LOGO-COLOR.png';
 
 const sidebarItems = [
   {
@@ -127,7 +127,7 @@ export const Sidebar: React.FC = () => {
           <div className="flex items-center space-x-2">
             <img 
               src={fuschinLogoUrl} 
-              alt="Fuschia Logo" 
+              alt="Fuchsia Logo" 
               className="h-8 w-auto"
               onError={(e) => {
                 // Fallback to text logo if image fails to load
@@ -136,7 +136,7 @@ export const Sidebar: React.FC = () => {
                 if (fallback) fallback.style.display = 'flex';
               }}
             />
-            <div className="w-8 h-8 bg-gradient-to-br from-fuschia-500 to-fuschia-600 rounded-lg items-center justify-center hidden">
+            <div className="w-8 h-8 bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 rounded-lg items-center justify-center hidden">
               <span className="text-white font-bold text-sm">F</span>
             </div>
           </div>
@@ -144,7 +144,7 @@ export const Sidebar: React.FC = () => {
           <div className="flex items-center justify-center">
             <img 
               src={fuschinLogoUrl} 
-              alt="Fuschia Logo" 
+              alt="Fuchsia Logo" 
               className="h-6 w-auto"
               onError={(e) => {
                 // Fallback to text logo if image fails to load
@@ -153,7 +153,7 @@ export const Sidebar: React.FC = () => {
                 if (fallback) fallback.style.display = 'flex';
               }}
             />
-            <div className="w-6 h-6 bg-gradient-to-br from-fuschia-500 to-fuschia-600 rounded-lg items-center justify-center hidden">
+            <div className="w-6 h-6 bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 rounded-lg items-center justify-center hidden">
               <span className="text-white font-bold text-xs">F</span>
             </div>
           </div>
@@ -211,7 +211,7 @@ export const Sidebar: React.FC = () => {
               sidebarCollapsed && 'justify-center'
             )}
           >
-            <div className="w-8 h-8 bg-gradient-to-br from-fuschia-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 bg-gradient-to-br from-fuchsia-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
               <User className="w-4 h-4 text-white" />
             </div>
             {!sidebarCollapsed && (
@@ -245,7 +245,7 @@ export const Sidebar: React.FC = () => {
         {/* Version Info */}
         {!sidebarCollapsed && (
           <div className="text-xs text-gray-500 mt-4 pt-4 border-t border-gray-100">
-            <div>Fuschia v0.1.0</div>
+            <div>Fuchsia v0.1.0</div>
             <div>Enterprise Edition</div>
           </div>
         )}

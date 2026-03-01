@@ -50,7 +50,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
     <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-3">
-          <div className="p-2 bg-fuschia-100 rounded-lg">
+          <div className="p-2 bg-fuchsia-100 rounded-lg">
             {icon}
           </div>
           <div>
@@ -85,7 +85,7 @@ const SimpleBarChart: React.FC<{ data: Array<{ label: string; value: number }> }
           <div className="w-16 text-sm text-gray-600 text-right">{item.label}</div>
           <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
             <div 
-              className="bg-fuschia-500 h-6 rounded-full flex items-center justify-end pr-2"
+              className="bg-fuchsia-500 h-6 rounded-full flex items-center justify-end pr-2"
               style={{ width: `${(item.value / maxValue) * 100}%` }}
             >
               <span className="text-white text-xs font-medium">{item.value}</span>
@@ -110,7 +110,7 @@ const SimpleLineChart: React.FC<{ data: Array<{ label: string; value: number }> 
         return (
           <div key={index} className="flex-1 flex flex-col items-center">
             <div 
-              className="w-full bg-fuschia-500 rounded-t"
+              className="w-full bg-fuchsia-500 rounded-t"
               style={{ height: `${height}%` }}
             />
             <div className="text-xs text-gray-600 mt-1 transform -rotate-45">
@@ -156,7 +156,7 @@ export const DashboardOverview: React.FC = () => {
           value="2,847"
           change={12.3}
           changeType="positive"
-          icon={<Zap className="w-5 h-5 text-fuschia-600" />}
+          icon={<Zap className="w-5 h-5 text-fuchsia-600" />}
           description="This month"
         />
         <MetricCard
@@ -164,7 +164,7 @@ export const DashboardOverview: React.FC = () => {
           value="94.2%"
           change={2.1}
           changeType="positive"
-          icon={<CheckCircle className="w-5 h-5 text-fuschia-600" />}
+          icon={<CheckCircle className="w-5 h-5 text-fuchsia-600" />}
           description="Last 30 days"
         />
         <MetricCard
@@ -172,7 +172,7 @@ export const DashboardOverview: React.FC = () => {
           value="1.2s"
           change={-8.5}
           changeType="positive"
-          icon={<Clock className="w-5 h-5 text-fuschia-600" />}
+          icon={<Clock className="w-5 h-5 text-fuchsia-600" />}
           description="Processing time"
         />
         <MetricCard
@@ -180,7 +180,7 @@ export const DashboardOverview: React.FC = () => {
           value="12"
           change={0}
           changeType="neutral"
-          icon={<Users className="w-5 h-5 text-fuschia-600" />}
+          icon={<Users className="w-5 h-5 text-fuchsia-600" />}
           description="Currently online"
         />
       </div>
