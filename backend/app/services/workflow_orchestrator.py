@@ -183,36 +183,36 @@ class WorkflowOrchestrator:
                             
                             return  # Stop workflow execution
 
-                        # Enhanced YAML canvas update detection and processing
+                        # Enhanced JSON canvas update detection and processing
                         results = result.get('results') if isinstance(result, dict) else None
                         response = results.get('response') if results else None
 
                         if response and isinstance(response, str):
-                            # Check for YAML canvas update markers
-                            if ("YaMl_StArT" in response and "YaMl_EnD" in response):
-                                # Extract YAML content between markers
-                                yaml_content = response.replace("YaMl_StArT", "").replace("YaMl_EnD", "").strip()
-                                
-                                # Determine canvas type based on YAML content
+                            # Check for JSON canvas update markers
+                            if ("JSON_START" in response and "JSON_END" in response):
+                                # Extract JSON content between markers
+                                json_content = response.replace("JSON_START", "").replace("JSON_END", "").strip()
+
+                                # Determine canvas type based on JSON content
                                 canvas_type = "workflow"  # default
-                                if any(keyword in yaml_content.lower() for keyword in ['agent', 'role:', 'skills:', 'department:']):
+                                if any(keyword in json_content.lower() for keyword in ['"role":', '"skills":', '"department":']):
                                     canvas_type = "agent"
-                                
-                                                       
+
+
                                 # Send specialized canvas update message
                                 await websocket_manager.send_execution_update(execution.id, {
                                     'type': 'canvas_update',
                                     'canvas_type': canvas_type,
-                                    'yaml_content': yaml_content,
+                                    'json_content': json_content,
                                     'message': f"Canvas update received for {canvas_type} designer",
                                     'task_id': ready_tasks[i].id,
                                     'agent_name': self._get_agent_name(ready_tasks[i].assigned_agent_id) if ready_tasks[i].assigned_agent_id else 'Unassigned'
                                 })
-                            
-                            # Check for other structured data patterns
-                            elif any(pattern in response.lower() for pattern in ['nodes:', 'edges:', 'workflow:', 'agents:']):
-                                # This might be YAML without explicit markers
-                                
+
+                            # Check for other structured data patterns (potential JSON without markers)
+                            elif any(pattern in response.lower() for pattern in ['"nodes":', '"edges":', '"workflow":', '"agents":']):
+                                # This might be JSON without explicit markers
+
                                 await websocket_manager.send_execution_update(execution.id, {
                                     'type': 'potential_canvas_update',
                                     'content': response,
@@ -607,8 +607,8 @@ class WorkflowOrchestrator:
                         if isinstance(results, dict):
                             response = results.get('response')
                             if response and isinstance(response, str):
-                                # Clean up the response - remove YAML markers if present
-                                if 'YaMl_StArT' in response:
+                                # Clean up the response - remove JSON/YAML canvas markers if present
+                                if 'JSON_START' in response or 'YaMl_StArT' in response:
                                     continue  # Skip canvas updates
                                 return response[:2000]  # Limit length
 
@@ -634,7 +634,7 @@ class WorkflowOrchestrator:
                     if isinstance(results, dict):
                         response = results.get('response') or results.get('execution_summary')
                         if response and isinstance(response, str):
-                            if 'YaMl_StArT' not in response:
+                            if 'JSON_START' not in response and 'YaMl_StArT' not in response:
                                 return response[:2000]
 
             return None

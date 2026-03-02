@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { AppState } from '@/types';
-import { ReactFlowData } from '@/utils/yamlParser';
+import { ReactFlowData } from '@/utils/canvasParser';
 
 interface AppStore extends AppState {
   workflowData: ReactFlowData | null;

@@ -1,11 +1,12 @@
 import { Node, Edge } from '@xyflow/react';
-import { parseYAMLWorkflow, convertToReactFlowData, convertToAgentFlowData, isValidYAML } from '@/utils/yamlParser';
+import { parseJSONCanvas, convertToReactFlowData, convertToAgentFlowData, isValidJSON, isValidYAML, parseYAMLWorkflow } from '@/utils/canvasParser';
 import { useAppStore } from '@/store/appStore';
 
 export interface CanvasUpdateData {
   type: 'canvas_update' | 'potential_canvas_update';
   canvas_type?: 'workflow' | 'agent';
-  yaml_content?: string;
+  json_content?: string;
+  yaml_content?: string; // Legacy support
   content?: string;
   message: string;
   task_id?: string;
@@ -28,23 +29,33 @@ class CanvasUpdateService {
     console.log('🎨 Processing canvas update:', updateData);
 
     try {
-      // Handle confirmed canvas updates
-      if (updateData.type === 'canvas_update' && updateData.yaml_content) {
-        return this.applyCanvasUpdate(updateData.yaml_content, updateData.canvas_type || 'workflow');
+      // Handle confirmed canvas updates (JSON format - preferred)
+      if (updateData.type === 'canvas_update' && updateData.json_content) {
+        return this.applyCanvasUpdate(updateData.json_content, updateData.canvas_type || 'workflow', 'json');
       }
-      
+
+      // Handle legacy YAML format for backwards compatibility
+      if (updateData.type === 'canvas_update' && updateData.yaml_content) {
+        return this.applyCanvasUpdate(updateData.yaml_content, updateData.canvas_type || 'workflow', 'yaml');
+      }
+
       // Handle potential canvas updates (needs validation)
       if (updateData.type === 'potential_canvas_update' && updateData.content) {
-        if (isValidYAML(updateData.content)) {
-          // Determine canvas type from content
+        // Try JSON first
+        if (isValidJSON(updateData.content)) {
           const canvasType = this.detectCanvasType(updateData.content);
-          return this.applyCanvasUpdate(updateData.content, canvasType);
-        } else {
-          return {
-            success: false,
-            message: 'Content does not appear to be valid YAML for canvas update'
-          };
+          return this.applyCanvasUpdate(updateData.content, canvasType, 'json');
         }
+        // Fall back to YAML for legacy support
+        if (isValidYAML(updateData.content)) {
+          const canvasType = this.detectCanvasType(updateData.content);
+          return this.applyCanvasUpdate(updateData.content, canvasType, 'yaml');
+        }
+
+        return {
+          success: false,
+          message: 'Content does not appear to be valid JSON or YAML for canvas update'
+        };
       }
 
       return {
@@ -64,32 +75,39 @@ class CanvasUpdateService {
   /**
    * Apply a canvas update to the appropriate designer
    */
-  private applyCanvasUpdate(yamlContent: string, canvasType: 'workflow' | 'agent'): CanvasUpdateResult {
-    console.log(`🎨 Applying ${canvasType} canvas update with YAML:`, yamlContent.substring(0, 200) + '...');
+  private applyCanvasUpdate(
+    content: string,
+    canvasType: 'workflow' | 'agent',
+    format: 'json' | 'yaml'
+  ): CanvasUpdateResult {
+    console.log(`🎨 Applying ${canvasType} canvas update with ${format.toUpperCase()}:`, content.substring(0, 200) + '...');
 
-    const parsedWorkflow = parseYAMLWorkflow(yamlContent);
-    if (!parsedWorkflow) {
+    const parsedCanvas = format === 'json'
+      ? parseJSONCanvas(content)
+      : parseYAMLWorkflow(content);
+
+    if (!parsedCanvas) {
       return {
         success: false,
-        message: 'Failed to parse YAML content'
+        message: `Failed to parse ${format.toUpperCase()} content`
       };
     }
 
-    console.log('📋 Parsed workflow:', parsedWorkflow);
+    console.log('📋 Parsed canvas:', parsedCanvas);
 
     // Convert to ReactFlow format based on canvas type
     let reactFlowData;
     if (canvasType === 'agent') {
-      reactFlowData = convertToAgentFlowData(parsedWorkflow);
+      reactFlowData = convertToAgentFlowData(parsedCanvas);
     } else {
-      reactFlowData = convertToReactFlowData(parsedWorkflow);
+      reactFlowData = convertToReactFlowData(parsedCanvas);
     }
 
     console.log('🔄 Converted ReactFlow data:', reactFlowData);
 
     // Update the appropriate store
     const { setWorkflowData, setAgentData } = useAppStore.getState();
-    
+
     if (canvasType === 'agent') {
       setAgentData(reactFlowData);
       console.log('✅ Updated agent designer canvas');
@@ -108,19 +126,19 @@ class CanvasUpdateService {
   }
 
   /**
-   * Detect canvas type from YAML content
+   * Detect canvas type from content
    */
   private detectCanvasType(content: string): 'workflow' | 'agent' {
     const lowerContent = content.toLowerCase();
-    
-    // Agent-specific keywords
-    const agentKeywords = ['role:', 'skills:', 'department:', 'agent', 'supervisor', 'coordinator', 'specialist'];
+
+    // Agent-specific keywords (JSON format)
+    const agentKeywords = ['"role":', '"skills":', '"department":', 'agent', 'supervisor', 'coordinator', 'specialist'];
     const agentScore = agentKeywords.filter(keyword => lowerContent.includes(keyword)).length;
-    
+
     // Workflow-specific keywords
     const workflowKeywords = ['workflow', 'process', 'step', 'task', 'action'];
     const workflowScore = workflowKeywords.filter(keyword => lowerContent.includes(keyword)).length;
-    
+
     // Return type with higher score, default to workflow
     return agentScore > workflowScore ? 'agent' : 'workflow';
   }
@@ -128,22 +146,29 @@ class CanvasUpdateService {
   /**
    * Validate and preview canvas update without applying
    */
-  previewCanvasUpdate(yamlContent: string): CanvasUpdateResult & { 
-    preview?: { nodes: Node[], edges: Edge[] } 
+  previewCanvasUpdate(content: string): CanvasUpdateResult & {
+    preview?: { nodes: Node[], edges: Edge[] }
   } {
     try {
-      const parsedWorkflow = parseYAMLWorkflow(yamlContent);
-      if (!parsedWorkflow) {
+      // Try JSON first
+      let parsedCanvas = isValidJSON(content) ? parseJSONCanvas(content) : null;
+
+      // Fall back to YAML
+      if (!parsedCanvas && isValidYAML(content)) {
+        parsedCanvas = parseYAMLWorkflow(content);
+      }
+
+      if (!parsedCanvas) {
         return {
           success: false,
-          message: 'Invalid YAML format'
+          message: 'Invalid format - expected JSON or YAML'
         };
       }
 
-      const canvasType = this.detectCanvasType(yamlContent);
-      const reactFlowData = canvasType === 'agent' 
-        ? convertToAgentFlowData(parsedWorkflow)
-        : convertToReactFlowData(parsedWorkflow);
+      const canvasType = this.detectCanvasType(content);
+      const reactFlowData = canvasType === 'agent'
+        ? convertToAgentFlowData(parsedCanvas)
+        : convertToReactFlowData(parsedCanvas);
 
       return {
         success: true,
@@ -166,21 +191,18 @@ class CanvasUpdateService {
    */
   clearCanvas(canvasType: 'workflow' | 'agent'): void {
     const { setWorkflowData, setAgentData } = useAppStore.getState();
-    
+
     const emptyData = { nodes: [], edges: [] };
-    
+
     if (canvasType === 'agent') {
       setAgentData(emptyData);
     } else {
       setWorkflowData(emptyData);
     }
-    
+
     console.log(`🗑️ Cleared ${canvasType} canvas`);
   }
 }
 
 // Export singleton instance
 export const canvasUpdateService = new CanvasUpdateService();
-
-// Export types
-export type { CanvasUpdateData, CanvasUpdateResult };

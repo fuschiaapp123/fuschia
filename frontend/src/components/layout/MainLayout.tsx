@@ -7,7 +7,7 @@ import { useAppStore } from '@/store/appStore';
 import { useAuthStore } from '@/store/authStore';
 import { useLLMStore } from '@/store/llmStore';
 import ChatAPI from './ChatAPI';
-import { parseYAMLWorkflow, convertToReactFlowData, convertToAgentFlowData, isValidYAML } from '@/utils/yamlParser';
+import { parseJSONCanvas, convertToReactFlowData, convertToAgentFlowData, isValidJSON, parseYAMLWorkflow, isValidYAML } from '@/utils/canvasParser';
 import { websocketService, ExecutionUpdate } from '@/services/websocketService';
 import { canvasUpdateService, CanvasUpdateData } from '@/services/canvasUpdateService';
 
@@ -307,23 +307,35 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       );
       console.log('Chat API response:', response);
       
-      // Check if response contains YAML workflow and parse it
-      if (currentModule === 'workflow' && activeTab === 'designer' && isValidYAML(response.response)) {
-        const parsedWorkflow = parseYAMLWorkflow(response.response);
-        console.log('Parsed workflow:', parsedWorkflow);
+      // Check if response contains JSON or YAML workflow and parse it (JSON preferred)
+      if (currentModule === 'workflow' && activeTab === 'designer') {
+        // Try JSON first, fall back to YAML for backwards compatibility
+        const parsedWorkflow = isValidJSON(response.response)
+          ? parseJSONCanvas(response.response)
+          : isValidYAML(response.response)
+            ? parseYAMLWorkflow(response.response)
+            : null;
+
         if (parsedWorkflow) {
-          console.log('Valid workflow YAML detected, converting to React Flow data...');
+          console.log('Parsed workflow:', parsedWorkflow);
+          console.log('Valid workflow data detected, converting to React Flow data...');
           const reactFlowData = convertToReactFlowData(parsedWorkflow);
           console.log('Converted React Flow data:');
           setWorkflowData(reactFlowData);
           console.log('Parsed workflow data:', reactFlowData);
         }
       }
-      else if (currentModule === 'agents' && activeTab === 'designer' && isValidYAML(response.response)) {
-        const parsedAgentOrg = parseYAMLWorkflow(response.response);
-        console.log('Agent Parsed workflow:', parsedAgentOrg);
+      else if (currentModule === 'agents' && activeTab === 'designer') {
+        // Try JSON first, fall back to YAML for backwards compatibility
+        const parsedAgentOrg = isValidJSON(response.response)
+          ? parseJSONCanvas(response.response)
+          : isValidYAML(response.response)
+            ? parseYAMLWorkflow(response.response)
+            : null;
+
         if (parsedAgentOrg) {
-          console.log('Valid agent organization YAML detected, converting to Agent Flow data...');
+          console.log('Agent Parsed workflow:', parsedAgentOrg);
+          console.log('Valid agent organization data detected, converting to Agent Flow data...');
           const agentFlowData = convertToAgentFlowData(parsedAgentOrg);
           console.log('Converted Agent React Flow data:', agentFlowData);
           setAgentData(agentFlowData);
