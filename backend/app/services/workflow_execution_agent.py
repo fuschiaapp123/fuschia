@@ -740,6 +740,7 @@ class WorkflowExecutionAgent:
                 'execution_summary': f"Task '{task.name}' executed using DSPy simple strategy by {self.agent_node.name}",
                 'reasoning': prediction.reasoning,
                 'response': prediction.response,
+                'execution_result': prediction.execution_result,
                 'task_id': task.id,
                 'agent_id': self.agent_node.id,
                 'completed_at': datetime.utcnow().isoformat()

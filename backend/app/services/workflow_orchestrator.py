@@ -144,7 +144,7 @@ class WorkflowOrchestrator:
                         agent, task, execution.execution_context, execution
                     )
                     execution_coroutines.append(coroutine)
-                
+                self.logger.info("Awaiting all tasks to complete", execution_coroutines=execution_coroutines)
                 # Wait for all assigned tasks to complete
                 if execution_coroutines:
                     task_results = await asyncio.gather(*execution_coroutines, return_exceptions=True)
@@ -154,16 +154,25 @@ class WorkflowOrchestrator:
 
                     # Process results
                     for i, result in enumerate(task_results):
-                        
-
+                        self.logger.info(
+                            "Processing task result",
+                            execution_id=execution.id,)
                         # Check for PENDING status - workflow should pause
                         if isinstance(result, dict) and result.get('status') == TaskStatus.PENDING.value:
                             has_pending_task = True
-                            
-
+                        
+                        self.logger.info(
+                            "Task execution result",
+                            execution_id=execution.id,
+                            result=result)
                         # Check for PAUSED status - workflow should pause immediately
                         if isinstance(result, dict) and result.get('status') == TaskStatus.PAUSED.value:
-                            
+                            self.logger.info(
+                                "Task requested workflow pause",
+                                execution_id=execution.id,
+                                task_id=ready_tasks[i].id,
+                                pause_reason=result.get('pause_reason', 'No reason provided')
+                            )
 
                             # Update workflow status to PAUSED
                             execution.status = ExecutionStatus.PAUSED
@@ -182,11 +191,19 @@ class WorkflowOrchestrator:
 
                             
                             return  # Stop workflow execution
-
+                        self.logger.info(
+                            "Checking for JSON canvas update in task result",
+                            execution_id=execution.id,
+                            task_id=ready_tasks[i].id,
+                            result=result
+                        )
                         # Enhanced JSON canvas update detection and processing
                         results = result.get('results') if isinstance(result, dict) else None
-                        response = results.get('response') if results else None
-
+                        # Check execution_result first (DSPy output), then fall back to response
+                        response = results.get('execution_result') if results else None
+                        if not response:
+                            response = results.get('response') if results else None
+                        self.logger.info("Detecting JSON canvas update", response=response)
                         if response and isinstance(response, str):
                             # Check for JSON canvas update markers
                             if ("JSON_START" in response and "JSON_END" in response):
@@ -602,10 +619,11 @@ class WorkflowOrchestrator:
 
                     # Try to extract response from various possible locations
                     if isinstance(result, dict):
-                        # Check for 'results' > 'response' structure
+                        # Check for 'results' > 'execution_result' or 'response' structure
                         results = result.get('results', {})
                         if isinstance(results, dict):
-                            response = results.get('response')
+                            # Check execution_result first (DSPy output), then response
+                            response = results.get('execution_result') or results.get('response')
                             if response and isinstance(response, str):
                                 # Clean up the response - remove JSON/YAML canvas markers if present
                                 if 'JSON_START' in response or 'YaMl_StArT' in response:
@@ -617,8 +635,8 @@ class WorkflowOrchestrator:
                             if summary and isinstance(summary, str):
                                 return summary[:2000]
 
-                        # Check for direct response
-                        direct_response = result.get('response')
+                        # Check for direct execution_result or response
+                        direct_response = result.get('execution_result') or result.get('response')
                         if direct_response and isinstance(direct_response, str):
                             return direct_response[:2000]
 
@@ -632,7 +650,8 @@ class WorkflowOrchestrator:
                 if task.status == TaskStatus.COMPLETED and task.results:
                     results = task.results
                     if isinstance(results, dict):
-                        response = results.get('response') or results.get('execution_summary')
+                        # Check execution_result first (DSPy output), then response, then execution_summary
+                        response = results.get('execution_result') or results.get('response') or results.get('execution_summary')
                         if response and isinstance(response, str):
                             if 'JSON_START' not in response and 'YaMl_StArT' not in response:
                                 return response[:2000]

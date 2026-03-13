@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Node } from '@xyflow/react';
+import { Trash2 } from 'lucide-react';
 import { WorkflowStepData } from './WorkflowDesigner';
 
 interface NodePropertyFormProps {
   node: Node | null;
   onUpdate: (nodeId: string, newData: Partial<WorkflowStepData>) => void;
+  onDelete?: (nodeId: string) => void;
   onClose: () => void;
 }
 
 export const NodePropertyForm: React.FC<NodePropertyFormProps> = ({
   node,
   onUpdate,
+  onDelete,
   onClose,
 }) => {
   const [formData, setFormData] = useState<WorkflowStepData>({
@@ -46,6 +49,15 @@ export const NodePropertyForm: React.FC<NodePropertyFormProps> = ({
       ...prev,
       [field]: value,
     }));
+  };
+
+  const handleDelete = () => {
+    if (node && onDelete) {
+      if (confirm('Are you sure you want to delete this node? This will also remove all connected edges.')) {
+        onDelete(node.id);
+        onClose();
+      }
+    }
   };
 
   if (!node) return null;
@@ -121,20 +133,32 @@ export const NodePropertyForm: React.FC<NodePropertyFormProps> = ({
             />
           </div>
 
-          <div className="flex space-x-3 pt-4 border-t border-gray-200">
-            <button
-              type="submit"
-              className="flex-1 bg-fuchsia-500 text-white py-2 px-4 rounded-md hover:bg-fuchsia-600 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 focus:ring-offset-2 transition-colors"
-            >
-              Save Changes
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
-            >
-              Cancel
-            </button>
+          <div className="flex justify-between pt-4 border-t border-gray-200">
+            {onDelete && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="px-4 py-2 border border-red-300 rounded-md text-red-700 hover:bg-red-50 transition-colors flex items-center space-x-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Node</span>
+              </button>
+            )}
+            <div className={`flex space-x-3 ${!onDelete ? 'w-full' : ''}`}>
+              <button
+                type="button"
+                onClick={onClose}
+                className={`${!onDelete ? 'flex-1' : ''} px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors`}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className={`${!onDelete ? 'flex-1' : ''} px-4 py-2 bg-fuchsia-600 text-white rounded-md hover:bg-fuchsia-700 transition-colors`}
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </form>
     </div>

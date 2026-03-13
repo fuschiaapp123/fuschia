@@ -402,6 +402,12 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
     setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
   }, [setEdges]);
 
+  const handleNodeDelete = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
+    // Also remove any edges connected to this node
+    setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+  }, [setNodes, setEdges]);
+
   const handleDrawerClose = useCallback(() => {
     setIsDrawerOpen(false);
     setSelectedNode(null);
@@ -1149,6 +1155,7 @@ export const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({
           <NodePropertyForm
             node={selectedNode}
             onUpdate={handleNodeUpdate}
+            onDelete={handleNodeDelete}
             onClose={handleDrawerClose}
           />
         ) : selectedEdge ? (
